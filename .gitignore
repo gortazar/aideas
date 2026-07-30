@@ -1,0 +1,12 @@
+# Orchestrator runtime state: lock, resumable session ids, per-cycle JSON logs and the
+# usage ledger. Machine-local and rewritten constantly — committing it would make every
+# cycle conflict with the laptop on `git pull`.
+.orchestrator/
+
+# Generated every cycle from AGENTS.md + PLAN.md + STATUS.md; never hand-edited, so
+# there's nothing to preserve in git.
+ideas/*/CLAUDE.md
+
+# Never commit the shared heartbeat secret or the box's auth token.
+*.env
+orchestrator/env

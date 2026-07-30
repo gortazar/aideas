@@ -1,0 +1,35 @@
+# Tune these any time — the orchestrator re-reads this file every cycle.
+#
+# Note on the cost figures below: the orchestrator box authenticates with a Claude
+# subscription token (`claude setup-token`), not a metered API key. The `total_cost_usd`
+# that `claude -p --output-format json` reports is therefore the *equivalent* API value of
+# the work, not money actually billed to you. Use it as a consistent proxy for "how much
+# of my allowance did this burn" — your real ceiling is the plan's rolling 5-hour and
+# weekly windows, not a daily dollar figure.
+
+# Stop starting new cycles once today's cumulative equivalent cost reaches this.
+# The orchestrator tracks it in .orchestrator/usage.log, summed per calendar day.
+max_daily_cost_usd: 5.00
+
+# Safety valve per build cycle, independent of the daily budget above. Passed straight
+# through to `claude --max-budget-usd`, so it aborts a runaway cycle mid-flight rather
+# than only being noticed after the fact.
+max_cycle_cost_usd: 1.00
+
+# Same valve for the cheaper planning pass, which only reads and writes PLAN.md.
+max_plan_cost_usd: 0.40
+
+# Only allowed to run within this local-time window each day. Supports overnight ranges.
+allowed_hours: "20:00-07:00"
+timezone: "Europe/Lisbon"
+
+# How long a heartbeat can go without an update before a Claude Code session on the
+# laptop is considered idle (covers crashes, long-running commands, and suspend/sleep).
+heartbeat_staleness_minutes: 10
+
+# How long the repo lock can be held before it's considered abandoned and reclaimed.
+lock_ttl_minutes: 60
+
+# If the current top-priority idea has been "in_progress" for longer than this without
+# completing, allow the orchestrator to pick an easier unstarted idea instead this cycle.
+stale_idea_after_hours: 6

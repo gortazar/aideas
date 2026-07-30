@@ -1,0 +1,30 @@
+[Unit]
+Description=Idea-builder orchestrator — one build cycle
+Documentation=https://github.com/gortazar/aideas
+After=network-online.target idea-heartbeat.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=CHANGEME_USER
+EnvironmentFile=/etc/idea-agent.env
+ExecStart=/opt/idea-agent/orchestrator/orchestrator.sh
+
+# systemd's default PATH has neither `claude` (~/.local/bin) nor `nix` — and the build
+# agent shells out to both. Adjust the home directory to the service user's.
+Environment=PATH=/home/CHANGEME_USER/.local/bin:/home/CHANGEME_USER/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin
+
+# A cycle is bounded by --max-budget-usd, but a wedged git or network call isn't — this
+# is the outer stop. Keep it comfortably above a realistic cycle; the expiring repo lock
+# (lock_ttl_minutes) cleans up after a kill.
+TimeoutStartSec=3600
+
+# The script needs the service user's ~/.claude (subscription token from
+# `claude setup-token`) and its SSH key for git push, so ProtectHome is off here —
+# unlike the heartbeat unit, which needs neither.
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+# Deliberately no [Install] section: this unit is triggered by idea-orchestrator.timer,
+# never enabled directly. Enabling it would fire one cycle at every boot, ignoring the
+# allowed_hours window.

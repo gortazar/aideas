@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "~/.claude/hooks/hook-heartbeat.sh session_start" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          { "type": "command", "command": "~/.claude/hooks/hook-heartbeat.sh tool_use" }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          { "type": "command", "command": "~/.claude/hooks/hook-heartbeat.sh session_end" }
+        ]
+      }
+    ]
+  }
+}

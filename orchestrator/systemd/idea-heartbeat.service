@@ -1,0 +1,32 @@
+[Unit]
+Description=Idea-builder heartbeat receiver (laptop activity over VPN)
+Documentation=https://github.com/gortazar/aideas
+# The bind address belongs to the VPN interface, which may not exist at boot.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=CHANGEME_USER
+EnvironmentFile=/etc/idea-agent.env
+ExecStart=/usr/bin/python3 /opt/idea-agent/orchestrator/heartbeat_server.py
+Restart=always
+RestartSec=10
+# The VPN interface can come up after this unit does; keep retrying instead of failing.
+StartLimitIntervalSec=0
+
+# State file lives here; the unit gets it created and owned automatically.
+StateDirectory=idea-agent
+
+# Hardening — this process only needs to write its one state file and listen on the VPN.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

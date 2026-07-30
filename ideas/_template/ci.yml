@@ -1,0 +1,31 @@
+# Template for a per-idea CI workflow. The orchestrator copies this to
+# .github/workflows/ci-<idea-slug>.yml at the REPO ROOT when it first scaffolds an idea,
+# substituting <idea-slug> throughout — GitHub only discovers workflows under the root
+# .github/workflows/, so per-idea files are distinguished by name, not by location.
+#
+# Once the idea picks a real stack, replace `nix flake check` below with the real test
+# command (or wire the flake's `checks` output to it, which is the tidier option).
+name: CI - <idea-slug>
+
+on:
+  push:
+    paths:
+      - "ideas/<idea-slug>/**"
+      - ".github/workflows/ci-<idea-slug>.yml"
+  pull_request:
+    paths:
+      - "ideas/<idea-slug>/**"
+      - ".github/workflows/ci-<idea-slug>.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ideas/<idea-slug>
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: "experimental-features = nix-command flakes"
+      - run: nix flake check

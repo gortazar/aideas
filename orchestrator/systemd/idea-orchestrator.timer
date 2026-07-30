@@ -1,0 +1,17 @@
+[Unit]
+Description=Wake the idea-builder orchestrator every 5 minutes
+Documentation=https://github.com/gortazar/aideas
+
+[Timer]
+# Fire often and cheaply: the script exits in well under a second when it's outside
+# allowed_hours, over budget, the laptop is busy, or the lock is held. The real schedule
+# lives in .agent-config.yml so you can retune it without touching systemd.
+OnBootSec=2min
+OnUnitInactiveSec=5min
+AccuracySec=30s
+
+# Catch up after the box has been off, but only once — not once per missed interval.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
