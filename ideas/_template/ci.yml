@@ -5,6 +5,11 @@
 #
 # Once the idea picks a real stack, replace `nix flake check` below with the real test
 # command (or wire the flake's `checks` output to it, which is the tidier option).
+#
+# Everything above this marker is about the template itself and is stripped on copy.
+# --- template header ends ---
+# Generated from ideas/_template/ci.yml. Edit freely — it is only created once, never
+# regenerated, so your changes to the real test command will stick.
 name: CI - <idea-slug>
 
 on:

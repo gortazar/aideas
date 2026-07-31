@@ -30,6 +30,12 @@
 #  10. Release the lock, record real cost/turn usage, exit.
 
 set -euo pipefail
+
+# Non-negotiable: this script does float maths by piping awk output into bc, and in a
+# comma-decimal locale awk prints "0,4211" while bc only ever accepts "0.4211". The
+# comparison then fails silently and the daily budget gate stops firing at all.
+export LC_ALL=C
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 : "${IDEAS_REPO_PATH:?set this to the local clone of your ideas repo}"
@@ -58,6 +64,16 @@ LOCK_TTL=$(cfg lock_ttl_minutes)
 STALE_IDEA_HOURS=$(cfg stale_idea_after_hours)
 
 log() { echo "[$(date -Iseconds)] $*"; }
+
+# Float comparison via bc, with a caller-chosen answer for unparseable input. Both gates
+# below fail closed — meaning "stop" — but "stop" is `true` for the budget check and
+# `false` for the heartbeat check, so each passes the default that backs off.
+fcmp() {
+  local lhs="$1" op="$2" rhs="$3" on_error="$4" result
+  result=$(echo "${lhs:-x} ${op} ${rhs:-x}" | bc -l 2>/dev/null) || result=""
+  [[ -z "${result}" ]] && return "${on_error}"
+  [[ "${result}" == "1" ]]
+}
 
 # Reads a field from the JSON `claude -p --output-format json` wrote, with a default.
 json_field() { python3 -c "
@@ -99,7 +115,8 @@ fi
 today=$(date +%F)
 # usage.log is CSV: date,cost_usd,slug,phase,turns
 used_usd=$(awk -F, -v d="$today" '$1==d {sum+=$2} END {printf "%.4f", sum+0}' "${USAGE_LOG}" 2>/dev/null || echo 0)
-if (( $(echo "${used_usd} >= ${MAX_DAILY_USD}" | bc -l) )); then
+# An unreadable total counts as over budget: never treat a broken ledger as free money.
+if fcmp "${used_usd}" ">=" "${MAX_DAILY_USD}" 0; then
   log "Daily budget spent (\$${used_usd} >= \$${MAX_DAILY_USD}); exiting."
   exit 0
 fi
@@ -109,7 +126,9 @@ log "Today's spend so far: \$${used_usd} of \$${MAX_DAILY_USD}."
 status_json=$(curl --silent --max-time 3 "${ORCHESTRATOR_HEARTBEAT_SELF_URL}/status" || echo '{"stale_seconds": 999999}')
 stale_seconds=$(echo "${status_json}" | python3 -c "import json,sys; print(json.load(sys.stdin).get('stale_seconds', 999999))" 2>/dev/null || echo 999999)
 stale_threshold=$(( STALE_MIN * 60 ))
-if (( $(echo "${stale_seconds} < ${stale_threshold}" | bc -l) )); then
+# An unreadable heartbeat counts as "session active": back off rather than risk running
+# on top of the user's own Claude Code session.
+if fcmp "${stale_seconds}" "<" "${stale_threshold}" 0; then
   log "Laptop Claude Code session active (heartbeat ${stale_seconds}s old); exiting."
   exit 0
 fi
@@ -166,7 +185,8 @@ for slug in "${idea_slugs[@]}"; do
   ci_path=".github/workflows/ci-${slug}.yml"
   if [[ ! -f "${ci_path}" ]]; then
     mkdir -p .github/workflows
-    sed "s/<idea-slug>/${slug}/g" ideas/_template/ci.yml > "${ci_path}"
+    awk 'past {print} /^# --- template header ends ---$/ {past=1}' ideas/_template/ci.yml \
+      | sed "s/<idea-slug>/${slug}/g" > "${ci_path}"
   fi
 
   idea_desc=$(awk -v s="ideas/${slug}/" 'index($0, s){f=1} f{print} f && /^[[:space:]]*$/{exit}' README.md)
@@ -192,6 +212,7 @@ done
 # --- 6. Pick an idea to build ------------------------------------------------------
 pick_idea() {
   local slug plan status started age_h
+  local -a stalled=()
   for slug in "${idea_slugs[@]}"; do
     plan="ideas/${slug}/PLAN.md"
     status="ideas/${slug}/STATUS.md"
@@ -203,14 +224,27 @@ pick_idea() {
         started=$(sed -n 's/^started_at:[[:space:]]*//p' "${status}" | head -1)
         if [[ -n "${started}" ]]; then
           age_h=$(( ( $(date +%s) - $(date -d "${started}" +%s 2>/dev/null || date +%s) ) / 3600 ))
-          # Taking too long — fall through and prefer an easier idea this cycle.
-          (( age_h > STALE_IDEA_HOURS )) && continue
+          if (( age_h > STALE_IDEA_HOURS )); then
+            # Grinding on too long — deprioritise, don't disqualify. Remember it and
+            # keep looking for something fresher first.
+            stalled+=("${slug}")
+            continue
+          fi
         fi
       fi
     fi
     echo "${slug}"
     return 0
   done
+  # Nothing fresh is eligible. Rather than stall forever — which is what happens if a
+  # long-running idea is merely skipped and every idea eventually crosses the threshold —
+  # go back to the highest-priority stalled one and keep chipping away at it.
+  if (( ${#stalled[@]} > 0 )); then
+    # stdout is this function's return channel, so the log line must go to stderr.
+    log "All eligible ideas are past stale_idea_after_hours; resuming ${stalled[0]}." >&2
+    echo "${stalled[0]}"
+    return 0
+  fi
   return 1
 }
 
@@ -275,12 +309,15 @@ cycle_cost=$(json_field "${out_file}" total_cost_usd 0)
   echo
   echo "## Log"
   echo "- $(date -Iseconds) — ${new_status} (\$${cycle_cost})"
-  # Carry the existing log over, dropping the old header block and its "## Log" heading.
+  # Carry the existing log over, dropping the old header block, its "## Log" heading, and
+  # the template's instructional comment — which would otherwise sink below the newest
+  # entry and stay there for the life of the idea.
   awk 'BEGIN{hdr=1}
        hdr && /^[a-z_]+:/ {next}
        hdr && /^[[:space:]]*$/ {next}
        {hdr=0}
        /^## Log$/ {next}
+       /^[[:space:]]*<!--/ {next}
        {print}' "${status_file}" 2>/dev/null || true
 } > "${status_file}.new"
 mv "${status_file}.new" "${status_file}"
