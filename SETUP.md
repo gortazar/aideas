@@ -97,6 +97,16 @@ curl -s -X POST -H 'Content-Type: application/json' \
 `200` means accepted, `401` means the secrets don't match, a hang means the VPN or the
 bind address is wrong.
 
+Note that the heartbeat gate fails **closed**: if `idea-heartbeat.service` is down, the
+orchestrator can't tell whether you're working, so it skips the cycle rather than risk
+building on top of your session. That means a dead heartbeat service quietly halts all
+work — if nothing has been built for a while, check it first:
+
+```bash
+systemctl status idea-heartbeat.service
+journalctl -u idea-orchestrator | grep -i unreachable
+```
+
 ## Adding an idea
 
 Add a numbered entry to [README.md](README.md) in the format documented there. That's the
@@ -135,9 +145,12 @@ them as a consistent proxy for allowance burn; your actual ceiling is the plan's
 5-hour and weekly windows. See the notes at the top of `.agent-config.yml`.
 
 ```bash
-# What did today cost?
-awk -F, -v d="$(date +%F)" '$1==d {s+=$2} END {printf "$%.2f\n", s}' .orchestrator/usage.log
+# What did today cost? LC_ALL=C matters: in a comma-decimal locale awk prints "3,79".
+LC_ALL=C awk -F, -v d="$(date +%F)" '$1==d {s+=$2} END {printf "$%.2f\n", s}' .orchestrator/usage.log
 ```
+
+The daily figure gates the *start* of a cycle, so a day can overshoot by at most one
+`max_cycle_cost_usd`.
 
 ## Security
 

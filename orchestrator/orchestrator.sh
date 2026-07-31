@@ -123,8 +123,15 @@ fi
 log "Today's spend so far: \$${used_usd} of \$${MAX_DAILY_USD}."
 
 # --- 2. Heartbeat gate ----------------------------------------------------------
-status_json=$(curl --silent --max-time 3 "${ORCHESTRATOR_HEARTBEAT_SELF_URL}/status" || echo '{"stale_seconds": 999999}')
-stale_seconds=$(echo "${status_json}" | python3 -c "import json,sys; print(json.load(sys.stdin).get('stale_seconds', 999999))" 2>/dev/null || echo 999999)
+# A dead heartbeat server is not evidence that the laptop is idle — it's the absence of
+# evidence either way. Backing off is the safe reading: building while the user is working
+# spends the very allowance this gate exists to protect. The service has Restart=always
+# and the timer retries in 5 minutes, so a blip costs one skipped cycle, nothing more.
+if ! status_json=$(curl --silent --fail --max-time 3 "${ORCHESTRATOR_HEARTBEAT_SELF_URL}/status"); then
+  log "Heartbeat server unreachable at ${ORCHESTRATOR_HEARTBEAT_SELF_URL}; can't tell whether the laptop is busy; exiting."
+  exit 0
+fi
+stale_seconds=$(echo "${status_json}" | python3 -c "import json,sys; print(json.load(sys.stdin).get('stale_seconds', 0))" 2>/dev/null || echo "")
 stale_threshold=$(( STALE_MIN * 60 ))
 # An unreadable heartbeat counts as "session active": back off rather than risk running
 # on top of the user's own Claude Code session.
