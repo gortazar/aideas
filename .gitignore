@@ -10,3 +10,6 @@ ideas/*/CLAUDE.md
 # Never commit the shared heartbeat secret or the box's auth token.
 *.env
 orchestrator/env
+
+__pycache__/
+*.pyc
