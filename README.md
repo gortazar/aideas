@@ -16,16 +16,26 @@ Reorder entries to reprioritise: position in this list *is* the priority.
 
 ## Ideas
 
-1. [markdown-toc](ideas/markdown-toc/) — table-of-contents generator for Markdown files
-   A small CLI that reads one or more Markdown files and inserts (or refreshes) a
-   table of contents between `<!-- toc -->` / `<!-- /toc -->` markers. Should handle
-   nested headings, skip fenced code blocks, generate GitHub-compatible anchor slugs,
-   and support `--check` mode that exits non-zero if the TOC is out of date so it can
-   run in CI. Throwaway idea, seeded to exercise the orchestrator end to end.
+1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard
+   Pwgen is a small Gnome Shell extension that generates a secure password by calling the command pwgen and 
+   copies it to the clipboard automatically. This extension already exists and its code is hosted at
+   [github.com/gortazar/pwgen](https://github.com/gortazar/gnome-shell-pwgen). To comply with strict [review
+   rules from the Gnome Shell portal](https://gjs.guide/extensions/review-guidelines/review-guidelines.html)
+   we need to replace the call to pwgen with our own code to generate the secure passwords. When doing this change
+   ensure that: CI is run on the branch this change is done, CI is green, changes conform with the review rules.
 
-2. [unit-convert](ideas/unit-convert/) — command-line unit converter
-   A CLI that converts between units of length, mass, temperature and data size, e.g.
-   `unit-convert 3.5 mi km`. Should parse common unit aliases, keep a reasonable
-   precision, print a clear error for incompatible dimensions, and expose the
-   conversion table as data rather than hardcoded branches. Throwaway idea, seeded to
-   exercise the orchestrator end to end.
+2. [gnome-tasks](ideas/gnome-tasks/) — KDE Activities port to Gnome
+   KDE Activities is a Plasma app that allows users to combine apps under a specific task, and change between
+   tasks effortlessly. When the user switch to a task, all the applications that were open the last time the task 
+   was used are opened in their respective monitors/workspaces. KDE Activities is documented in several pages,
+   [here](https://docs.kde.org/trunk_kf6/en/plasma-desktop/plasma-desktop/activities-interface.html), 
+   [here](https://docs.kde.org/trunk_kf6/en/plasma-desktop/kcontrol/kcmactivities/index.html), 
+   [and here in the wiki](https://community.kde.org/KDE_Visual_Design_Group/Plasma_Activities). This idea brings
+   this concept to Gnome. This is a complex project, and some things may be worth pointed out: it must be a
+   task switcher in the gnome shell top bar; for each app opened, the project must keep not just the name of the app
+   but also the file it opened; if there are commands running (like docker compose up), they must be launched as well,
+   some apps supporting multiple windows/tabs may require specific plugins: for instance, firefox may need a plugin
+   to tell Gnome Activities which tabs are opened in that firefox window so that they can be restored when the task is
+   deactivated and reactivated later. The gnome-tasks idea requires a deep understanding on how Gnome works, events that are
+   fired when apps are launched (like DBus), and where is the necessary info that needs to be kept for an activity. All this knowledge
+   must be clearly documented within the idea folder. 
