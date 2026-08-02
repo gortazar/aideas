@@ -180,13 +180,12 @@ if (( ${#idea_slugs[@]} == 0 )); then
 fi
 
 for slug in "${idea_slugs[@]}"; do
-  plan_path="ideas/${slug}/PLAN.md"
-  [[ -f "${plan_path}" ]] && continue
-
-  log "Drafting plan for ${slug}"
   mkdir -p "ideas/${slug}"
   [[ -f "ideas/${slug}/STATUS.md" ]] || cp ideas/_template/STATUS.md "ideas/${slug}/STATUS.md"
 
+  # Scaffold CI for every idea in the README, not only ones this pass drafts a plan for.
+  # A hand-seeded PLAN.md (which SETUP.md invites) skips the drafting below, and gating
+  # the workflow on that branch left such ideas permanently without CI.
   # GitHub only discovers workflows under the repo-root .github/workflows/, so each idea's
   # path-filtered CI lives there as ci-<slug>.yml rather than inside the idea folder.
   ci_path=".github/workflows/ci-${slug}.yml"
@@ -194,8 +193,14 @@ for slug in "${idea_slugs[@]}"; do
     mkdir -p .github/workflows
     awk 'past {print} /^# --- template header ends ---$/ {past=1}' ideas/_template/ci.yml \
       | sed "s/<idea-slug>/${slug}/g" > "${ci_path}"
+    git add "${ci_path}"
+    git commit -m "Add CI workflow for ${slug}" --quiet || true
   fi
 
+  plan_path="ideas/${slug}/PLAN.md"
+  [[ -f "${plan_path}" ]] && continue
+
+  log "Drafting plan for ${slug}"
   idea_desc=$(awk -v s="ideas/${slug}/" 'index($0, s){f=1} f{print} f && /^[[:space:]]*$/{exit}' README.md)
   out_file="${STATE_DIR}/logs/plan-${slug}-$(date +%s).json"
   claude -p "Draft ideas/${slug}/PLAN.md for this idea:
