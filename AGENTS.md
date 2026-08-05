@@ -12,6 +12,14 @@ These rules apply to every idea in `ideas/`. This file is prepended to each idea
 - Tests first: for any feature, write a failing test before writing the implementation.
 - Commit in small, working increments. Never leave the tree in a broken (non-building,
   non-passing-tests) state at the end of a session.
+- You are working in a git worktree on a branch of your own, because another agent may be
+  building a different idea at the same time. Commit freely, but do **not** push this
+  repo, switch branches, rebase, or merge — the orchestrator merges your branch and
+  pushes once you finish. (Pushing to a *different* repo your `PLAN.md` tells you to work
+  on is fine; this rule is only about the ideas repo.)
+- Keep everything you produce inside your idea folder. If a task needs a scratch clone of
+  another repository, put it under `ideas/<this-idea>/` — not in `/tmp`, which is not
+  committed and can be wiped between cycles, silently losing a whole session's work.
 - If you hit a genuine ambiguity that blocks progress (not something you can reasonably
   assume your way past), STOP and do the following instead of guessing:
   1. Append a new question under `## Open Questions` in this idea's `PLAN.md`, as its own

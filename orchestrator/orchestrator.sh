@@ -62,8 +62,20 @@ TZ_NAME=$(cfg timezone)
 STALE_MIN=$(cfg heartbeat_staleness_minutes)
 LOCK_TTL=$(cfg lock_ttl_minutes)
 STALE_IDEA_HOURS=$(cfg stale_idea_after_hours)
+PARALLEL_AGENTS=$(cfg parallel_agents)
+PARALLEL_AGENTS="${PARALLEL_AGENTS:-2}"
+[[ "${PARALLEL_AGENTS}" =~ ^[1-9][0-9]*$ ]] || PARALLEL_AGENTS=2
 
 log() { echo "[$(date -Iseconds)] $*"; }
+
+# A limit set to "unlimited" (or none/off) is not enforced at all: the schedule and
+# budget gates are skipped and no --max-budget-usd is passed to Claude. Nothing then
+# bounds a cycle's spend except the work running out, so treat this as a deliberate
+# "let it rip" switch rather than a default.
+is_unlimited() {
+  local v="${1:-}"
+  [[ "${v,,}" == "unlimited" || "${v,,}" == "none" || "${v,,}" == "off" ]]
+}
 
 # Float comparison via bc, with a caller-chosen answer for unparseable input. Both gates
 # below fail closed — meaning "stop" — but "stop" is `true` for the budget check and
@@ -95,6 +107,9 @@ has_unanswered_questions() {
 }
 
 # --- 1. Schedule / budget gate -------------------------------------------------
+if is_unlimited "${ALLOWED_HOURS}"; then
+  log "allowed_hours is ${ALLOWED_HOURS}; running at any hour."
+else
 now_local=$(TZ="${TZ_NAME}" date +%H:%M)
 # (Overnight-range-aware comparison; swap in your own if allowed_hours can't wrap midnight.)
 in_window=$(python3 - "$now_local" "$ALLOWED_HOURS" <<'PY'
@@ -111,16 +126,26 @@ if [[ "${in_window}" != "yes" ]]; then
   log "Outside allowed_hours (${ALLOWED_HOURS} ${TZ_NAME}); exiting."
   exit 0
 fi
+fi
 
 today=$(date +%F)
 # usage.log is CSV: date,cost_usd,slug,phase,turns
 used_usd=$(awk -F, -v d="$today" '$1==d {sum+=$2} END {printf "%.4f", sum+0}' "${USAGE_LOG}" 2>/dev/null || echo 0)
+if is_unlimited "${MAX_DAILY_USD}"; then
+  log "Today's spend so far: \$${used_usd}; daily budget is ${MAX_DAILY_USD}."
 # An unreadable total counts as over budget: never treat a broken ledger as free money.
-if fcmp "${used_usd}" ">=" "${MAX_DAILY_USD}" 0; then
+elif fcmp "${used_usd}" ">=" "${MAX_DAILY_USD}" 0; then
   log "Daily budget spent (\$${used_usd} >= \$${MAX_DAILY_USD}); exiting."
   exit 0
+else
+  log "Today's spend so far: \$${used_usd} of \$${MAX_DAILY_USD}."
 fi
-log "Today's spend so far: \$${used_usd} of \$${MAX_DAILY_USD}."
+
+# Per-run caps, omitted entirely when unlimited so Claude runs to completion.
+plan_budget_args=()
+is_unlimited "${MAX_PLAN_USD}" || plan_budget_args=(--max-budget-usd "${MAX_PLAN_USD}")
+cycle_budget_args=()
+is_unlimited "${MAX_CYCLE_USD}" || cycle_budget_args=(--max-budget-usd "${MAX_CYCLE_USD}")
 
 # --- 2. Heartbeat gate ----------------------------------------------------------
 # A dead heartbeat server is not evidence that the laptop is idle — it's the absence of
@@ -213,7 +238,7 @@ genuinely ambiguous, a '## Open Questions' section where every question is its o
 (easy/medium/hard) with a short reason. Do not start implementing yet." \
     --allowed-tools "Read,Write" \
     --permission-mode acceptEdits \
-    --max-budget-usd "${MAX_PLAN_USD}" \
+    ${plan_budget_args[@]+"${plan_budget_args[@]}"} \
     --output-format json > "${out_file}" || true
 
   record_usage "${out_file}" "${slug}" plan
@@ -221,10 +246,12 @@ genuinely ambiguous, a '## Open Questions' section where every question is its o
   git commit -m "Draft plan for ${slug}" --quiet || true
 done
 
-# --- 6. Pick an idea to build ------------------------------------------------------
-pick_idea() {
+# --- 6. Pick ideas to build ---------------------------------------------------------
+# Returns up to $1 slugs, highest README priority first.
+pick_ideas() {
+  local want="$1"
   local slug plan status started age_h
-  local -a stalled=()
+  local -a fresh=() stalled=()
   for slug in "${idea_slugs[@]}"; do
     plan="ideas/${slug}/PLAN.md"
     status="ideas/${slug}/STATUS.md"
@@ -237,108 +264,153 @@ pick_idea() {
         if [[ -n "${started}" ]]; then
           age_h=$(( ( $(date +%s) - $(date -d "${started}" +%s 2>/dev/null || date +%s) ) / 3600 ))
           if (( age_h > STALE_IDEA_HOURS )); then
-            # Grinding on too long — deprioritise, don't disqualify. Remember it and
-            # keep looking for something fresher first.
+            # Grinding on too long — deprioritise, don't disqualify.
             stalled+=("${slug}")
             continue
           fi
         fi
       fi
     fi
-    echo "${slug}"
-    return 0
+    fresh+=("${slug}")
   done
-  # Nothing fresh is eligible. Rather than stall forever — which is what happens if a
-  # long-running idea is merely skipped and every idea eventually crosses the threshold —
-  # go back to the highest-priority stalled one and keep chipping away at it.
-  if (( ${#stalled[@]} > 0 )); then
-    # stdout is this function's return channel, so the log line must go to stderr.
-    log "All eligible ideas are past stale_idea_after_hours; resuming ${stalled[0]}." >&2
-    echo "${stalled[0]}"
-    return 0
-  fi
-  return 1
+  # Fresh ideas fill the slots first; stalled ones only take what's left over. That keeps
+  # a long-running idea deprioritised without ever abandoning it — if everything is
+  # stalled, the stalled list is all there is and work continues rather than halting.
+  (( ${#fresh[@]} + ${#stalled[@]} == 0 )) && return 0
+  printf '%s\n' ${fresh[@]+"${fresh[@]}"} ${stalled[@]+"${stalled[@]}"} | head -n "${want}"
 }
 
-if ! slug=$(pick_idea); then
+mapfile -t build_slugs < <(pick_ideas "${PARALLEL_AGENTS}")
+if (( ${#build_slugs[@]} == 0 )); then
   log "No idea is currently buildable (all blocked or planned only); exiting."
   exit 0
 fi
-log "Building: ${slug}"
+log "Building ${#build_slugs[@]} of ${PARALLEL_AGENTS} slot(s) in parallel: ${build_slugs[*]}"
 
-# --- 7. Regenerate CLAUDE.md -------------------------------------------------------
-# Always regenerated, never hand-edited, so edits to AGENTS.md and newly answered
-# questions in PLAN.md propagate on the very next cycle.
-{
-  cat "${AGENTS_MD}"
-  echo
-  cat "ideas/${slug}/PLAN.md"
-  echo
-  echo "## Current status"
-  tail -n 20 "ideas/${slug}/STATUS.md" 2>/dev/null || true
-} > "ideas/${slug}/CLAUDE.md"
-
-# --- 8. Invoke Claude Code headlessly ----------------------------------------------
-session_file="${STATE_DIR}/sessions/${slug}.id"
-resume_args=()
-[[ -f "${session_file}" ]] && resume_args=(--resume "$(cat "${session_file}")")
-
-out_file="${STATE_DIR}/logs/${slug}-$(date +%s).json"
-pushd "ideas/${slug}" >/dev/null
-claude -p "Continue implementing this idea per CLAUDE.md." \
-  --allowed-tools "Bash,Read,Edit,Write,Glob,Grep" \
-  --permission-mode acceptEdits \
-  --max-budget-usd "${MAX_CYCLE_USD}" \
-  --output-format json \
-  "${resume_args[@]}" > "${out_file}" || true
-popd >/dev/null
-
-new_session_id=$(json_field "${out_file}" session_id "")
-[[ -n "${new_session_id}" ]] && echo "${new_session_id}" > "${session_file}"
-
-# --- 9. Update status, commit ------------------------------------------------------
-# pick_idea only selects ideas with zero unanswered questions, so any unticked checkbox
-# now can only have been appended by the run that just finished. Checking the file beats
-# diffing the worktree, which is usually already clean because AGENTS.md tells Claude to
-# commit its own work as it goes.
-blocked="no"
-has_unanswered_questions "ideas/${slug}/PLAN.md" && blocked="yes"
-new_status=$( [[ ${blocked} == yes ]] && echo blocked || echo in_progress )
-
-status_file="ideas/${slug}/STATUS.md"
-prev_started=$(sed -n 's/^started_at:[[:space:]]*//p' "${status_file}" 2>/dev/null | head -1)
-[[ -n "${prev_started}" ]] || prev_started=$(date -Iseconds)
-cycle_cost=$(json_field "${out_file}" total_cost_usd 0)
-
-# Rebuild the header rather than prepending to it, otherwise every cycle buries the
-# previous cycle's "key: value" lines inside the log body.
-{
-  echo "status: ${new_status}"
-  echo "started_at: ${prev_started}"
-  echo "last_session_id: ${new_session_id}"
-  echo "last_run: $(date -Iseconds)"
-  echo "last_cycle_cost_usd: ${cycle_cost}"
-  echo
-  echo "## Log"
-  echo "- $(date -Iseconds) — ${new_status} (\$${cycle_cost})"
-  # Carry the existing log over, dropping the old header block, its "## Log" heading, and
-  # the template's instructional comment — which would otherwise sink below the newest
-  # entry and stay there for the life of the idea.
-  awk 'BEGIN{hdr=1}
-       hdr && /^[a-z_]+:/ {next}
-       hdr && /^[[:space:]]*$/ {next}
-       {hdr=0}
-       /^## Log$/ {next}
-       /^[[:space:]]*<!--/ {next}
-       {print}' "${status_file}" 2>/dev/null || true
-} > "${status_file}.new"
-mv "${status_file}.new" "${status_file}"
-
+# Any scaffolding the pass above created must be committed before worktrees branch off
+# HEAD, or the agents start from a tree missing their own STATUS.md and the merge below
+# trips over uncommitted local changes.
 git add -A
-git commit -m "${slug}: automated build cycle ($( [[ ${blocked} == yes ]] && echo 'blocked on new question' || echo 'progress' ))" --quiet || true
+git commit -m "Scaffold idea files" --quiet || true
+
+# --- 7/8. Run the agents, each in its own worktree, in parallel ----------------------
+# Parallel agents cannot share one working tree. AGENTS.md tells each agent to commit as
+# it goes, and concurrent commits in a shared tree race on .git/index — one agent would
+# stage and commit the other's half-finished files. A linked worktree per agent gives
+# each its own index, HEAD and branch, so the commits are independent; the branches are
+# merged back below. Worktrees live under .orchestrator/, which is gitignored.
+WORKTREE_ROOT="${STATE_DIR}/worktrees"
+mkdir -p "${WORKTREE_ROOT}"
+git worktree prune
+
+run_agent() {
+  local slug="$1" wt="$2" out_file="$3"
+  # CLAUDE.md is regenerated every cycle, never hand-edited, so edits to AGENTS.md and
+  # newly answered questions in PLAN.md propagate on the very next cycle.
+  {
+    cat "${AGENTS_MD}"
+    echo
+    cat "${wt}/ideas/${slug}/PLAN.md"
+    echo
+    echo "## Current status"
+    tail -n 20 "${wt}/ideas/${slug}/STATUS.md" 2>/dev/null || true
+  } > "${wt}/ideas/${slug}/CLAUDE.md"
+
+  local session_file="${STATE_DIR}/sessions/${slug}.id"
+  local -a resume_args=()
+  [[ -f "${session_file}" ]] && resume_args=(--resume "$(cat "${session_file}")")
+
+  (
+    cd "${wt}/ideas/${slug}" || exit 0
+    claude -p "Continue implementing this idea per CLAUDE.md." \
+      --allowed-tools "Bash,Read,Edit,Write,Glob,Grep" \
+      --permission-mode acceptEdits \
+      ${cycle_budget_args[@]+"${cycle_budget_args[@]}"} \
+      --output-format json \
+      ${resume_args[@]+"${resume_args[@]}"} > "${out_file}"
+  ) || true
+}
+
+declare -A WT_OF=() OUT_OF=()
+now_stamp=$(date +%s)
+for slug in "${build_slugs[@]}"; do
+  wt="${WORKTREE_ROOT}/${slug}"
+  # A worktree left behind by a killed cycle would block `worktree add`; clear it first.
+  git worktree remove --force "${wt}" 2>/dev/null || true
+  git branch -D "agent/${slug}" 2>/dev/null || true
+  git worktree add --quiet -b "agent/${slug}" "${wt}" HEAD
+  WT_OF["${slug}"]="${wt}"
+  OUT_OF["${slug}"]="${STATE_DIR}/logs/${slug}-${now_stamp}.json"
+  run_agent "${slug}" "${wt}" "${OUT_OF[${slug}]}" &
+done
+wait
+
+# --- 9. Merge each agent's branch back, update status, commit ------------------------
+for slug in "${build_slugs[@]}"; do
+  wt="${WT_OF[${slug}]}"
+  out_file="${OUT_OF[${slug}]}"
+
+  new_session_id=$(json_field "${out_file}" session_id "")
+  [[ -n "${new_session_id}" ]] && echo "${new_session_id}" > "${STATE_DIR}/sessions/${slug}.id"
+
+  # Sweep up whatever the agent left uncommitted in its own worktree.
+  git -C "${wt}" add -A
+  git -C "${wt}" commit -m "${slug}: uncommitted work from automated build cycle" --quiet || true
+
+  # Each agent touches only its own ideas/<slug>/ and ci-<slug>.yml, so these branches are
+  # disjoint and the merge should never conflict. If one does, something crossed lanes:
+  # keep the branch and its worktree for inspection rather than silently discarding work.
+  if ! git merge --no-ff --no-edit --quiet "agent/${slug}"; then
+    git merge --abort 2>/dev/null || true
+    log "WARNING: merging agent/${slug} conflicted — work kept on that branch in ${wt}; skipping."
+    record_usage "${out_file}" "${slug}" build
+    continue
+  fi
+  git worktree remove --force "${wt}" 2>/dev/null || true
+  git branch -d "agent/${slug}" --quiet 2>/dev/null || true
+
+  # pick_ideas only selects ideas with zero unanswered questions, so any unticked checkbox
+  # now can only have been appended by the run that just finished. Checking the file beats
+  # diffing the tree, which is usually already clean because the agent self-commits.
+  blocked="no"
+  has_unanswered_questions "ideas/${slug}/PLAN.md" && blocked="yes"
+  new_status=$( [[ ${blocked} == yes ]] && echo blocked || echo in_progress )
+
+  status_file="ideas/${slug}/STATUS.md"
+  prev_started=$(sed -n 's/^started_at:[[:space:]]*//p' "${status_file}" 2>/dev/null | head -1)
+  [[ -n "${prev_started}" ]] || prev_started=$(date -Iseconds)
+  cycle_cost=$(json_field "${out_file}" total_cost_usd 0)
+
+  # Rebuild the header rather than prepending to it, otherwise every cycle buries the
+  # previous cycle's "key: value" lines inside the log body.
+  {
+    echo "status: ${new_status}"
+    echo "started_at: ${prev_started}"
+    echo "last_session_id: ${new_session_id}"
+    echo "last_run: $(date -Iseconds)"
+    echo "last_cycle_cost_usd: ${cycle_cost}"
+    echo
+    echo "## Log"
+    echo "- $(date -Iseconds) — ${new_status} (\$${cycle_cost})"
+    # Carry the existing log over, dropping the old header block, its "## Log" heading, and
+    # the template's instructional comment — which would otherwise sink below the newest
+    # entry and stay there for the life of the idea.
+    awk 'BEGIN{hdr=1}
+         hdr && /^[a-z_]+:/ {next}
+         hdr && /^[[:space:]]*$/ {next}
+         {hdr=0}
+         /^## Log$/ {next}
+         /^[[:space:]]*<!--/ {next}
+         {print}' "${status_file}" 2>/dev/null || true
+  } > "${status_file}.new"
+  mv "${status_file}.new" "${status_file}"
+
+  git add -A
+  git commit -m "${slug}: automated build cycle ($( [[ ${blocked} == yes ]] && echo 'blocked on new question' || echo 'progress' ))" --quiet || true
+
+  # --- 10. Record usage --------------------------------------------------------------
+  record_usage "${out_file}" "${slug}" build
+  log "Cycle complete for ${slug} (${new_status})."
+done
+
 git push --quiet || log "push failed — will retry next cycle"
-
-# --- 10. Record usage --------------------------------------------------------------
-record_usage "${out_file}" "${slug}" build
-
-log "Cycle complete for ${slug} (${new_status})."
