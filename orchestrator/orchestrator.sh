@@ -74,6 +74,12 @@ STOP_FILE="${STATE_DIR}/stop"
 AGENT_PID_DIR="${STATE_DIR}/agents"
 mkdir -p "${AGENT_PID_DIR}"
 
+# The deadline runs from here, not from when the agents start. systemd's TimeoutStartSec
+# counts the whole process, so anything before the build phase — a planning pass with no
+# cost cap, a slow pull — has to come out of the same budget or the deadline guarantees
+# nothing.
+SCRIPT_STARTED=$(date +%s)
+
 log() { echo "[$(date -Iseconds)] $*"; }
 
 # --- Graceful stop ------------------------------------------------------------------
@@ -91,7 +97,16 @@ stop_requested() {
     GRACEFUL_STOP="stop file"
     return 0
   fi
+  if deadline_passed; then
+    GRACEFUL_STOP="max_cycle_minutes=${MAX_CYCLE_MINUTES} reached"
+    return 0
+  fi
   return 1
+}
+
+deadline_passed() {
+  is_unlimited "${MAX_CYCLE_MINUTES}" && return 1
+  (( $(date +%s) >= SCRIPT_STARTED + MAX_CYCLE_MINUTES * 60 ))
 }
 
 if [[ -f "${STOP_FILE}" ]]; then
@@ -259,6 +274,14 @@ if (( ${#idea_slugs[@]} == 0 )); then
 fi
 
 for slug in "${idea_slugs[@]}"; do
+  # Planning draws on the same wall clock as the build phase. Without this check a long
+  # planning pass — unbounded when max_plan_cost_usd is unlimited — could burn the whole
+  # deadline and still hand over to agents that then get no time at all.
+  if stop_requested; then
+    log "Stopping before planning ${slug}: ${GRACEFUL_STOP}."
+    break
+  fi
+
   mkdir -p "ideas/${slug}"
   [[ -f "ideas/${slug}/STATUS.md" ]] || cp ideas/_template/STATUS.md "ideas/${slug}/STATUS.md"
 
@@ -334,6 +357,13 @@ pick_ideas() {
   printf '%s\n' ${fresh[@]+"${fresh[@]}"} ${stalled[@]+"${stalled[@]}"} | head -n "${want}"
 }
 
+# Starting agents now would mean launching them with no time to work and immediately
+# winding them down — a cycle's worth of startup cost for nothing.
+if stop_requested; then
+  log "Not starting a build phase: ${GRACEFUL_STOP}."
+  exit 0
+fi
+
 mapfile -t build_slugs < <(pick_ideas "${PARALLEL_AGENTS}")
 if (( ${#build_slugs[@]} == 0 )); then
   log "No idea is currently buildable (all blocked or planned only); exiting."
@@ -393,7 +423,6 @@ run_agent() {
 declare -A WT_OF=() OUT_OF=() SUB_PID_OF=()
 declare -a AGENT_PIDS=()
 now_stamp=$(date +%s)
-cycle_started=${now_stamp}
 for slug in "${build_slugs[@]}"; do
   wt="${WORKTREE_ROOT}/${slug}"
   # A worktree left behind by a killed cycle would block `worktree add`; clear it first.
@@ -451,19 +480,14 @@ wind_down() {
 
 # Poll rather than plain `wait`: a bare wait blocks until the agents finish, which with no
 # budget cap may be never, and it would leave no room to react to a stop request or to
-# finish before systemd's TimeoutStartSec kills us mid-merge.
-cycle_deadline=""
+# finish before systemd's TimeoutStartSec kills us mid-merge. stop_requested() covers the
+# signal, the stop file and the deadline alike.
 if ! is_unlimited "${MAX_CYCLE_MINUTES}"; then
-  cycle_deadline=$(( cycle_started + MAX_CYCLE_MINUTES * 60 ))
-  log "Agents must finish by $(date -d "@${cycle_deadline}" +%H:%M:%S) (max_cycle_minutes=${MAX_CYCLE_MINUTES})."
+  log "Cycle must finish by $(date -d "@$(( SCRIPT_STARTED + MAX_CYCLE_MINUTES * 60 ))" +%H:%M:%S) (max_cycle_minutes=${MAX_CYCLE_MINUTES}, counted from script start)."
 fi
 while agents_running; do
   if stop_requested; then
     wind_down "${GRACEFUL_STOP}"
-    break
-  fi
-  if [[ -n "${cycle_deadline}" ]] && (( $(date +%s) >= cycle_deadline )); then
-    wind_down "max_cycle_minutes=${MAX_CYCLE_MINUTES} reached"
     break
   fi
   sleep 5

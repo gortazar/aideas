@@ -43,7 +43,9 @@ timezone: "Europe/Lisbon"
 # laptop is considered idle (covers crashes, long-running commands, and suspend/sleep).
 heartbeat_staleness_minutes: 10
 
-# Wall-clock ceiling for one cycle's agents. When it's reached they're asked to stop and
+# Wall-clock ceiling for the whole cycle, counted from when the script starts — planning
+# included, since systemd's TimeoutStartSec counts it too. When it's reached the agents are
+# asked to stop and
 # the cycle still commits, merges and pushes what they had — a graceful wind-down rather
 # than a kill. This is the knob that keeps a cycle finishing on its own terms instead of
 # being SIGTERMed by systemd, so keep this ordering intact:
