@@ -353,9 +353,12 @@ for slug in "${build_slugs[@]}"; do
   new_session_id=$(json_field "${out_file}" session_id "")
   [[ -n "${new_session_id}" ]] && echo "${new_session_id}" > "${STATE_DIR}/sessions/${slug}.id"
 
-  # Sweep up whatever the agent left uncommitted in its own worktree.
+  # Sweep up whatever the agent left uncommitted in its own worktree. A well-behaved
+  # agent self-commits, so "nothing to commit" is the normal case and is not worth
+  # printing — git says that on stdout, where it reads like a failure.
   git -C "${wt}" add -A
-  git -C "${wt}" commit -m "${slug}: uncommitted work from automated build cycle" --quiet || true
+  git -C "${wt}" commit -m "${slug}: uncommitted work from automated build cycle" \
+    --quiet >/dev/null 2>&1 || true
 
   # Each agent touches only its own ideas/<slug>/ and ci-<slug>.yml, so these branches are
   # disjoint and the merge should never conflict. If one does, something crossed lanes:
