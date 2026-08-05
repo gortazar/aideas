@@ -192,6 +192,42 @@ Leftover `agent/*` branches mean a merge conflicted or a cycle was killed mid-fl
 next cycle rebuilds its own worktrees from scratch, so they are safe to inspect and delete
 once you've salvaged anything you want.
 
+## Stopping gracefully
+
+A cycle never has to be killed. Three things ask it to wind down, and all take the same
+path: each agent is sent SIGTERM, given `agent_grace_seconds` to exit, and then the cycle
+carries on to commit their work, merge the branches, update `STATUS.md` and push. Nothing
+in progress is thrown away.
+
+```bash
+# Pause the whole system — honoured before a cycle starts and mid-cycle
+touch "$IDEAS_REPO_PATH/.orchestrator/stop"
+rm    "$IDEAS_REPO_PATH/.orchestrator/stop"   # resume
+
+# Stop the cycle that's running now
+sudo systemctl stop idea-orchestrator.service
+```
+
+The third is `max_cycle_minutes`: the cycle stops its own agents at that point. That's
+what keeps a long cycle from being SIGKILLed halfway through a merge, so keep the ordering
+in `.agent-config.yml` intact — `max_cycle_minutes < lock_ttl_minutes < TimeoutStartSec`.
+Setting it to `unlimited` gives up that guarantee, which matters most when the cost caps
+are also off and cycles have nothing else bounding them.
+
+Two things to know about a stopped agent:
+
+- **It stays resumable.** The session id normally comes from the result JSON, which is
+  only written on a clean exit, so the orchestrator falls back to reading it from the
+  session transcript filename. The next cycle `--resume`s the same conversation.
+- **Its cost is unrecoverable**, for the same reason. It's logged as `build-stopped` with
+  `$0` and a warning, so the day's ledger under-counts by whatever that agent spent. With
+  finite budgets, treat a run containing `build-stopped` rows as having spent more than
+  the ledger admits.
+
+```bash
+grep -c 'stopped' "$IDEAS_REPO_PATH/.orchestrator/usage.log"   # unaccounted-for agents
+```
+
 ## Security
 
 The heartbeat server must only be reachable over the VPN — bind it to the VPN interface,
