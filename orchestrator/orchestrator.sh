@@ -129,10 +129,10 @@ except Exception:
 
 # Claude Code names each session's transcript <session-id>.jsonl, under a directory whose
 # name is the working directory with every non-alphanumeric character replaced by "-".
-# That's the only place a session id survives when an agent is stopped instead of allowed
-# to finish, because the result JSON is written on clean exit only. Without this recovery,
-# a graceful stop would silently start a brand-new conversation on the next cycle and
-# throw away everything the agent had worked out.
+# A SIGTERMed agent does write a result JSON with its session id in it, so this is the
+# fallback for the cases that don't: SIGKILL after the grace period, or a crash. Without
+# it, those would silently start a brand-new conversation on the next cycle and throw away
+# everything the agent had worked out.
 recover_session_id() {
   local agent_cwd="$1" dir newest
   dir="${HOME}/.claude/projects/$(printf '%s' "${agent_cwd}" | sed 's/[^a-zA-Z0-9]/-/g')"
@@ -224,9 +224,10 @@ git pull --quiet --ff-only || log "pull failed — continuing with the local tre
 record_usage() {
   local out_file="$1" slug="$2" phase="$3"
   local cost turns denials
-  # Cost and turns live only in the result JSON, which a stopped agent never writes. Say
-  # so rather than logging a confident "$0" — otherwise a wound-down cycle looks free and
-  # the daily ledger quietly under-counts everything it spent.
+  # Cost and turns live only in the result JSON. A SIGTERMed agent does still write one
+  # (marked is_error/error_during_execution), so this path is only reached after a SIGKILL
+  # or a crash. Say so rather than logging a confident "$0" — otherwise the cycle looks
+  # free and the daily ledger quietly under-counts everything it spent.
   if [[ ! -s "${out_file}" ]]; then
     echo "${today},0,${slug},${phase}-stopped,0" >> "${USAGE_LOG}"
     log "WARNING: ${phase}/${slug} produced no result JSON (agent stopped); its real cost is unknown and is recorded as \$0."

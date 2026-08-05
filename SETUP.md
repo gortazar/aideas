@@ -214,15 +214,15 @@ in `.agent-config.yml` intact — `max_cycle_minutes < lock_ttl_minutes < Timeou
 Setting it to `unlimited` gives up that guarantee, which matters most when the cost caps
 are also off and cycles have nothing else bounding them.
 
-Two things to know about a stopped agent:
+A SIGTERMed agent still writes its result JSON on the way out — with its session id and
+its real cost — so it stays resumable and the day's ledger stays accurate. It's marked
+`is_error: true` with `subtype: error_during_execution`, which is how a stopped cycle is
+told apart from one that finished on its own.
 
-- **It stays resumable.** The session id normally comes from the result JSON, which is
-  only written on a clean exit, so the orchestrator falls back to reading it from the
-  session transcript filename. The next cycle `--resume`s the same conversation.
-- **Its cost is unrecoverable**, for the same reason. It's logged as `build-stopped` with
-  `$0` and a warning, so the day's ledger under-counts by whatever that agent spent. With
-  finite budgets, treat a run containing `build-stopped` rows as having spent more than
-  the ledger admits.
+Only a SIGKILL or a crash loses that JSON. Then the orchestrator recovers the session id
+from the transcript filename so `--resume` still works, but the cost is genuinely gone: it
+goes in the ledger as `build-stopped` with `$0` and a warning, and the day under-counts by
+whatever that agent spent.
 
 ```bash
 grep -c 'stopped' "$IDEAS_REPO_PATH/.orchestrator/usage.log"   # unaccounted-for agents
