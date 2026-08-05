@@ -43,6 +43,21 @@ timezone: "Europe/Lisbon"
 # laptop is considered idle (covers crashes, long-running commands, and suspend/sleep).
 heartbeat_staleness_minutes: 10
 
+# Wall-clock ceiling for one cycle's agents. When it's reached they're asked to stop and
+# the cycle still commits, merges and pushes what they had — a graceful wind-down rather
+# than a kill. This is the knob that keeps a cycle finishing on its own terms instead of
+# being SIGTERMed by systemd, so keep this ordering intact:
+#
+#   max_cycle_minutes  <  lock_ttl_minutes  <  TimeoutStartSec in the systemd unit
+#
+# The first gap stops a second cycle reclaiming the lock while this one is still running;
+# the second leaves time for the merge and push after the agents stop. Accepts
+# "unlimited", which removes the ceiling — and with it the guarantee of either.
+max_cycle_minutes: 45
+
+# How long an agent gets to shut down after being asked, before it's killed outright.
+agent_grace_seconds: 90
+
 # How long the repo lock can be held before it's considered abandoned and reclaimed.
 lock_ttl_minutes: 60
 

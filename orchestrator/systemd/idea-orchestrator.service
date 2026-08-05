@@ -14,10 +14,21 @@ ExecStart=/opt/idea-agent/orchestrator/orchestrator.sh
 # agent shells out to both. Adjust the home directory to the service user's.
 Environment=PATH=/home/CHANGEME_USER/.local/bin:/home/CHANGEME_USER/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin
 
-# A cycle is bounded by --max-budget-usd, but a wedged git or network call isn't — this
-# is the outer stop. Keep it comfortably above a realistic cycle; the expiring repo lock
-# (lock_ttl_minutes) cleans up after a kill.
+# Outer stop. The script's own max_cycle_minutes should trip well before this, so a cycle
+# normally winds itself down and this is only a backstop; keep it above
+# max_cycle_minutes + agent_grace_seconds + merge/push time. On expiry systemd sends
+# SIGTERM, which the script traps and treats as "wind down now" rather than dying.
 TimeoutStartSec=3600
+
+# SIGTERM the script only, not the whole cgroup: the orchestrator has to stay alive to
+# stop its agents, commit their work, merge the branches and push. With the default
+# control-group kill, systemd would signal the agents directly and the script would race
+# them to the exit, abandoning worktrees mid-merge.
+KillMode=mixed
+
+# Room to actually finish that wind-down before SIGKILL. Must exceed
+# agent_grace_seconds plus however long the merge and push take.
+TimeoutStopSec=300
 
 # The script needs the service user's ~/.claude (subscription token from
 # `claude setup-token`) and its SSH key for git push, so ProtectHome is off here —

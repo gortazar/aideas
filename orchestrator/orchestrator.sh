@@ -65,8 +65,39 @@ STALE_IDEA_HOURS=$(cfg stale_idea_after_hours)
 PARALLEL_AGENTS=$(cfg parallel_agents)
 PARALLEL_AGENTS="${PARALLEL_AGENTS:-2}"
 [[ "${PARALLEL_AGENTS}" =~ ^[1-9][0-9]*$ ]] || PARALLEL_AGENTS=2
+MAX_CYCLE_MINUTES=$(cfg max_cycle_minutes)
+MAX_CYCLE_MINUTES="${MAX_CYCLE_MINUTES:-45}"
+AGENT_GRACE_SECONDS=$(cfg agent_grace_seconds)
+AGENT_GRACE_SECONDS="${AGENT_GRACE_SECONDS:-90}"
+
+STOP_FILE="${STATE_DIR}/stop"
+AGENT_PID_DIR="${STATE_DIR}/agents"
+mkdir -p "${AGENT_PID_DIR}"
 
 log() { echo "[$(date -Iseconds)] $*"; }
+
+# --- Graceful stop ------------------------------------------------------------------
+# Two ways to ask this cycle to wind down: a SIGTERM (which is what systemd sends when
+# TimeoutStartSec expires or you `systemctl stop`), or the stop file. Neither aborts
+# anything mid-flight — they set a flag that the agent wait loop notices, so the cycle
+# still commits, merges and pushes whatever the agents had produced by then.
+GRACEFUL_STOP=""
+on_stop_signal() { GRACEFUL_STOP="${GRACEFUL_STOP:-signal}"; }
+trap on_stop_signal TERM INT
+
+stop_requested() {
+  [[ -n "${GRACEFUL_STOP}" ]] && return 0
+  if [[ -f "${STOP_FILE}" ]]; then
+    GRACEFUL_STOP="stop file"
+    return 0
+  fi
+  return 1
+}
+
+if [[ -f "${STOP_FILE}" ]]; then
+  log "Paused: ${STOP_FILE} exists. Remove it to resume."
+  exit 0
+fi
 
 # A limit set to "unlimited" (or none/off) is not enforced at all: the schedule and
 # budget gates are skipped and no --max-budget-usd is passed to Claude. Nothing then
@@ -95,6 +126,20 @@ try:
 except Exception:
     print(sys.argv[3])
 " "$1" "$2" "$3" 2>/dev/null || echo "$3"; }
+
+# Claude Code names each session's transcript <session-id>.jsonl, under a directory whose
+# name is the working directory with every non-alphanumeric character replaced by "-".
+# That's the only place a session id survives when an agent is stopped instead of allowed
+# to finish, because the result JSON is written on clean exit only. Without this recovery,
+# a graceful stop would silently start a brand-new conversation on the next cycle and
+# throw away everything the agent had worked out.
+recover_session_id() {
+  local agent_cwd="$1" dir newest
+  dir="${HOME}/.claude/projects/$(printf '%s' "${agent_cwd}" | sed 's/[^a-zA-Z0-9]/-/g')"
+  [[ -d "${dir}" ]] || return 0
+  newest=$(ls -t "${dir}"/*.jsonl 2>/dev/null | head -1)
+  [[ -n "${newest}" ]] && basename "${newest}" .jsonl
+}
 
 # An idea is blocked iff its Open Questions section still holds an unticked checkbox.
 # The template documents "- [ ]" as the one blocking form, so match only that — also
@@ -179,6 +224,14 @@ git pull --quiet --ff-only || log "pull failed — continuing with the local tre
 record_usage() {
   local out_file="$1" slug="$2" phase="$3"
   local cost turns denials
+  # Cost and turns live only in the result JSON, which a stopped agent never writes. Say
+  # so rather than logging a confident "$0" — otherwise a wound-down cycle looks free and
+  # the daily ledger quietly under-counts everything it spent.
+  if [[ ! -s "${out_file}" ]]; then
+    echo "${today},0,${slug},${phase}-stopped,0" >> "${USAGE_LOG}"
+    log "WARNING: ${phase}/${slug} produced no result JSON (agent stopped); its real cost is unknown and is recorded as \$0."
+    return 0
+  fi
   cost=$(json_field "${out_file}" total_cost_usd 0)
   turns=$(json_field "${out_file}" num_turns 0)
   denials=$(python3 -c "
@@ -327,12 +380,19 @@ run_agent() {
       --permission-mode acceptEdits \
       ${cycle_budget_args[@]+"${cycle_budget_args[@]}"} \
       --output-format json \
-      ${resume_args[@]+"${resume_args[@]}"} > "${out_file}"
+      ${resume_args[@]+"${resume_args[@]}"} > "${out_file}" &
+    # Recorded so a wind-down can signal Claude itself rather than this wrapper subshell,
+    # which would leave the real agent orphaned and still spending.
+    echo $! > "${AGENT_PID_DIR}/${slug}.pid"
+    wait $!
   ) || true
+  rm -f "${AGENT_PID_DIR}/${slug}.pid"
 }
 
-declare -A WT_OF=() OUT_OF=()
+declare -A WT_OF=() OUT_OF=() SUB_PID_OF=()
+declare -a AGENT_PIDS=()
 now_stamp=$(date +%s)
+cycle_started=${now_stamp}
 for slug in "${build_slugs[@]}"; do
   wt="${WORKTREE_ROOT}/${slug}"
   # A worktree left behind by a killed cycle would block `worktree add`; clear it first.
@@ -341,9 +401,73 @@ for slug in "${build_slugs[@]}"; do
   git worktree add --quiet -b "agent/${slug}" "${wt}" HEAD
   WT_OF["${slug}"]="${wt}"
   OUT_OF["${slug}"]="${STATE_DIR}/logs/${slug}-${now_stamp}.json"
+  rm -f "${AGENT_PID_DIR}/${slug}.pid"
   run_agent "${slug}" "${wt}" "${OUT_OF[${slug}]}" &
+  SUB_PID_OF["${slug}"]=$!
+  AGENT_PIDS+=("$!")
 done
-wait
+
+agents_running() {
+  local pid
+  for pid in ${AGENT_PIDS[@]+"${AGENT_PIDS[@]}"}; do
+    kill -0 "${pid}" 2>/dev/null && return 0
+  done
+  return 1
+}
+
+# Ask every agent to stop, then give it AGENT_GRACE_SECONDS to exit before forcing it.
+# Claude Code handles SIGTERM by shutting the session down, and the session transcript is
+# already on disk, so the work in the worktree and the resumable session both survive.
+wind_down() {
+  local reason="$1" slug pf cpid waited=0
+  log "Winding down agents gracefully: ${reason}."
+  for slug in "${build_slugs[@]}"; do
+    pf="${AGENT_PID_DIR}/${slug}.pid"
+    cpid=""
+    [[ -f "${pf}" ]] && cpid=$(cat "${pf}" 2>/dev/null)
+    if [[ -n "${cpid}" ]] && kill -0 "${cpid}" 2>/dev/null; then
+      log "  SIGTERM -> ${slug} agent (pid ${cpid})"
+      kill -TERM "${cpid}" 2>/dev/null || true
+    elif kill -0 "${SUB_PID_OF[${slug}]}" 2>/dev/null; then
+      # No pid file yet: the agent is still starting up, so signal its wrapper instead.
+      log "  SIGTERM -> ${slug} wrapper (pid ${SUB_PID_OF[${slug}]}); agent had not started"
+      kill -TERM "${SUB_PID_OF[${slug}]}" 2>/dev/null || true
+    fi
+  done
+  while agents_running && (( waited < AGENT_GRACE_SECONDS )); do
+    sleep 2
+    waited=$(( waited + 2 ))
+  done
+  if agents_running; then
+    log "  agents still alive after ${AGENT_GRACE_SECONDS}s; escalating to SIGKILL"
+    for slug in "${build_slugs[@]}"; do
+      pf="${AGENT_PID_DIR}/${slug}.pid"
+      [[ -f "${pf}" ]] && kill -KILL "$(cat "${pf}" 2>/dev/null)" 2>/dev/null || true
+      kill -KILL "${SUB_PID_OF[${slug}]}" 2>/dev/null || true
+    done
+  fi
+}
+
+# Poll rather than plain `wait`: a bare wait blocks until the agents finish, which with no
+# budget cap may be never, and it would leave no room to react to a stop request or to
+# finish before systemd's TimeoutStartSec kills us mid-merge.
+cycle_deadline=""
+if ! is_unlimited "${MAX_CYCLE_MINUTES}"; then
+  cycle_deadline=$(( cycle_started + MAX_CYCLE_MINUTES * 60 ))
+  log "Agents must finish by $(date -d "@${cycle_deadline}" +%H:%M:%S) (max_cycle_minutes=${MAX_CYCLE_MINUTES})."
+fi
+while agents_running; do
+  if stop_requested; then
+    wind_down "${GRACEFUL_STOP}"
+    break
+  fi
+  if [[ -n "${cycle_deadline}" ]] && (( $(date +%s) >= cycle_deadline )); then
+    wind_down "max_cycle_minutes=${MAX_CYCLE_MINUTES} reached"
+    break
+  fi
+  sleep 5
+done
+wait || true
 
 # --- 9. Merge each agent's branch back, update status, commit ------------------------
 for slug in "${build_slugs[@]}"; do
@@ -351,6 +475,12 @@ for slug in "${build_slugs[@]}"; do
   out_file="${OUT_OF[${slug}]}"
 
   new_session_id=$(json_field "${out_file}" session_id "")
+  if [[ -z "${new_session_id}" ]]; then
+    # No result JSON: the agent was stopped rather than finishing. Fall back to the
+    # transcript on disk so the next cycle can still --resume this conversation.
+    new_session_id=$(recover_session_id "${wt}/ideas/${slug}")
+    [[ -n "${new_session_id}" ]] && log "${slug}: recovered session ${new_session_id} from its transcript."
+  fi
   [[ -n "${new_session_id}" ]] && echo "${new_session_id}" > "${STATE_DIR}/sessions/${slug}.id"
 
   # Sweep up whatever the agent left uncommitted in its own worktree. A well-behaved
