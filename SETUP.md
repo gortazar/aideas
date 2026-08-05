@@ -149,8 +149,48 @@ them as a consistent proxy for allowance burn; your actual ceiling is the plan's
 LC_ALL=C awk -F, -v d="$(date +%F)" '$1==d {s+=$2} END {printf "$%.2f\n", s}' .orchestrator/usage.log
 ```
 
-The daily figure gates the *start* of a cycle, so a day can overshoot by at most one
-`max_cycle_cost_usd`.
+The daily figure gates the *start* of a cycle, so a day can overshoot by at most
+`parallel_agents × max_cycle_cost_usd`. The per-cycle cap is also approximate — a cycle
+capped at $1.50 has been seen finishing at $1.53 — and it stops the agent mid-tool-call,
+so a cycle can be cut off partway through a push or a merge.
+
+### Turning the limits off
+
+`allowed_hours`, `max_daily_cost_usd`, `max_cycle_cost_usd` and `max_plan_cost_usd` each
+accept `unlimited` (or `none`/`off`):
+
+```yaml
+allowed_hours: "unlimited"
+max_daily_cost_usd: unlimited
+max_cycle_cost_usd: unlimited
+```
+
+With `max_cycle_cost_usd: unlimited` no `--max-budget-usd` is passed, so an agent runs
+until it decides it has finished rather than being cut off — better output, no ceiling.
+Combined with `parallel_agents`, an unlimited overnight run can consume your entire
+rolling allowance, so it is worth pairing with a `max_daily_cost_usd` you keep finite.
+
+The heartbeat gate has deliberately **no** off switch: it is the one rule that keeps the
+orchestrator off your allowance while you are working, which is the point of the system.
+
+### Parallel agents
+
+`parallel_agents` (default 2) sets how many ideas are built concurrently, one agent each,
+taking the top N eligible ideas in README order. Each agent gets its own git worktree
+under `.orchestrator/worktrees/<slug>` on branch `agent/<slug>`, so its commits can't
+collide with the other's, and the orchestrator merges the branches back at the end of the
+cycle. A conflicting merge is treated as a signal that agents crossed lanes: the branch
+and worktree are left in place for inspection rather than discarded.
+
+```bash
+# What each agent is doing right now
+git -C "$IDEAS_REPO_PATH" worktree list
+git -C "$IDEAS_REPO_PATH" branch --list 'agent/*'
+```
+
+Leftover `agent/*` branches mean a merge conflicted or a cycle was killed mid-flight; the
+next cycle rebuilds its own worktrees from scratch, so they are safe to inspect and delete
+once you've salvaged anything you want.
 
 ## Security
 
