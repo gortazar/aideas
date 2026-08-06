@@ -17,6 +17,7 @@ import GLib from 'gi://GLib';
 
 import { DAEMON_NAME } from '../lib/protocol.js';
 import { TaskStore } from '../lib/taskStore.js';
+import { ShellClient } from './shellClient.js';
 import { TasksService } from './service.js';
 
 const loop = new GLib.MainLoop(null, false);
@@ -28,7 +29,10 @@ const store = new TaskStore(dataDir ? { directory: dataDir } : {});
 for (const problem of store.load())
     printerr(`gnome-tasks-daemon: ${problem}`);
 
-const service = new TasksService(store);
+// The compositor connection is optional on purpose: the daemon must start, hold state and answer
+// clients whether or not the Shell extension is loaded.
+const shell = new ShellClient(() => service.onWindowsChanged());
+const service = new TasksService(store, shell);
 let exitCode = 0;
 
 const ownerId = Gio.bus_own_name(
@@ -45,28 +49,23 @@ const ownerId = Gio.bus_own_name(
         loop.quit();
     });
 
+// Signal handling uses GLib.unix_signal_add even though glib 2.80 deprecated it in favour of
+// GLibUnix.signal_add, which warns once at startup. The obvious fix — a dynamic import to prefer the
+// new entry point where it exists — introduces a *top-level await*, and that quietly breaks the whole
+// daemon: with a top-level await, module evaluation becomes a promise job, loop.run() then runs
+// inside that job, and no queued microtask ever gets drained. The symptom is spectacular and
+// mystifying: D-Bus calls go out, replies arrive, callbacks fire, and every `await` in the process
+// hangs for ever. One warning line is a much better trade.
+const SIGINT = 2;
+const SIGTERM = 15;
+
 function quit() {
     loop.quit();
     return GLib.SOURCE_REMOVE;
 }
 
-// glib 2.80 moved the unix helpers into their own typelib and warns (with a stack trace) when the
-// old entry point is used. Prefer the new one where it exists so the journal stays readable.
-const SIGINT = 2;
-const SIGTERM = 15;
-let addSignalHandler = (signal, handler) =>
+const addSignalHandler = (signal, handler) =>
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal, handler);
-try {
-    // The typelib exists from glib 2.80 but does not always expose signal_add, so check for the
-    // function rather than for the import.
-    const GLibUnix = (await import('gi://GLibUnix')).default;
-    if (typeof GLibUnix?.signal_add === 'function') {
-        addSignalHandler = (signal, handler) =>
-            GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, signal, handler);
-    }
-} catch {
-    // older glib: the GLib entry point is the only one there is
-}
 
 addSignalHandler(SIGTERM, quit);
 addSignalHandler(SIGINT, quit);
@@ -74,5 +73,6 @@ addSignalHandler(SIGINT, quit);
 loop.run();
 
 service.destroy();
+shell.destroy();
 Gio.bus_unown_name(ownerId);
 imports.system.exit(exitCode);

@@ -40,7 +40,11 @@ export const TaskState = {
 
 /** What happens to a task's windows when the user switches away from it. */
 export const DeactivatePolicy = {
-    /** Leave the apps running, parked out of sight. Fast, memory-hungry. */
+    /**
+     * Leave the apps running, parked out of sight. Fast, memory-hungry — and not implemented yet:
+     * parking needs a workspace policy that does not exist, so the daemon says so rather than
+     * silently doing nothing. See docs/limitations.md.
+     */
     HIDE: 'hide',
     /** Ask the apps to quit politely, reopen on return. Slow, may prompt about unsaved work. */
     CLOSE: 'close',

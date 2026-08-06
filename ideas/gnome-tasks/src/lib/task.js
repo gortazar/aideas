@@ -50,7 +50,9 @@ function randomUuid() {
  * moment it has a name.
  */
 export function createTask({ uuid, name, icon = '', description = '',
-    deactivatePolicy = DeactivatePolicy.HIDE, apps = [], commands = [] } = {}) {
+    // LEAVE rather than HIDE: a default has to be a behaviour that exists, and leaving windows
+    // alone is also the safest thing to do with somebody's open work.
+    deactivatePolicy = DeactivatePolicy.LEAVE, apps = [], commands = [] } = {}) {
     return {
         version: SCHEMA_VERSION,
         uuid: uuid ?? randomUuid(),
@@ -124,7 +126,7 @@ export function parseTask(text) {
         name: migrated.name,
         icon: migrated.icon ?? '',
         description: migrated.description ?? '',
-        deactivatePolicy: migrated.deactivatePolicy ?? DeactivatePolicy.HIDE,
+        deactivatePolicy: migrated.deactivatePolicy ?? DeactivatePolicy.LEAVE,
         apps: migrated.apps ?? [],
         commands: migrated.commands ?? [],
     });
