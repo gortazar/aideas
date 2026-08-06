@@ -17,6 +17,8 @@ import {
 } from '../lib/protocol.js';
 import { serializeTask, summarizeTask } from '../lib/task.js';
 import { layoutFromWindows, restorePlan, sameLayout } from '../lib/layout.js';
+import { documentsFor } from '../lib/adapters/index.js';
+import { readProcessInfo } from './procReader.js';
 
 /**
  * How long to wait after the compositor reports a change before saving. Window drags and workspace
@@ -237,12 +239,29 @@ export class TasksService {
             return;
 
         const windows = await this._shell.listWindows();
-        const layout = layoutFromWindows(windows);
+        const layout = layoutFromWindows(windows, { documents: window => this._documentsFor(window) });
 
         if (sameLayout(layout, task.apps ?? []))
             return;
 
         this._store.update(task.uuid, { apps: layout });
+    }
+
+    /**
+     * What document this window is showing, as far as anything outside the application can tell.
+     * Reading /proc happens here, in the daemon, and never in the compositor.
+     */
+    _documentsFor(record) {
+        const info = readProcessInfo(record.pid);
+        if (!info)
+            return [];
+
+        // The adapters ask about paths they derive themselves (a terminal's title names a directory
+        // that appears in no file descriptor), so they get a live check rather than a fixed list.
+        return documentsFor(record, {
+            ...info,
+            exists: path => GLib.file_test(path, GLib.FileTest.EXISTS),
+        });
     }
 
     async _switchTasks(outgoingUuid, incoming) {

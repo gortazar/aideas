@@ -12,17 +12,19 @@ It is three cooperating pieces, for reasons explained in [PLAN.md](PLAN.md) and
 | --- | --- | --- |
 | `gnome-tasks-daemon` | its own process, owns `org.gnome.Tasks` | all state, all persistence, all subprocess work |
 | the Shell extension | inside `gnome-shell` | the top-bar switcher, and the window introspection/placement only in-process code can do |
-| app adapters | per app | recovering "which document is this window showing", by capability tier |
+| app adapters | per app | recovering "which document is this window showing", by capability tier ([docs](docs/app-adapters.md)) |
 
 Anything slow or risky stays out of the compositor: the extension only makes D-Bus calls.
 
 ## Status
 
-The core loop works: **a task remembers the applications you opened, and switching back to it brings
-them back where they were.** Verified end to end in a real (nested, headless) GNOME Shell 46 session
-by `tools/smoke-nested.py`. Documents, per-task commands, the preferences window and the browser
-adapters are not built yet — see [STATUS.md](STATUS.md) for exactly what works today and
-[docs/limitations.md](docs/limitations.md) for what cannot work at all.
+The core loop works: **a task remembers the applications you opened — and, for some of them, the
+document each one had open — and switching back brings them back where they were.** Verified end to
+end in a real (nested, headless) GNOME Shell 46 session by `make smoke`. Per-task commands, the
+preferences window and the browser adapters are not built yet — see [STATUS.md](STATUS.md) for
+exactly what works today, [docs/app-adapters.md](docs/app-adapters.md) for which applications can
+have their documents recovered, and [docs/limitations.md](docs/limitations.md) for what cannot work
+at all.
 
 ![The switcher in the top bar, showing the active task, with a window restored into it](screenshots/nested-session.png)
 

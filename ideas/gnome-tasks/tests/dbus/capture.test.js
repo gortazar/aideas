@@ -100,6 +100,69 @@ suite('capture', () => {
     });
 });
 
+suite('documents', () => {
+    // The daemon reads /proc for real, so this test points a fake window at a real process whose
+    // command line contains a real file: the test runner itself. That exercises procReader and the
+    // command-line adapter end to end, which a pure unit test cannot.
+    test('a document on an application\'s command line is captured', async () => {
+        const uuid = await createTask('With documents');
+        const pid = new TextDecoder().decode(
+            GLib.file_get_contents('/proc/self/stat')[1]).split(' ')[0];
+        const runnerPath = GLib.build_filenamev([
+            GLib.path_get_dirname(GLib.path_get_dirname(
+                GLib.filename_from_uri(import.meta.url)[0])), 'run.js',
+        ]);
+
+        // gjs was started as `gjs -m tests/run.js tests/dbus`, so run.js is on its command line and
+        // the command-line adapter should find it — but only for an app that has that adapter.
+        shell.windows = [{
+            ...fakeWindow('org.gnome.TextEditor.desktop'),
+            pid: Number(pid),
+        }];
+
+        await call('CaptureNow', new GLib.Variant('(s)', [uuid]));
+        await sleep(800);
+
+        const document = await taskDocument(uuid);
+        assertEquals(document.apps.length, 1);
+        const documents = document.apps[0].documents;
+        assert(documents.some(uri => uri.endsWith('/run.js')),
+            `expected the runner's path among ${JSON.stringify(documents)} (looking for ${runnerPath})`);
+
+        await call('DeleteTask', new GLib.Variant('(s)', [uuid]));
+    });
+
+    test('an app with no adapter records no documents, whatever its command line holds', async () => {
+        const uuid = await createTask('Tier zero');
+        const pid = new TextDecoder().decode(
+            GLib.file_get_contents('/proc/self/stat')[1]).split(' ')[0];
+
+        shell.windows = [{ ...fakeWindow('org.gnome.Calculator.desktop'), pid: Number(pid) }];
+
+        await call('CaptureNow', new GLib.Variant('(s)', [uuid]));
+        await sleep(800);
+
+        const document = await taskDocument(uuid);
+        assertDeepEquals(document.apps[0].documents, []);
+
+        await call('DeleteTask', new GLib.Variant('(s)', [uuid]));
+    });
+
+    test('a dead process is not an error', async () => {
+        const uuid = await createTask('Dead process');
+        shell.windows = [{ ...fakeWindow('org.gnome.TextEditor.desktop'), pid: 999999 }];
+
+        await call('CaptureNow', new GLib.Variant('(s)', [uuid]));
+        await sleep(800);
+
+        const document = await taskDocument(uuid);
+        assertEquals(document.apps.length, 1, 'the window is still captured');
+        assertDeepEquals(document.apps[0].documents, []);
+
+        await call('DeleteTask', new GLib.Variant('(s)', [uuid]));
+    });
+});
+
 suite('restore', () => {
     test('activating a task launches the applications it remembers, with their placement', async () => {
         const uuid = await createTask('Restorable');

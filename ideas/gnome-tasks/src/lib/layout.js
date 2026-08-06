@@ -13,7 +13,7 @@ import { canCapture } from './windowModel.js';
  * is on disk to decide whether to write; an order that followed the stacking order would make every
  * click look like a change.
  */
-export function layoutFromWindows(windows, { excludedAppIds = [] } = {}) {
+export function layoutFromWindows(windows, { excludedAppIds = [], documents = null } = {}) {
     const excluded = new Set(excludedAppIds);
 
     return windows
@@ -21,8 +21,9 @@ export function layoutFromWindows(windows, { excludedAppIds = [] } = {}) {
         .map(window => ({
             appId: window.appId,
             title: window.title,
-            // Filled in by the tier-1 adapters in M4; empty means "launch with no document".
-            documents: [],
+            // From the per-app adapters (src/lib/adapters/), which the daemon wires up because they
+            // need to read /proc. Empty means "launch with no document", which is the tier-0 answer.
+            documents: documents ? documents(window) : [],
             placement: {
                 workspace: window.workspaceIndex,
                 geometry: { ...window.geometry },

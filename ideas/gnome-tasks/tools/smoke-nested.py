@@ -15,11 +15,15 @@ about:
 Prints a verdict per step and exits non-zero if any of them failed.
 """
 import json
+import os
 import subprocess
 import sys
 import time
 
 APP = "org.gnome.Calculator.desktop"
+DOCUMENT_APP = "org.gnome.TextEditor.desktop"
+DOCUMENT_DIR = os.path.expanduser("~/.cache/gnome-tasks-smoke")
+DOCUMENT = os.path.join(DOCUMENT_DIR, "notes.txt")
 
 failures = []
 
@@ -65,9 +69,13 @@ def current_task():
     return reply.strip("(),").strip("<>").strip("'")
 
 
-def calculator_windows():
+def windows_of(app_fragment):
     data = unwrap_json(shell("ListWindows"))
-    return [w for w in data["windows"] if "Calculator" in w["appId"]]
+    return [w for w in data["windows"] if app_fragment in w["appId"]]
+
+
+def calculator_windows():
+    return windows_of("Calculator")
 
 
 def wait_for(predicate, what, timeout=90):
@@ -136,19 +144,65 @@ def main():
         print(f"   remembered geometry: {remembered.get('geometry')}")
         print(f"   restored geometry:   {window['geometry']}")
 
+    print("\n== step 7: a document is remembered and reopened (tier 1) ==")
+    os.makedirs(DOCUMENT_DIR, exist_ok=True)
+    with open(DOCUMENT, "w") as handle:
+        handle.write("a document restored by gnome-tasks\n")
+
+    docs_task = unwrap_string(tasks("CreateTask", "Documents", ""))
+    tasks("SetTaskProperties", docs_task, "{'deactivate-policy': <'close'>}")
+    tasks("ActivateTask", docs_task)
+    time.sleep(2)
+
+    shell("LaunchApp", DOCUMENT_APP, f"['file://{DOCUMENT}']", "{}")
+    opened = wait_for(lambda: bool(windows_of("TextEditor")), "the text editor")
+    check("the text editor opened with the document", opened)
+
+    remembered = wait_for(
+        lambda: any(app.get("documents")
+                    for app in (unwrap_json(tasks("GetTask", docs_task)) or {}).get("apps", [])),
+        "the document to be captured", timeout=40)
+    check("the document was captured from the application's command line", remembered)
+
+    captured = unwrap_json(tasks("GetTask", docs_task)) or {}
+    for app in captured.get("apps", []):
+        print(f"   remembered: {app['appId']} documents={app['documents']}")
+
+    tasks("ActivateTask", other)
+    wait_for(lambda: not windows_of("TextEditor"), "the editor to close", timeout=40)
+
+    tasks("ActivateTask", docs_task)
+    back = wait_for(lambda: bool(windows_of("TextEditor")), "the editor to come back", timeout=90)
+    check("the editor was relaunched", back)
+    if back:
+        title = windows_of("TextEditor")[0]["title"]
+        print(f"   restored window title: {title}")
+        check("the restored window shows the same document", "notes.txt" in title)
+
+    for window in windows_of("TextEditor"):
+        shell("CloseWindow", window["id"])
+    tasks("StopTask", docs_task)
+    tasks("DeleteTask", docs_task)
+
     print("\n== cleanup ==")
     for window in calculator_windows():
         shell("CloseWindow", window["id"])
     tasks("StopTask", work)
     tasks("DeleteTask", work)
     tasks("DeleteTask", other)
+    try:
+        os.remove(DOCUMENT)
+        os.rmdir(DOCUMENT_DIR)
+    except OSError:
+        pass
     print("   tasks deleted")
 
     print("\n== verdict ==")
     if failures:
         print(f"   {len(failures)} step(s) failed: {failures}")
         sys.exit(1)
-    print("   the whole loop works: remember, close on switch-away, restore on switch-back")
+    print("   the whole loop works: remember (including the open document), close on switch-away,")
+    print("   restore on switch-back with the same document and geometry")
 
 
 if __name__ == "__main__":
