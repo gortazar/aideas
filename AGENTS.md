@@ -10,8 +10,8 @@ These rules apply to every idea in `ideas/`. This file is prepended to each idea
 - Do not edit `CLAUDE.md`. It is regenerated from `AGENTS.md` + `PLAN.md` + `STATUS.md`
   before every cycle, so any edit is silently discarded.
 - Tests first: for any feature, write a failing test before writing the implementation.
-- Commit in small, working increments. Never leave the tree in a broken (non-building,
-  non-passing-tests) state at the end of a session.
+- Work in small units and commit each one — see **Units of work** below. Never leave the
+  tree in a broken (non-building, non-passing-tests) state at the end of a session.
 - You are working in a git worktree on a branch of your own, because another agent may be
   building a different idea at the same time. Commit freely, but do **not** push this
   repo, switch branches, rebase, or merge — the orchestrator merges your branch and
@@ -30,6 +30,42 @@ These rules apply to every idea in `ideas/`. This file is prepended to each idea
   3. End the session — do not keep working on this idea until the question is answered.
 - Never delete or reword an already-answered question in `PLAN.md`. Only append new ones.
 
+## Units of work
+
+Split every feature in `PLAN.md` into units small enough to build, test and commit in one
+go — one observable behaviour each. Finish one before starting the next; never leave two
+half-built. If you can't say what a unit does in a single specific sentence, it's still
+two units.
+
+A unit is done when its tests pass, the build is clean, and it's committed. Until then it
+doesn't exist as far as anyone else can tell, so:
+
+- **Commit at the end of every unit, not at the end of the session.** Ten small commits
+  beat one big one. A commit whose diff sprawls across several behaviours should have
+  been several commits.
+- **Update `STATUS.md` in that same commit** — what this unit added, and what the next
+  unit is. A session can end at any moment; a `STATUS.md` you planned to write later
+  reads afterwards as work that never happened.
+- **Estimate in units, not in features.** "3 of 7 units done" is a fact someone can act
+  on; "working on the daemon" isn't.
+
+### Your uncommitted work may be committed for you
+
+A cycle can be stopped at any instant — by its deadline or by a signal — and the
+orchestrator then sweeps whatever is sitting in your worktree into a commit so that
+nothing is lost. That commit is merged like any other. It has already happened: an agent
+was stopped after writing a test importing a module it hadn't created yet, and the merged
+result broke the whole suite with an `ImportError`.
+
+So keep the tree in a state you'd be willing to have committed *right now*. Tests-first is
+still correct — just close the loop quickly:
+
+- Create the module in the same breath as the test that imports it. A stub that throws
+  `Error('not implemented')` is enough; it keeps the tree loadable.
+- Keep the red window down to minutes, and never end a unit inside it.
+- A failing assertion is a fine thing to be caught mid-way through. A tree that can't
+  even load its test suite is not.
+
 ## Required per-idea deliverables
 - `flake.nix` providing a reproducible dev/build/test/release environment.
 - `README.md` with concrete instructions: how to enter the environment (`nix develop`),
@@ -41,8 +77,10 @@ These rules apply to every idea in `ideas/`. This file is prepended to each idea
   `ideas/_template/ci.yml` when it first scaffolds the idea — keep it in step with the
   real test command as the build takes shape. This is the one file outside your own
   folder you may edit.
-- `STATUS.md` kept up to date: what's done, what's next, current difficulty estimate,
-  last session id.
+- `STATUS.md` kept up to date, refreshed at every unit rather than only at session end:
+  units done, the next unit, current difficulty estimate, last session id. It is the only
+  report anyone reads to judge progress, so make it match the tree — list what is
+  committed and passing, not what is nearly ready.
 
 ## Style
 - Prefer boring, well-supported tools over novel ones unless the idea specifically calls

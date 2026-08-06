@@ -558,7 +558,10 @@ for slug in "${build_slugs[@]}"; do
          hdr && /^[[:space:]]*$/ {next}
          {hdr=0}
          /^## Log$/ {next}
-         /^[[:space:]]*<!--/ {next}
+         # Skip whole HTML comments, not just their first line — dropping only the opener
+         # left the continuation lines of a multi-line comment stranded as visible text.
+         incomment { if (/-->/) incomment=0; next }
+         /^[[:space:]]*<!--/ { if (!/-->/) incomment=1; next }
          {print}' "${status_file}" 2>/dev/null || true
   } > "${status_file}.new"
   mv "${status_file}.new" "${status_file}"
