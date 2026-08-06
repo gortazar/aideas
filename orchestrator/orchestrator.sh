@@ -336,6 +336,9 @@ pick_ideas() {
     has_unanswered_questions "${plan}" && continue
     if [[ -f "${status}" ]]; then
       grep -qi "^status: blocked" "${status}" && continue
+      # A finished idea stays finished. Without this an idea that has delivered everything
+      # in its PLAN.md is still eligible, so it gets rebuilt every cycle at full cost.
+      grep -qiE "^status:[[:space:]]*(done|complete[d]?)[[:space:]]*$" "${status}" && continue
       if grep -qi "^status: in_progress" "${status}"; then
         started=$(sed -n 's/^started_at:[[:space:]]*//p' "${status}" | head -1)
         if [[ -n "${started}" ]]; then
@@ -530,11 +533,20 @@ for slug in "${build_slugs[@]}"; do
   # pick_ideas only selects ideas with zero unanswered questions, so any unticked checkbox
   # now can only have been appended by the run that just finished. Checking the file beats
   # diffing the tree, which is usually already clean because the agent self-commits.
+  status_file="ideas/${slug}/STATUS.md"
   blocked="no"
   has_unanswered_questions "ideas/${slug}/PLAN.md" && blocked="yes"
-  new_status=$( [[ ${blocked} == yes ]] && echo blocked || echo in_progress )
+  if [[ ${blocked} == yes ]]; then
+    new_status=blocked
+  elif grep -qiE "^status:[[:space:]]*(done|complete[d]?)[[:space:]]*$" "${status_file}" 2>/dev/null; then
+    # The agent declared the idea finished. Preserve that: rewriting it to in_progress —
+    # which is all this used to do — meant an idea could never reach a terminal state, so
+    # a finished idea was picked up and rebuilt from scratch every cycle, forever.
+    new_status=done
+  else
+    new_status=in_progress
+  fi
 
-  status_file="ideas/${slug}/STATUS.md"
   prev_started=$(sed -n 's/^started_at:[[:space:]]*//p' "${status_file}" 2>/dev/null | head -1)
   [[ -n "${prev_started}" ]] || prev_started=$(date -Iseconds)
   cycle_cost=$(json_field "${out_file}" total_cost_usd 0)
@@ -550,14 +562,22 @@ for slug in "${build_slugs[@]}"; do
     echo
     echo "## Log"
     echo "- $(date -Iseconds) — ${new_status} (\$${cycle_cost})"
-    # Carry the existing log over, dropping the old header block, its "## Log" heading, and
-    # the template's instructional comment — which would otherwise sink below the newest
-    # entry and stay there for the life of the idea.
+    # Re-gather this log from wherever it ended up. The agent rewrites STATUS.md too, and
+    # when it puts its own report directly under "## Log" the previous cycles' entries get
+    # carried along below it — so the log arrives fragmented, oldest entries stranded at
+    # the bottom of the file. Collecting by line shape instead of by position fixes that
+    # however the agent chose to lay the file out.
+    grep -E '^- [0-9]{4}-[0-9]{2}-[0-9]{2}T[^ ]+ — (in_progress|blocked|done) ' \
+      "${status_file}" 2>/dev/null || true
+    echo
+    # Everything else is the agent's: keep it verbatim, minus the old header block, the
+    # "## Log" heading, the log entries just re-gathered above, and HTML comments.
     awk 'BEGIN{hdr=1}
          hdr && /^[a-z_]+:/ {next}
          hdr && /^[[:space:]]*$/ {next}
          {hdr=0}
          /^## Log$/ {next}
+         /^- [0-9]{4}-[0-9]{2}-[0-9]{2}T[^ ]+ — (in_progress|blocked|done) / {next}
          # Skip whole HTML comments, not just their first line — dropping only the opener
          # left the continuation lines of a multi-line comment stranded as visible text.
          incomment { if (/-->/) incomment=0; next }

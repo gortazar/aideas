@@ -29,6 +29,11 @@ These rules apply to every idea in `ideas/`. This file is prepended to each idea
   2. Update `STATUS.md` explaining what's blocked and why.
   3. End the session — do not keep working on this idea until the question is answered.
 - Never delete or reword an already-answered question in `PLAN.md`. Only append new ones.
+- When every feature in `PLAN.md` is delivered, tested and green, set `status: done` in
+  `STATUS.md` and say in the body what "done" covered. That is the only way to finish an
+  idea: the orchestrator keeps picking an `in_progress` idea and rebuilding it every cycle
+  otherwise, so declaring completion in prose alone quietly burns the budget forever. Do
+  not use it to mean "done for now" — a stopping point mid-plan is `in_progress`.
 
 ## Units of work
 
