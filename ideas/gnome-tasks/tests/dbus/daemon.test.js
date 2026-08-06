@@ -10,30 +10,43 @@ import {
     call, getProperty, recordSignals, setProperty, startDaemon, stopDaemon,
 } from './helpers.js';
 
-// One daemon for the whole file: starting a process per test would triple the runtime for no
-// extra coverage, and the tests below clean up the tasks they create.
-// Reassigned (not mutated) when a test restarts the daemon: the session object carries a getter
-// for the exit state, and Object.assign would flatten it into a stale boolean.
-let session = await startDaemon();
+// One daemon for the whole file: starting a process per test would triple the runtime for no extra
+// coverage, and the tests below clean up the tasks they create. Started on first use, not at import
+// time, because every dbus test file shares one process and one bus — two daemons cannot own
+// org.gnome.Tasks at once.
+//
+// Reassigned (not mutated) when a test restarts the daemon: the session object carries a getter for
+// the exit state, and Object.assign would flatten it into a stale boolean.
+let session = null;
+
+async function daemon() {
+    if (!session || session.exited)
+        session = await startDaemon();
+    return session;
+}
 
 suite('org.gnome.Tasks', () => {
     test('the daemon owns its name and answers Ping', async () => {
+        await daemon();
         const [reply] = await call('Ping', new GLib.Variant('(s)', ['hello']), '(s)');
 
         assertEquals(reply, `gnome-tasks/${API_VERSION} hello`);
     });
 
     test('ApiVersion matches the protocol module the client compiled against', async () => {
+        await daemon();
         assertEquals(await getProperty('ApiVersion'), API_VERSION);
     });
 
     test('a fresh daemon has no current task and no tasks', async () => {
+        await daemon();
         assertEquals(await getProperty('CurrentTask'), '');
         const [tasks] = await call('ListTasks', null, '(aa{sv})');
         assertEquals(tasks.length, 0);
     });
 
     test('CaptureEnabled defaults to on and is writable', async () => {
+        await daemon();
         assertEquals(await getProperty('CaptureEnabled'), true);
 
         await setProperty('CaptureEnabled', GLib.Variant.new_boolean(false));
@@ -44,6 +57,7 @@ suite('org.gnome.Tasks', () => {
     });
 
     test('create, list, rename, delete round trip over the bus', async () => {
+        await daemon();
         const [uuid] = await call('CreateTask', new GLib.Variant('(ss)', ['Writing', 'folder']), '(s)');
         assertMatch(uuid, /^[0-9a-f-]{36}$/);
 
@@ -70,6 +84,7 @@ suite('org.gnome.Tasks', () => {
     });
 
     test('activating a task makes it current and announces it', async () => {
+        await daemon();
         const [uuid] = await call('CreateTask', new GLib.Variant('(ss)', ['Client work', '']), '(s)');
 
         const signals = await recordSignals(
@@ -94,6 +109,7 @@ suite('org.gnome.Tasks', () => {
     });
 
     test('TaskAdded, TaskChanged and TaskRemoved are emitted with the uuid', async () => {
+        await daemon();
         let uuid;
         const signals = await recordSignals(async () => {
             [uuid] = await call('CreateTask', new GLib.Variant('(ss)', ['Temp', '']), '(s)');
@@ -113,6 +129,7 @@ suite('org.gnome.Tasks', () => {
     });
 
     test('an unknown uuid comes back as an error, not a crash', async () => {
+        await daemon();
         let error = null;
         try {
             await call('GetTask', new GLib.Variant('(s)', ['no-such-task']), '(s)');
@@ -130,6 +147,7 @@ suite('org.gnome.Tasks', () => {
     });
 
     test('an empty task name is rejected', async () => {
+        await daemon();
         let error = null;
         try {
             await call('CreateTask', new GLib.Variant('(ss)', ['   ', '']), '(s)');
@@ -142,14 +160,15 @@ suite('org.gnome.Tasks', () => {
         assertMatch(error.message, /needs a name/);
     });
 
-    // Methods that need the compositor must fail loudly while they are unimplemented, so nobody
-    // builds on a silent no-op.
-    test('not-yet-implemented methods raise NotSupported and name the milestone', async () => {
+    // Anything unavailable must fail loudly rather than as a silent no-op: this suite runs with no
+    // Shell extension on the bus, so capture cannot work and must say why.
+    test('methods that cannot work raise NotSupported and explain themselves', async () => {
+        await daemon();
         const [uuid] = await call('CreateTask', new GLib.Variant('(ss)', ['Capture', '']), '(s)');
 
-        for (const [method, parameters] of [
-            ['CaptureNow', new GLib.Variant('(s)', [uuid])],
-            ['ReportAppState', new GLib.Variant('(ss)', ['firefox', '{}'])],
+        for (const [method, parameters, expected] of [
+            ['CaptureNow', new GLib.Variant('(s)', [uuid]), /Shell extension/],
+            ['ReportAppState', new GLib.Variant('(ss)', ['firefox', '{}']), /M\d/],
         ]) {
             let error = null;
             try {
@@ -160,13 +179,14 @@ suite('org.gnome.Tasks', () => {
             assert(error !== null, `${method} should have raised`);
             assert(error.matches(Gio.DBusError, Gio.DBusError.NOT_SUPPORTED),
                 `${method} should raise NotSupported, raised ${error}`);
-            assertMatch(error.message, /M\d/, `${method} should say which milestone implements it`);
+            assertMatch(error.message, expected, `${method} should explain why it cannot run`);
         }
 
         await call('DeleteTask', new GLib.Variant('(s)', [uuid]));
     });
 
     test('tasks are still there after the daemon is restarted', async () => {
+        await daemon();
         const [uuid] = await call('CreateTask', new GLib.Variant('(ss)', ['Persistent', '']), '(s)');
         await call('ActivateTask', new GLib.Variant('(s)', [uuid]));
 
@@ -187,7 +207,7 @@ suite('org.gnome.Tasks', () => {
 // continue, so shutdown is registered as the last "test" instead.
 suite('teardown', () => {
     test('the daemon shuts down on SIGTERM', async () => {
-        await stopDaemon(session);
+        await stopDaemon(await daemon());
         assert(session.exited, 'the daemon should have exited');
         assert(session.daemon.get_if_exited() && session.daemon.get_exit_status() === 0,
             `expected a clean exit, got status ${session.daemon.get_exit_status()}`);

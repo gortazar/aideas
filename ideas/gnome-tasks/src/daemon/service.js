@@ -12,9 +12,20 @@ import {
     API_VERSION,
     DAEMON_IFACE_XML,
     DAEMON_OBJECT_PATH,
+    DeactivatePolicy,
     TaskState,
 } from '../lib/protocol.js';
 import { serializeTask, summarizeTask } from '../lib/task.js';
+import { layoutFromWindows, restorePlan, sameLayout } from '../lib/layout.js';
+import { documentsFor } from '../lib/adapters/index.js';
+import { readProcessInfo } from './procReader.js';
+
+/**
+ * How long to wait after the compositor reports a change before saving. Window drags and workspace
+ * switches arrive in bursts; the extension already coalesces its signals, and this stops a burst
+ * from becoming a burst of writes.
+ */
+const CAPTURE_DEBOUNCE_MS = 2000;
 
 /** D-Bus property/dict keys are kebab-case; the model is camelCase. */
 const PROPERTY_KEYS = {
@@ -60,13 +71,35 @@ function dictToVariants(object) {
 }
 
 export class TasksService {
-    constructor(store) {
+    constructor(store, shell = null) {
         this._store = store;
+        this._shell = shell;
         this._captureEnabled = true;
+        this._captureTimeoutId = 0;
+        // Set while restore is running, so the windows restore itself creates are not immediately
+        // captured back into the task — which would fight with what the user actually had.
+        this._restoring = false;
 
         this._impl = Gio.DBusExportedObject.wrapJSObject(DAEMON_IFACE_XML, this);
 
         this._disconnectStore = store.connect((kind, uuid) => this._onStoreChanged(kind, uuid));
+    }
+
+    /** Called by the daemon when the compositor reports that windows changed. */
+    onWindowsChanged() {
+        if (!this._captureEnabled || this._restoring || this._store.currentUuid === '')
+            return;
+
+        if (this._captureTimeoutId)
+            GLib.source_remove(this._captureTimeoutId);
+
+        this._captureTimeoutId = GLib.timeout_add(
+            GLib.PRIORITY_DEFAULT_IDLE, CAPTURE_DEBOUNCE_MS, () => {
+                this._captureTimeoutId = 0;
+                this._captureCurrentTask().catch(
+                    error => printerr(`gnome-tasks-daemon: capture failed: ${error.message}`));
+                return GLib.SOURCE_REMOVE;
+            });
     }
 
     export(connection) {
@@ -74,6 +107,10 @@ export class TasksService {
     }
 
     destroy() {
+        if (this._captureTimeoutId) {
+            GLib.source_remove(this._captureTimeoutId);
+            this._captureTimeoutId = 0;
+        }
         this._disconnectStore?.();
         this._impl.unexport();
     }
@@ -125,14 +162,15 @@ export class TasksService {
 
     ActivateTask(uuid) {
         const task = this._task(uuid);
+        const outgoingUuid = this._store.currentUuid;
 
-        // M2 restores the task's applications here, and M3 their placement. For now activation
-        // is bookkeeping only: it records which task the user is in, which is what the switcher
-        // and every capture decision keys off.
-        this._store.setCurrent(uuid);
-        task.state = TaskState.ACTIVE;
-        this._impl.emit_signal('TaskStateChanged',
-            new GLib.Variant('(su)', [uuid, task.state]));
+        if (outgoingUuid === uuid)
+            return;
+
+        // Save what the outgoing task looks like *before* anything moves, or switching away loses
+        // the arrangement the user just had.
+        this._switchTasks(outgoingUuid, task).catch(
+            error => printerr(`gnome-tasks-daemon: activation failed: ${error.message}`));
     }
 
     StopTask(uuid) {
@@ -146,9 +184,18 @@ export class TasksService {
     }
 
     CaptureNow(uuid) {
-        this._task(uuid);
-        throw notSupported(
-            'session capture is not implemented yet; it needs org.gnome.Tasks.Shell (M3)');
+        const task = this._task(uuid);
+
+        if (!this._shell?.available) {
+            throw notSupported(
+                'no compositor connection: capture needs the gnome-tasks Shell extension to be ' +
+                'loaded and owning org.gnome.Tasks.Shell');
+        }
+
+        // Synchronous from the caller's point of view is not possible — reading the window list is a
+        // D-Bus round trip — but errors are reported through the log rather than swallowed.
+        this._capture(task).catch(
+            error => printerr(`gnome-tasks-daemon: capture failed: ${error.message}`));
     }
 
     ReportAppState(adapterId, json) {
@@ -175,6 +222,110 @@ export class TasksService {
             return;
         this._captureEnabled = value;
         this._impl.emit_property_changed('CaptureEnabled', GLib.Variant.new_boolean(value));
+    }
+
+    // --- capture and restore ---------------------------------------------------------------
+
+    async _captureCurrentTask() {
+        const uuid = this._store.currentUuid;
+        if (uuid === '' || !this._store.has(uuid))
+            return;
+        await this._capture(this._store.get(uuid));
+    }
+
+    /** Record what the desktop looks like into `task`, if it changed. */
+    async _capture(task) {
+        if (!this._shell)
+            return;
+
+        const windows = await this._shell.listWindows();
+        const layout = layoutFromWindows(windows, { documents: window => this._documentsFor(window) });
+
+        if (sameLayout(layout, task.apps ?? []))
+            return;
+
+        this._store.update(task.uuid, { apps: layout });
+    }
+
+    /**
+     * What document this window is showing, as far as anything outside the application can tell.
+     * Reading /proc happens here, in the daemon, and never in the compositor.
+     */
+    _documentsFor(record) {
+        const info = readProcessInfo(record.pid);
+        if (!info)
+            return [];
+
+        // The adapters ask about paths they derive themselves (a terminal's title names a directory
+        // that appears in no file descriptor), so they get a live check rather than a fixed list.
+        return documentsFor(record, {
+            ...info,
+            exists: path => GLib.file_test(path, GLib.FileTest.EXISTS),
+        });
+    }
+
+    async _switchTasks(outgoingUuid, incoming) {
+        if (outgoingUuid !== '' && this._store.has(outgoingUuid)) {
+            const outgoing = this._store.get(outgoingUuid);
+            await this._capture(outgoing);
+            await this._deactivate(outgoing);
+        }
+
+        this._store.setCurrent(incoming.uuid);
+        incoming.state = TaskState.ACTIVE;
+        this._impl.emit_signal('TaskStateChanged',
+            new GLib.Variant('(su)', [incoming.uuid, incoming.state]));
+
+        await this._restore(incoming);
+    }
+
+    /** Apply a task's deactivation policy to the windows it owns. */
+    async _deactivate(task) {
+        if (!this._shell)
+            return;
+
+        switch (task.deactivatePolicy) {
+            case DeactivatePolicy.LEAVE:
+                return;
+
+            case DeactivatePolicy.CLOSE: {
+                const appIds = new Set((task.apps ?? []).map(entry => entry.appId));
+                const windows = await this._shell.listWindows();
+                for (const window of windows) {
+                    if (appIds.has(window.appId))
+                        await this._shell.closeWindow(window.id);
+                }
+                return;
+            }
+
+            case DeactivatePolicy.HIDE:
+            default:
+                // Parking windows out of sight needs a workspace policy that does not exist yet; see
+                // docs/limitations.md. Saying so is better than quietly doing nothing that looks
+                // like a bug.
+                printerr('gnome-tasks-daemon: the \'hide\' deactivation policy is not implemented ' +
+                    `yet; leaving ${task.name}'s windows where they are`);
+        }
+    }
+
+    /** Launch and place whatever `task` remembers. */
+    async _restore(task) {
+        if (!this._shell || (task.apps ?? []).length === 0)
+            return;
+
+        this._restoring = true;
+        try {
+            const windows = await this._shell.listWindows();
+            const plan = restorePlan(task.apps, windows);
+
+            for (const place of plan.places)
+                await this._shell.placeWindow(place.windowId, place.placement);
+
+            for (const launch of plan.launches)
+                await this._shell.launchApp(launch.appId, launch.uris, launch.placement);
+        } finally {
+            this._restoring = false;
+        }
     }
 
     // --- internals -------------------------------------------------------------------------

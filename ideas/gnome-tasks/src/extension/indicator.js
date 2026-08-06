@@ -33,12 +33,25 @@ class TasksIndicator extends PanelMenu.Button {
         box.add_child(this._label);
         this.add_child(box);
 
-        // The list is rebuilt when the menu opens rather than kept in sync continuously: the menu
-        // is the only thing that can see it, and a stale list is the one bug users notice.
+        // The menu is kept populated at all times rather than built when it opens. Building on open
+        // does not work: an empty PopupMenu declines to open at all, so a menu that is only filled
+        // in by its own open handler stays empty for ever (observed: isOpen false, numMenuItems 0).
+        this._rebuild();
+
+        // Opening is still a good moment to ask the daemon for fresher data.
         this.menu.connect('open-state-changed', (menu, isOpen) => {
-            if (isOpen)
-                this._rebuild().catch(error => console.warn(`gnome-tasks: ${error}`));
+            if (!isOpen)
+                return;
+            this._client.listTasks()
+                .then(() => this._rebuild())
+                .catch(error => console.warn(`gnome-tasks: ${error}`));
         });
+    }
+
+    /** Everything the indicator shows, from the client's cached task list. */
+    refresh(tasks) {
+        this.refreshLabel(tasks);
+        this._rebuild();
     }
 
     /** Update just the top-bar label; cheap enough to call on every daemon signal. */
@@ -51,7 +64,9 @@ class TasksIndicator extends PanelMenu.Button {
             this._icon.icon_name = 'view-grid-symbolic';
     }
 
-    async _rebuild() {
+    _rebuild() {
+        // Rebuilding while the menu is open is fine — the items are recreated in place — but the
+        // menu must never be left with nothing in it.
         this.menu.removeAll();
 
         if (!this._client.available) {
@@ -64,13 +79,11 @@ class TasksIndicator extends PanelMenu.Button {
             hint.setSensitive(false);
             hint.label.clutter_text.line_wrap = true;
             this.menu.addMenuItem(hint);
-            this.refreshLabel([]);
             return;
         }
 
-        const tasks = await this._client.listTasks();
+        const tasks = this._client.tasks;
         const currentUuid = this._client.currentTask;
-        this.refreshLabel(tasks);
 
         if (tasks.length === 0) {
             const empty = new PopupMenu.PopupMenuItem(_('No tasks yet'));

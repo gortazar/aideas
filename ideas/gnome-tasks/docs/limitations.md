@@ -27,6 +27,10 @@ value of gnome-tasks depends on being clear about which 80% works.
   the app's own D-Bus interface, or title parsing, in that order of preference. Per the answered
   open question in `PLAN.md` a best-effort heuristic is acceptable here, which means **restore will
   sometimes open the wrong document** for such apps.
+* **Documents for applications without an adapter** — by design. An app with no rule in
+  `src/lib/adapters/` is restored with no document at all rather than with a guessed one. Which apps
+  have rules today is listed in [app-adapters.md](app-adapters.md); the list is short on purpose, and
+  adding to it is a small, testable change.
 * **Terminal working directory** — confirmed available only via the window title
   (`user@host:/path`), because the window belongs to `gnome-terminal-server` and its PID and cwd
   are the server's, not the shell's. Title formats are per-app and user-configurable, so this is a

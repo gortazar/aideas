@@ -19,7 +19,8 @@ suite('task model', () => {
         assertEquals(task.version, SCHEMA_VERSION);
         assertEquals(task.icon, '');
         assertEquals(task.description, '');
-        assertEquals(task.deactivatePolicy, DeactivatePolicy.HIDE);
+        assertEquals(task.deactivatePolicy, DeactivatePolicy.LEAVE,
+            'the default must be a policy that is actually implemented');
         assertDeepEquals(task.apps, []);
         assertDeepEquals(task.commands, []);
         assertEquals(task.state, TaskState.STOPPED);

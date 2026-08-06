@@ -6,7 +6,8 @@ Three layers, because window management cannot be tested the way pure logic can.
 | --- | --- | --- | --- |
 | Shell-free logic — state model, schema migration, adapter selection, layout matching, monitor remapping | plain `gjs -m` | `make test-unit` | yes, blocking |
 | The daemon's D-Bus surface | `dbus-run-session` | `make test-dbus` | yes, blocking (from M1) |
-| Window capture and restore | a nested headless `gnome-shell` | `tools/nested-shell.sh` | experimental, non-blocking |
+| Window capture and restore, end to end | a nested headless `gnome-shell` | `make smoke` | by hand (see below) |
+| Mutter's willingness to place windows | a nested headless `gnome-shell` | `tools/experiment-geometry.py` | by hand |
 | Lint | `eslint` | `make lint` | yes, blocking |
 
 `nix flake check` runs the blocking set hermetically, and is what
@@ -32,6 +33,34 @@ the probe emitted its `probe-enabled` record. The blocking checks never depend o
 
 Until that job has run, window capture/restore is verified by hand against a real session, and
 what was verified is recorded in `STATUS.md`.
+
+## The end-to-end smoke test
+
+`make smoke` boots a nested headless Shell with the real extension, starts a real daemon against an
+isolated data directory, and then drives the whole idea through D-Bus:
+
+1. create a task and make it current
+2. open an application while it is current
+3. wait for the daemon to capture it, unprompted
+4. switch away, and watch the `close` policy close the window
+5. switch back, and watch the application come back with the geometry it had
+
+It prints PASS/FAIL per step and exits non-zero if any step fails. This is the only test that
+covers the two processes, Mutter and a real application together; everything below it is faked or
+pure.
+
+Two things it cannot do, both because a headless session has no input seat:
+
+* **Screenshot the switcher's popup menu.** A `PopupMenu` needs a modal pointer grab, which fails
+  with no seat, so the menu closes within a frame of opening (measured: `isOpen` false 150 ms after
+  `open()`, with the items present). Clicking through a virtual pointer
+  (`tools/probe`'s `ClickPanelIndicator`, the technique mutter's own tests use) highlights the
+  indicator but does not keep the menu up.
+* **Verify the keyboard shortcuts.**
+
+The hunt for that screenshot was still worth it: it exposed a real bug. The menu used to be built in
+its own `open-state-changed` handler, and an empty `PopupMenu` declines to open at all — so the menu
+would have stayed empty for ever. It is now kept populated from a cached task list.
 
 ## Running the nested session by hand
 

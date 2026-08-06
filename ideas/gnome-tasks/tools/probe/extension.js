@@ -13,6 +13,7 @@
 // file I/O inside the compositor process is exactly what the real extension must avoid, so the
 // probe does not model bad habits. Harvest with tools/harvest-probe.sh.
 
+import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import Gio from 'gi://Gio';
@@ -23,6 +24,44 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Config from 'resource:///org/gnome/shell/misc/config.js';
 
 const PREFIX = 'GT-PROBE';
+
+// A tiny control surface for driving a nested session from outside it: taking screenshots and
+// opening the switcher menu both need to happen *inside* the compositor, and GNOME 46 refuses
+// org.gnome.Shell.Screenshot to callers that are not the portal (AccessDenied). Research-only, and
+// deliberately part of the probe rather than the product.
+const CONTROL_NAME = 'org.gnome.TasksProbe';
+const CONTROL_PATH = '/org/gnome/TasksProbe';
+const CONTROL_IFACE_XML = `
+<node>
+  <interface name="org.gnome.TasksProbe">
+    <method name="Screenshot">
+      <arg type="s" name="path" direction="in"/>
+      <arg type="s" name="result" direction="out"/>
+    </method>
+    <method name="OpenTasksMenu">
+      <arg type="s" name="result" direction="out"/>
+    </method>
+    <method name="CloseMenus">
+      <arg type="s" name="result" direction="out"/>
+    </method>
+    <method name="HideOverview">
+      <arg type="s" name="result" direction="out"/>
+    </method>
+    <!-- Open the switcher and screenshot it in one in-process sequence: a D-Bus round trip between
+         the two is long enough for a popup to lose its grab in a headless session. -->
+    <method name="ShootTasksMenu">
+      <arg type="s" name="path" direction="in"/>
+      <arg type="s" name="result" direction="out"/>
+    </method>
+    <!-- Click through a virtual pointer, the way mutter's own tests drive input. A headless session
+         has no seat devices, and a panel menu opened programmatically loses its modal grab
+         immediately (observed: isOpen goes false within 900ms). A real click keeps it. -->
+    <method name="ClickPanelIndicator">
+      <arg type="s" name="name" direction="in"/>
+      <arg type="s" name="result" direction="out"/>
+    </method>
+  </interface>
+</node>`;
 
 // Zero-argument Meta.Window getters worth trying. Each is called defensively: the point of the
 // probe is to find out which of these exist and return something on this Shell version, so a
@@ -252,9 +291,17 @@ export default class ProbeExtension extends Extension {
         }
 
         this._probeDisplayConfig();
+        this._exportControl();
     }
 
     disable() {
+        if (this._controlOwnerId) {
+            Gio.bus_unown_name(this._controlOwnerId);
+            this._controlOwnerId = 0;
+        }
+        this._control?.unexport();
+        this._control = null;
+
         for (const [object, id] of this._signals)
             object.disconnect(id);
         this._signals = [];
@@ -273,6 +320,125 @@ export default class ProbeExtension extends Extension {
 
     _connect(object, signal, callback) {
         this._signals.push([object, object.connect(signal, callback)]);
+    }
+
+    _exportControl() {
+        this._control = Gio.DBusExportedObject.wrapJSObject(CONTROL_IFACE_XML, this);
+        this._control.export(Gio.DBus.session, CONTROL_PATH);
+        this._controlOwnerId = Gio.bus_own_name(
+            Gio.BusType.SESSION, CONTROL_NAME, Gio.BusNameOwnerFlags.REPLACE, null, null,
+            () => emit('control-name-lost', {}));
+    }
+
+    /** Screenshot the whole stage to a PNG. Returns 'ok' or a description of what went wrong. */
+    Screenshot(path) {
+        try {
+            const shooter = new Shell.Screenshot();
+            const file = Gio.File.new_for_path(path);
+            const stream = file.replace(null, false, Gio.FileCreateFlags.NONE, null);
+
+            // Async in the compositor, synchronous-looking to the caller: the reply is sent when the
+            // write finishes, which is what makes the file safe to read afterwards.
+            const invocation = this._control.get_invocation?.();
+            shooter.screenshot(false, stream, (source, result) => {
+                try {
+                    source.screenshot_finish(result);
+                    stream.close(null);
+                    emit('screenshot', { path });
+                } catch (error) {
+                    emit('screenshot-error', { path, error: `${error}` });
+                }
+            });
+            void invocation;
+            return 'started';
+        } catch (error) {
+            emit('screenshot-error', { path, error: `${error}` });
+            return `error: ${error}`;
+        }
+    }
+
+    /**
+     * Open the gnome-tasks switcher menu, so a screenshot can show it. The overview has to go first:
+     * a nested session with no windows starts in the overview, which covers the panel menus.
+     */
+    OpenTasksMenu() {
+        const indicator = Main.panel.statusArea['gnome-tasks'];
+        if (!indicator)
+            return 'error: the gnome-tasks indicator is not in the panel';
+
+        Main.overview.hide();
+        // One frame for the overview to get out of the way before the menu opens under it.
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 400, () => {
+            indicator.menu.open();
+            return GLib.SOURCE_REMOVE;
+        });
+        return 'ok';
+    }
+
+    /** Click the centre of a panel indicator with a virtual pointer. */
+    ClickPanelIndicator(name) {
+        const indicator = Main.panel.statusArea[name];
+        if (!indicator)
+            return `error: no indicator called ${name}`;
+
+        try {
+            const [x, y] = indicator.get_transformed_position();
+            const [width, height] = indicator.get_transformed_size();
+            const centreX = x + width / 2;
+            const centreY = y + height / 2;
+
+            const seat = Clutter.get_default_backend().get_default_seat();
+            this._pointer ??= seat.create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+
+            const now = global.get_current_time() * 1000;
+            this._pointer.notify_absolute_motion(now, centreX, centreY);
+            this._pointer.notify_button(now + 1000, Clutter.BUTTON_PRIMARY,
+                Clutter.ButtonState.PRESSED);
+            this._pointer.notify_button(now + 2000, Clutter.BUTTON_PRIMARY,
+                Clutter.ButtonState.RELEASED);
+
+            emit('clicked-indicator', { name, x: centreX, y: centreY });
+            return 'ok';
+        } catch (error) {
+            emit('click-error', { name, error: `${error}` });
+            return `error: ${error}`;
+        }
+    }
+
+    ShootTasksMenu(path) {
+        const indicator = Main.panel.statusArea['gnome-tasks'];
+        if (!indicator)
+            return 'error: the gnome-tasks indicator is not in the panel';
+
+        // The popup survives only briefly without a real pointer grab, so the shot has to follow
+        // the open almost immediately — 150ms is one or two frames, enough to be painted.
+        Main.overview.hide();
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+            this.ClickPanelIndicator('gnome-tasks');
+            indicator.menu.open();
+            emit('menu-opened', { isOpen: indicator.menu.isOpen });
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 150, () => {
+                emit('menu-before-shot', { isOpen: indicator.menu.isOpen,
+                    items: indicator.menu.numMenuItems });
+                this.Screenshot(path);
+                return GLib.SOURCE_REMOVE;
+            });
+            return GLib.SOURCE_REMOVE;
+        });
+        return 'started';
+    }
+
+    /** Leave the overview, so a screenshot shows the desktop as the user arranged it. */
+    HideOverview() {
+        Main.overview.hide();
+        return 'ok';
+    }
+
+    CloseMenus() {
+        Main.panel.closeQuickSettings?.();
+        for (const name of Object.keys(Main.panel.statusArea))
+            Main.panel.statusArea[name]?.menu?.close?.();
+        return 'ok';
     }
 
     _idOf(win) {

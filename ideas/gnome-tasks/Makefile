@@ -12,7 +12,7 @@ SYSTEMD_DIR := $(HOME)/.config/systemd/user
 GJS ?= gjs
 
 .PHONY: help lint test test-unit test-dbus build check-bundle pack install install-extension \
-        install-daemon uninstall enable disable restart-daemon logs clean check
+        install-daemon uninstall enable disable restart-daemon logs clean check smoke
 
 help:
 	@echo "gnome-tasks"
@@ -28,6 +28,7 @@ help:
 	@echo "  make restart-daemon   restart the user daemon and follow its log"
 	@echo "  make logs             follow the Shell and daemon logs"
 	@echo "  make check            lint + test (what CI runs)"
+	@echo "  make smoke            end-to-end test in a nested headless Shell (needs a display-less GNOME)"
 
 check: lint test check-bundle
 
@@ -66,6 +67,22 @@ pack: build
 	    --extra-source=lib \
 	    $(UUID)
 	@echo "packed: $(BUILD)/$(UUID).shell-extension.zip"
+
+# The only test that exercises the extension, the daemon, Mutter and a real application together.
+# Not part of `make check`: it needs a working GNOME installation and takes a couple of minutes.
+SMOKE_STATE ?= /tmp/gnome-tasks-smoke
+
+smoke: build
+	tools/nested-shell.sh stop --state $(SMOKE_STATE) >/dev/null 2>&1 || true
+	tools/nested-shell.sh start --extension $(BUNDLE) --state $(SMOKE_STATE)
+	set -a; . $(SMOKE_STATE)/env; set +a; \
+	    GNOME_TASKS_DATA_DIR=$(SMOKE_STATE)/tasks $(GJS) -m src/daemon/main.js \
+	        >$(SMOKE_STATE)/daemon.log 2>&1 & \
+	    sleep 4; \
+	    python3 tools/smoke-nested.py; \
+	    status=$$?; \
+	    tools/nested-shell.sh stop --state $(SMOKE_STATE); \
+	    exit $$status
 
 # --- install -------------------------------------------------------------------------------
 
