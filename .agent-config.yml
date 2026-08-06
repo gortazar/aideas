@@ -22,21 +22,21 @@ parallel_agents: 2
 
 # Stop starting new cycles once today's cumulative equivalent cost reaches this.
 # The orchestrator tracks it in .orchestrator/usage.log, summed per calendar day.
-max_daily_cost_usd: 5.00
+max_daily_cost_usd: 150.00
 
 # Safety valve per build cycle, independent of the daily budget above. Passed straight
 # through to `claude --max-budget-usd`, so it aborts a runaway cycle mid-flight rather
 # than only being noticed after the fact. Note it is approximate: a cycle capped at
 # $1.50 has been observed finishing at $1.53, and it stops mid-tool-call rather than at
 # a tidy stopping point.
-max_cycle_cost_usd: 1.00
+max_cycle_cost_usd: 50.00
 
 # Same valve for the cheaper planning pass, which only reads and writes PLAN.md.
 max_plan_cost_usd: 0.40
 
 # Only allowed to run within this local-time window each day. Supports overnight ranges.
 # Set to "unlimited" to run at any hour.
-allowed_hours: "20:00-07:00"
+allowed_hours: "unlimited"
 timezone: "Europe/Lisbon"
 
 # How long a heartbeat can go without an update before a Claude Code session on the
