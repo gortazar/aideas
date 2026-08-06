@@ -1,0 +1,117 @@
+# gnome-tasks build/install targets. Everything here is expected to run inside `nix develop`.
+
+UUID        := gnome-tasks@patxi.gortazar
+BUILD       := build
+BUNDLE      := $(BUILD)/$(UUID)
+EXT_DIR     := $(HOME)/.local/share/gnome-shell/extensions/$(UUID)
+LIB_DIR     := $(HOME)/.local/lib/gnome-tasks
+BIN_DIR     := $(HOME)/.local/bin
+DBUS_DIR    := $(HOME)/.local/share/dbus-1/services
+SYSTEMD_DIR := $(HOME)/.config/systemd/user
+
+GJS ?= gjs
+
+.PHONY: help lint test test-unit test-dbus build check-bundle pack install install-extension \
+        install-daemon uninstall enable disable restart-daemon logs clean check
+
+help:
+	@echo "gnome-tasks"
+	@echo "  make lint             eslint over src/, tests/, tools/"
+	@echo "  make test             unit tests + D-Bus integration tests"
+	@echo "  make test-unit        Shell-free unit tests (plain gjs)"
+	@echo "  make test-dbus        daemon D-Bus surface, on a private bus"
+	@echo "  make build            assemble $(BUNDLE)"
+	@echo "  make check-bundle     validate the assembled bundle (metadata + imports)"
+	@echo "  make pack             build + gnome-extensions pack -> $(BUILD)/$(UUID).shell-extension.zip"
+	@echo "  make install          install the extension and the daemon into ~/.local"
+	@echo "  make enable/disable   toggle the extension"
+	@echo "  make restart-daemon   restart the user daemon and follow its log"
+	@echo "  make logs             follow the Shell and daemon logs"
+	@echo "  make check            lint + test (what CI runs)"
+
+check: lint test check-bundle
+
+lint:
+	eslint .
+
+test: test-unit test-dbus
+
+test-unit:
+	$(GJS) -m tests/run.js tests/unit
+
+test-dbus: build
+	dbus-run-session -- $(GJS) -m tests/run.js tests/dbus
+
+# --- build ---------------------------------------------------------------------------------
+
+build:
+	rm -rf $(BUNDLE)
+	mkdir -p $(BUNDLE)
+	cp -r src/extension/. $(BUNDLE)/
+	# The Shell-free modules are shared with the daemon; an extension can only import from
+	# inside its own directory, so they are copied in rather than referenced.
+	mkdir -p $(BUNDLE)/lib
+	cp src/lib/*.js $(BUNDLE)/lib/
+	if [ -d src/extension/schemas ]; then \
+	    glib-compile-schemas --strict $(BUNDLE)/schemas; \
+	fi
+
+# What CI validates instead of `gnome-extensions pack`, which needs the whole gnome-shell closure.
+check-bundle: build
+	$(GJS) -m tools/check-bundle.js $(BUNDLE)
+
+pack: build
+	cd $(BUILD) && gnome-extensions pack --force \
+	    $(if $(wildcard src/extension/schemas),--schema=$(UUID)/schemas/*.gschema.xml,) \
+	    --extra-source=lib \
+	    $(UUID)
+	@echo "packed: $(BUILD)/$(UUID).shell-extension.zip"
+
+# --- install -------------------------------------------------------------------------------
+
+install: install-extension install-daemon
+	@echo
+	@echo "Installed. Log out and back in (Wayland cannot reload the Shell in place),"
+	@echo "then: gnome-extensions enable $(UUID)"
+
+install-extension: build
+	rm -rf $(EXT_DIR)
+	mkdir -p $(dir $(EXT_DIR))
+	cp -r $(BUNDLE) $(EXT_DIR)
+
+install-daemon:
+	mkdir -p $(LIB_DIR) $(BIN_DIR) $(DBUS_DIR) $(SYSTEMD_DIR)
+	rm -rf $(LIB_DIR)/daemon $(LIB_DIR)/lib
+	cp -r src/daemon $(LIB_DIR)/daemon
+	cp -r src/lib $(LIB_DIR)/lib
+	sed -e 's|@LIB_DIR@|$(LIB_DIR)|g' -e 's|@GJS@|$(shell command -v gjs)|g' \
+	    data/gnome-tasks-daemon.in > $(BIN_DIR)/gnome-tasks-daemon
+	chmod +x $(BIN_DIR)/gnome-tasks-daemon
+	sed -e 's|@BIN_DIR@|$(BIN_DIR)|g' \
+	    data/org.gnome.Tasks.service.in > $(DBUS_DIR)/org.gnome.Tasks.service
+	sed -e 's|@BIN_DIR@|$(BIN_DIR)|g' \
+	    data/gnome-tasks-daemon.service.in > $(SYSTEMD_DIR)/gnome-tasks-daemon.service
+	systemctl --user daemon-reload
+
+uninstall:
+	rm -rf $(EXT_DIR) $(LIB_DIR)
+	rm -f $(BIN_DIR)/gnome-tasks-daemon $(DBUS_DIR)/org.gnome.Tasks.service
+	rm -f $(SYSTEMD_DIR)/gnome-tasks-daemon.service
+	systemctl --user daemon-reload || true
+
+enable:
+	gnome-extensions enable $(UUID)
+
+disable:
+	gnome-extensions disable $(UUID)
+
+restart-daemon:
+	systemctl --user restart gnome-tasks-daemon.service
+	journalctl --user -u gnome-tasks-daemon.service -f -n 20
+
+logs:
+	journalctl --user -f -o cat \
+	    -u gnome-tasks-daemon.service -u org.gnome.Shell@wayland.service
+
+clean:
+	rm -rf $(BUILD)

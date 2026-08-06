@@ -1,0 +1,5 @@
+#!/bin/sh
+# Installed to ~/.local/bin/gnome-tasks-daemon by `make install-daemon`; @LIB_DIR@ and @GJS@ are
+# substituted at install time. A wrapper rather than a shebang on main.js so the daemon can be
+# started identically by hand, by systemd and by D-Bus activation.
+exec "@GJS@" -m "@LIB_DIR@/daemon/main.js" "$@"

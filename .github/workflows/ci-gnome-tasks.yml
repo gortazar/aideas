@@ -13,6 +13,8 @@ on:
       - ".github/workflows/ci-gnome-tasks.yml"
 
 jobs:
+  # Blocking: lint plus the Shell-free unit tests, and (from M1) the daemon's D-Bus surface on a
+  # private bus. See ideas/gnome-tasks/docs/testing.md for what lives in which layer.
   test:
     runs-on: ubuntu-latest
     defaults:
@@ -23,4 +25,70 @@ jobs:
       - uses: cachix/install-nix-action@v27
         with:
           extra_nix_config: "experimental-features = nix-command flakes"
-      - run: nix flake check
+      - run: nix flake check --print-build-logs
+
+  # Non-blocking experiment, and the answer to an open question in PLAN.md: can a GitHub runner
+  # run a nested headless GNOME Shell at all? It works locally (Ubuntu 24.04, Shell 46, no
+  # physical display); a runner has no /dev/dri, so Mutter has to fall back to software rendering.
+  # Rather than assume either way, this job asserts the probe extension emitted its probe-enabled
+  # record inside a real nested compositor and prints the verdict. continue-on-error, so the
+  # blocking checks never depend on the outcome.
+  nested-shell-smoke:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: ideas/gnome-tasks
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install a compositor
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gnome-shell dbus-x11 libglib2.0-bin mesa-utils
+
+      - name: Report what we are running on
+        run: |
+          gnome-shell --version
+          ls -l /dev/dri 2>&1 || echo "no /dev/dri — software rendering only"
+
+      - name: Boot a nested headless Shell with the probe extension
+        env:
+          # A runner has no GPU, and Mutter must not try to pick one.
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
+          # gnome-terminal-server and friends refuse to start under a non-UTF-8 locale.
+          LC_ALL: C.UTF-8
+        run: |
+          mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
+          tools/nested-shell.sh start --extension tools/probe --state "$RUNNER_TEMP/gtn" || true
+          sleep 10
+          grep -a 'GT-PROBE ' "$RUNNER_TEMP/gtn/shell.log" |
+            sed -e 's/^.*GT-PROBE //' > "$RUNNER_TEMP/probe.jsonl" || true
+          echo "--- probe records ---"
+          cat "$RUNNER_TEMP/probe.jsonl" || true
+
+      - name: Verdict
+        run: |
+          if grep -q '"event":"probe-enabled"' "$RUNNER_TEMP/probe.jsonl"; then
+            echo "VERDICT: a nested headless GNOME Shell runs on this runner."
+          else
+            echo "VERDICT: a nested headless GNOME Shell does NOT run on this runner."
+            echo "--- shell log tail ---"
+            tail -80 "$RUNNER_TEMP/gtn/shell.log" || true
+            exit 1
+          fi
+
+      - name: Stop the nested session
+        if: always()
+        run: tools/nested-shell.sh stop --state "$RUNNER_TEMP/gtn" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nested-shell-log
+          path: |
+            ${{ runner.temp }}/gtn/shell.log
+            ${{ runner.temp }}/probe.jsonl
+          if-no-files-found: warn

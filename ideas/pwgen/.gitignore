@@ -1,0 +1,5 @@
+# Kept by scripts/screenshot.sh --keep-log for debugging a failed capture.
+screenshot-shell.log
+
+# nix build output link.
+result

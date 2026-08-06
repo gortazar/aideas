@@ -1,0 +1,6 @@
+[D-BUS Service]
+Name=org.gnome.Tasks
+Exec=@BIN_DIR@/gnome-tasks-daemon
+# Hand activation to systemd so the daemon lands in its own unit and its output in the journal,
+# rather than being a child of dbus-daemon with nowhere to log.
+SystemdService=gnome-tasks-daemon.service

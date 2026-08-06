@@ -1,0 +1,20 @@
+[Unit]
+Description=gnome-tasks daemon (KDE-style Activities for GNOME)
+Documentation=https://github.com/patxi/aideas
+# The daemon deliberately outlives gnome-shell restarts: task state must survive Alt+F2 r, an
+# extension upgrade or a Shell crash, which is why it is not bound to the Shell's unit.
+PartOf=graphical-session.target
+After=dbus.socket
+Requires=dbus.socket
+
+[Service]
+Type=dbus
+BusName=org.gnome.Tasks
+ExecStart=@BIN_DIR@/gnome-tasks-daemon
+Restart=on-failure
+RestartSec=2
+# Per-task commands are started as separate transient units (M5), so nothing the user declared
+# ends up in this cgroup and a restart here never kills their dev servers.
+
+[Install]
+WantedBy=graphical-session.target

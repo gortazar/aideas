@@ -19,8 +19,19 @@ jobs:
       run:
         working-directory: ideas/pwgen
     steps:
+      # The extension itself lives in gortazar/gnome-shell-pwgen, checked out here
+      # as the upstream/ submodule. Its own CI (which boots a real GNOME Shell on
+      # six versions) gates changes there; this job checks the commit this idea
+      # currently points at.
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: cachix/install-nix-action@v27
         with:
           extra_nix_config: "experimental-features = nix-command flakes"
-      - run: nix flake check
+      # Cheap, and it fails for a reason no other step would catch: the submodule
+      # and the flake input pointing at different commits.
+      - run: ./scripts/check-pin.sh
+      # Runs the extension's headless generator suite, compiles the GSettings
+      # schema and packs the upload zip, all against the pinned commit.
+      - run: nix flake check --print-build-logs

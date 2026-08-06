@@ -1,0 +1,3 @@
+[submodule "ideas/pwgen/upstream"]
+	path = ideas/pwgen/upstream
+	url = https://github.com/gortazar/gnome-shell-pwgen.git

@@ -1,0 +1,8 @@
+{
+  "uuid": "gnome-tasks-probe@patxi.gortazar",
+  "name": "gnome-tasks probe",
+  "description": "Research-only extension: logs every window and app event with all reachable metadata to the journal, as JSON lines prefixed GT-PROBE. Not part of gnome-tasks proper; see docs/gnome-internals.md.",
+  "shell-version": ["45", "46", "47", "48"],
+  "url": "https://github.com/patxi/aideas",
+  "version-name": "probe"
+}
