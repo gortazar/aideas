@@ -50,6 +50,9 @@ export class DaemonClient {
         this._signalIds = [];
         this._propertiesId = 0;
         this._available = false;
+        // Cached so the menu can be built synchronously when it opens. Awaiting the daemon at that
+        // moment makes the menu appear empty and fill in a frame later, which reads as broken.
+        this._tasks = [];
 
         // G_DBUS_PROXY_FLAGS_NONE would auto-start the daemon through D-Bus activation the moment
         // the Shell loads us. Waiting until the user actually opens the menu is friendlier, so the
@@ -81,21 +84,29 @@ export class DaemonClient {
         }
     }
 
-    /** Tasks as plain objects, or [] if the daemon is not reachable. */
+    /** The last known task list. Never blocks; may be one signal out of date. */
+    get tasks() {
+        return this._tasks;
+    }
+
+    /** Refresh the cache from the daemon. Returns the tasks, or [] if it is not reachable. */
     async listTasks() {
-        if (!this._proxy)
-            return [];
+        if (!this._proxy) {
+            this._tasks = [];
+            return this._tasks;
+        }
         try {
             const [tasks] = await this._proxy.ListTasksAsync();
-            return tasks.map(task => ({
+            this._tasks = tasks.map(task => ({
                 uuid: task.uuid.deepUnpack(),
                 name: task.name.deepUnpack(),
                 icon: task.icon.deepUnpack(),
                 state: task.state.deepUnpack(),
             }));
+            return this._tasks;
         } catch (error) {
             console.warn(`gnome-tasks: ListTasks failed: ${error}`);
-            return [];
+            return this._tasks;
         }
     }
 

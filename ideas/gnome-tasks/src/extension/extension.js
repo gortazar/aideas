@@ -174,9 +174,10 @@ export default class GnomeTasksExtension extends Extension {
         if (!this._indicator)
             return;
 
-        // Only the label needs to follow the daemon continuously; the menu rebuilds when opened.
+        // Keeps the cache and the top-bar label current; the menu builds from that cache the moment
+        // it opens.
         this._client.listTasks()
-            .then(tasks => this._indicator?.refreshLabel(tasks))
+            .then(tasks => this._indicator?.refresh(tasks))
             .catch(error => console.warn(`gnome-tasks: ${error}`));
     }
 }

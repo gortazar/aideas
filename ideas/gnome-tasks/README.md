@@ -18,10 +18,18 @@ Anything slow or risky stays out of the compositor: the extension only makes D-B
 
 ## Status
 
-Early but real: the daemon holds and persists tasks, the extension provides a top-bar switcher and
-answers window queries over D-Bus. Nothing is captured or restored yet. See
-[STATUS.md](STATUS.md) for exactly what works today and
+The core loop works: **a task remembers the applications you opened, and switching back to it brings
+them back where they were.** Verified end to end in a real (nested, headless) GNOME Shell 46 session
+by `tools/smoke-nested.py`. Documents, per-task commands, the preferences window and the browser
+adapters are not built yet — see [STATUS.md](STATUS.md) for exactly what works today and
 [docs/limitations.md](docs/limitations.md) for what cannot work at all.
+
+![The switcher in the top bar, showing the active task, with a window restored into it](screenshots/nested-session.png)
+
+The top bar shows the current task ("Client work"); the window was launched and placed by
+gnome-tasks when that task was activated. The screenshot is taken inside the nested test session
+described under [Tests](#tests) — the switcher's popup menu cannot be captured there, because a
+panel menu needs a pointer grab that a headless session has no seat to provide.
 
 ```console
 $ gdbus call --session --dest org.gnome.Tasks --object-path /org/gnome/Tasks \
