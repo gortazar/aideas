@@ -1,13 +1,15 @@
 status: done
 started_at: 2026-08-05
 last_session_id: f47b1790-b735-4335-86d2-23da85419c6f
-last_run: 2026-08-06T14:10:10+02:00
-last_cycle_cost_usd: 9.796342500000005
+last_run: 2026-08-06T17:46:25+02:00
+last_cycle_cost_usd: 4.1371225
 
 ## Log
+- 2026-08-06T17:46:25+02:00 — done ($4.1371225)
 - 2026-08-06T14:10:10+02:00 — in_progress ($9.796342500000005)
 - 2026-08-06T01:22:08+02:00 — in_progress ($10.139659)
 - 2026-08-05T13:26:54+02:00 — in_progress ($8.671821999999997)
+
 ## Done
 
 Every feature in `PLAN.md` is delivered, tested and green, and the completion criterion from
