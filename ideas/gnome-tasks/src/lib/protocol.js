@@ -108,6 +108,22 @@ export const DAEMON_IFACE_XML = `
       <arg type="s" name="uuid" direction="in"/>
     </method>
 
+    <!-- A task's commands never run until the user has confirmed them, so the daemon has to be able
+         to ask: CommandsAwaitingConfirmation carries the ones it refused to start, and this is the
+         answer. Setting confirmed to false again re-arms the question. -->
+    <method name="ConfirmCommand">
+      <arg type="s" name="taskUuid" direction="in"/>
+      <arg type="s" name="commandId" direction="in"/>
+      <arg type="b" name="confirmed" direction="in"/>
+    </method>
+
+    <!-- The commands the daemon currently has running for this task, as JSON: unit name, pid, and
+         whether systemd adopted the process into a scope. -->
+    <method name="ListRunningCommands">
+      <arg type="s" name="taskUuid" direction="in"/>
+      <arg type="s" name="json" direction="out"/>
+    </method>
+
     <!-- Tier-2 entry point: a cooperating app or browser plugin pushes its own inner state
          (browser tabs, editor project, terminal cwd) as JSON, keyed by adapter id. -->
     <method name="ReportAppState">
@@ -130,6 +146,10 @@ export const DAEMON_IFACE_XML = `
     </signal>
     <signal name="CurrentTaskChanged">
       <arg type="s" name="uuid"/>
+    </signal>
+    <signal name="CommandsAwaitingConfirmation">
+      <arg type="s" name="uuid"/>
+      <arg type="s" name="json"/>
     </signal>
 
     <property name="ApiVersion" type="u" access="read"/>

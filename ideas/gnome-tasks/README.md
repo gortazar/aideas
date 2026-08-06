@@ -19,9 +19,10 @@ Anything slow or risky stays out of the compositor: the extension only makes D-B
 ## Status
 
 The core loop works: **a task remembers the applications you opened — and, for some of them, the
-document each one had open — and switching back brings them back where they were.** Verified end to
-end in a real (nested, headless) GNOME Shell 46 session by `make smoke`. Per-task commands, the
-preferences window and the browser adapters are not built yet — see [STATUS.md](STATUS.md) for
+document each one had open — and switching back brings them back where they were**, and per-task
+commands start and stop with the task as transient systemd units. Verified end to end in a real
+(nested, headless) GNOME Shell 46 session by `make smoke`. The preferences window and the browser
+adapters are not built yet — see [STATUS.md](STATUS.md) for
 exactly what works today, [docs/app-adapters.md](docs/app-adapters.md) for which applications can
 have their documents recovered, and [docs/limitations.md](docs/limitations.md) for what cannot work
 at all.

@@ -72,3 +72,7 @@ value of gnome-tasks depends on being clear about which 80% works.
   spawns processes at all.
 * **Recording commands the user did not declare.** Per-task commands run as transient systemd
   units and are shown before they are ever executed; gnome-tasks does not learn them by watching.
+* **Shell syntax in a command.** A command line is split into argv and executed directly, so pipes,
+  redirections, `&&` and variable expansion are not interpreted — they arrive as literal arguments. A
+  command that needs a shell has to say so itself (`bash -lc '…'`), which makes the choice visible in
+  the preferences rather than implicit in a string.
