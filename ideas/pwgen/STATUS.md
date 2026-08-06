@@ -1,4 +1,4 @@
-status: in_progress
+status: done
 started_at: 2026-08-05
 last_session_id: f47b1790-b735-4335-86d2-23da85419c6f
 last_run: 2026-08-06T14:10:10+02:00
@@ -8,7 +8,11 @@ last_cycle_cost_usd: 9.796342500000005
 - 2026-08-06T14:10:10+02:00 — in_progress ($9.796342500000005)
 - 2026-08-06T01:22:08+02:00 — in_progress ($10.139659)
 - 2026-08-05T13:26:54+02:00 — in_progress ($8.671821999999997)
-## What's done
+## Done
+
+Every feature in `PLAN.md` is delivered, tested and green, and the completion criterion from
+the answered open question — push to the remote, checks passing, merge, checks passing again
+on `main` — is met for all three changes below.
 
 The behavioural change is **merged upstream and green**. `main` is at
 [870d00e](https://github.com/gortazar/gnome-shell-pwgen/commit/870d00e); the idea pins that
@@ -71,18 +75,24 @@ it.
   `upstream/package.json`, and reproducing that version through nixpkgs would risk checking a
   different linter than upstream CI runs. It runs in the dev shell and in upstream CI.
 
-## What's next
+## Deliberately not done
 
-Nothing is required for this idea's scope. If it were to continue:
+- **Submitting the packed zip to extensions.gnome.org.** That is a publishing decision, not a
+  build step, and it is outside what the answered open question defines as done. `nix build`
+  produces the zip whenever it is wanted.
+- **`ci-pwgen.yml` has never run on GitHub.** It cannot here: this repository's `origin` is a
+  local bare repo in the sandbox. Both of its steps were instead verified by hand from a
+  clean `--recurse-submodules` clone, most recently at the current pin.
+- **The merged upstream branches** (`in-process-generator`, `ci-harness-isolation`,
+  `disable-cancels-generation`) still exist on the remote. Deleting branches in someone's
+  repository is not this idea's business, and it changes nothing.
 
-- Submit the packed zip to extensions.gnome.org. Not done — the answered open question
-  defines done as "push, checks passing, merge, checks passing again", which is complete, and
-  an EGO submission is a publishing decision rather than a build step.
-- `ci-pwgen.yml` has still never run on GitHub: this repository's `origin` is a local bare
-  repo in the sandbox. Both of its steps were verified by hand from a clean
-  `--recurse-submodules` clone.
-- The merged branches (`in-process-generator`, `ci-harness-isolation`,
-  `disable-cancels-generation`) still exist on the remote; deleting them is cosmetic.
+## Verified at close
+
+At pin `870d00e`, from this committed tree: `scripts/check-pin.sh` passes (both pins agree),
+`nix flake check` runs its three checks green, the headless suite is 33/33, upstream CI is
+green on `main` with no open pull requests, and the line references in the extension's
+`GNOME_REVIEW_RULES.md` still match the code they cite.
 
 Difficulty estimate: medium, as planned. The generator itself was straightforward. What took
 the time was everything shaped by the review rules — async entropy, cancellation on teardown,
