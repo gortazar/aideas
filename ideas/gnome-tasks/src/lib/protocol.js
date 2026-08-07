@@ -155,8 +155,11 @@ export const DAEMON_IFACE_XML = `
     <property name="ApiVersion" type="u" access="read"/>
     <!-- Empty string when no task is current. -->
     <property name="CurrentTask" type="s" access="read"/>
-    <!-- Global kill switch for session capture; nothing is recorded while false. -->
+    <!-- Global kill switch for session capture; nothing is recorded while false. Persisted, so
+         pausing capture survives a daemon restart. -->
     <property name="CaptureEnabled" type="b" access="readwrite"/>
+    <!-- Desktop ids never recorded into a layout, whatever is on screen. -->
+    <property name="ExcludedApps" type="as" access="readwrite"/>
   </interface>
 </node>`;
 

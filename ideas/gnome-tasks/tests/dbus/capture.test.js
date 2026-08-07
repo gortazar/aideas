@@ -5,7 +5,9 @@ import GLib from 'gi://GLib';
 
 import { suite, test, assert, assertEquals, assertDeepEquals } from '../harness.js';
 import { DeactivatePolicy } from '../../src/lib/protocol.js';
-import { call, setProperty, sleep, startDaemon, stopDaemon } from './helpers.js';
+import {
+    call, getProperty, setProperty, sleep, startDaemon, stopDaemon,
+} from './helpers.js';
 import { FakeShell, fakeWindow } from './fakeShell.js';
 
 const shell = new FakeShell();
@@ -302,6 +304,45 @@ suite('switching', () => {
 
         await call('StopTask', new GLib.Variant('(s)', [uuid]));
         await call('DeleteTask', new GLib.Variant('(s)', [uuid]));
+    });
+});
+
+suite('settings', () => {
+    test('an excluded application is never recorded', async () => {
+        const uuid = await createTask('Excluded');
+        await setProperty('ExcludedApps',
+            new GLib.Variant('as', ['org.keepassxc.KeePassXC.desktop']));
+
+        shell.windows = [
+            fakeWindow('org.keepassxc.KeePassXC.desktop'),
+            fakeWindow('org.gnome.Calculator.desktop', { x: 40 }),
+        ];
+        await call('CaptureNow', new GLib.Variant('(s)', [uuid]));
+        await sleep(700);
+
+        const document = await taskDocument(uuid);
+        assertEquals(document.apps.length, 1);
+        assertEquals(document.apps[0].appId, 'org.gnome.Calculator.desktop');
+
+        await setProperty('ExcludedApps', new GLib.Variant('as', []));
+        await call('DeleteTask', new GLib.Variant('(s)', [uuid]));
+    });
+
+    // Pausing capture is a privacy control, so it has to outlive the daemon rather than quietly
+    // resetting to "recording" the next time it starts.
+    test('CaptureEnabled and ExcludedApps survive a daemon restart', async () => {
+        await daemon();
+        await setProperty('CaptureEnabled', GLib.Variant.new_boolean(false));
+        await setProperty('ExcludedApps', new GLib.Variant('as', ['a.desktop', 'b.desktop']));
+
+        await stopDaemon(session);
+        session = await startDaemon({ dataDir: session.dataDir });
+
+        assertEquals(await getProperty('CaptureEnabled'), false);
+        assertDeepEquals(await getProperty('ExcludedApps'), ['a.desktop', 'b.desktop']);
+
+        await setProperty('CaptureEnabled', GLib.Variant.new_boolean(true));
+        await setProperty('ExcludedApps', new GLib.Variant('as', []));
     });
 });
 

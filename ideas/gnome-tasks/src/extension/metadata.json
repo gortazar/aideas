@@ -3,6 +3,7 @@
   "name": "Tasks",
   "description": "KDE-style Activities for GNOME: group applications, documents and commands under a named task and switch between them. Needs gnome-tasks-daemon, which holds all state; this extension is a thin top-bar client that additionally provides the window introspection only in-process code can do.",
   "shell-version": ["46"],
+  "settings-schema": "org.gnome.shell.extensions.gnome-tasks",
   "url": "https://github.com/patxi/aideas",
   "version-name": "0.1.0"
 }

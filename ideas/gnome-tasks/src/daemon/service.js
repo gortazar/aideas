@@ -77,7 +77,6 @@ export class TasksService {
         this._store = store;
         this._shell = shell;
         this._runner = runner;
-        this._captureEnabled = true;
         this._captureTimeoutId = 0;
         // Set while restore is running, so the windows restore itself creates are not immediately
         // captured back into the task — which would fight with what the user actually had.
@@ -90,7 +89,8 @@ export class TasksService {
 
     /** Called by the daemon when the compositor reports that windows changed. */
     onWindowsChanged() {
-        if (!this._captureEnabled || this._restoring || this._store.currentUuid === '')
+        if (!this._store.settings.captureEnabled || this._restoring ||
+            this._store.currentUuid === '')
             return;
 
         if (this._captureTimeoutId)
@@ -244,14 +244,24 @@ export class TasksService {
     }
 
     get CaptureEnabled() {
-        return this._captureEnabled;
+        return this._store.settings.captureEnabled;
     }
 
     set CaptureEnabled(value) {
-        if (this._captureEnabled === value)
+        if (this._store.settings.captureEnabled === value)
             return;
-        this._captureEnabled = value;
+        this._store.setSettings({ captureEnabled: Boolean(value) });
         this._impl.emit_property_changed('CaptureEnabled', GLib.Variant.new_boolean(value));
+    }
+
+    get ExcludedApps() {
+        return this._store.settings.excludedApps;
+    }
+
+    set ExcludedApps(value) {
+        this._store.setSettings({ excludedApps: value });
+        this._impl.emit_property_changed('ExcludedApps',
+            new GLib.Variant('as', this._store.settings.excludedApps));
     }
 
     // --- capture and restore ---------------------------------------------------------------
@@ -269,7 +279,10 @@ export class TasksService {
             return;
 
         const windows = await this._shell.listWindows();
-        const layout = layoutFromWindows(windows, { documents: window => this._documentsFor(window) });
+        const layout = layoutFromWindows(windows, {
+            excludedAppIds: this._store.settings.excludedApps,
+            documents: window => this._documentsFor(window),
+        });
 
         if (sameLayout(layout, task.apps ?? []))
             return;

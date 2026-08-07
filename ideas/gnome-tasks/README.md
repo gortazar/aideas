@@ -20,9 +20,9 @@ Anything slow or risky stays out of the compositor: the extension only makes D-B
 
 The core loop works: **a task remembers the applications you opened — and, for some of them, the
 document each one had open — and switching back brings them back where they were**, and per-task
-commands start and stop with the task as transient systemd units. Verified end to end in a real
-(nested, headless) GNOME Shell 46 session by `make smoke`. The preferences window and the browser
-adapters are not built yet — see [STATUS.md](STATUS.md) for
+commands start and stop with the task as transient systemd units. There is a preferences window and
+a keyboard shortcut (`Super`+`` ` ``) to cycle tasks. Verified end to end in a real (nested,
+headless) GNOME Shell 46 session by `make smoke`. The browser adapters are not built yet — see [STATUS.md](STATUS.md) for
 exactly what works today, [docs/app-adapters.md](docs/app-adapters.md) for which applications can
 have their documents recovered, and [docs/limitations.md](docs/limitations.md) for what cannot work
 at all.
@@ -30,9 +30,19 @@ at all.
 ![The switcher in the top bar, showing the active task, with a window restored into it](screenshots/nested-session.png)
 
 The top bar shows the current task ("Client work"); the window was launched and placed by
-gnome-tasks when that task was activated. The screenshot is taken inside the nested test session
-described under [Tests](#tests) — the switcher's popup menu cannot be captured there, because a
-panel menu needs a pointer grab that a headless session has no seat to provide.
+gnome-tasks when that task was activated.
+
+| Tasks | Capture and privacy |
+| --- | --- |
+| ![The preferences window listing three tasks](screenshots/preferences.png) | ![The capture page, with the recording switch and the exclusion list](screenshots/preferences-capture.png) |
+
+The preferences window is a view over the daemon: renaming a task, changing what happens to its
+windows on switch-away, allowing a command to run, or excluding an application from capture all go
+straight to `org.gnome.Tasks`.
+
+All three screenshots are taken inside the nested test session described under [Tests](#tests). The
+switcher's *popup menu* cannot be captured there — a panel menu needs a pointer grab that a headless
+session has no seat to provide.
 
 ```console
 $ gdbus call --session --dest org.gnome.Tasks --object-path /org/gnome/Tasks \

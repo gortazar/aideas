@@ -1,7 +1,7 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 
-import { suite, test, assert, assertEquals, assertThrows } from '../harness.js';
+import { suite, test, assert, assertDeepEquals, assertEquals, assertThrows } from '../harness.js';
 import { TaskStore } from '../../src/lib/taskStore.js';
 import { DeactivatePolicy } from '../../src/lib/protocol.js';
 
@@ -170,6 +170,60 @@ suite('TaskStore', () => {
         assertEquals(reloaded.list().length, 1);
         assertEquals(reloaded.get(good.uuid).name, 'Good');
         assertEquals(problems.length, 1, 'the problem should be reported, not swallowed');
+    });
+
+    // Daemon-level settings live beside the tasks rather than in the extension's GSettings: the
+    // daemon is what acts on them, and it has to keep working when the extension is not loaded.
+    test('settings default sensibly and survive a reload', () => {
+        const directory = scratchDir();
+        const store = new TaskStore({ directory });
+
+        assertEquals(store.settings.captureEnabled, true, 'capture is on by default');
+        assertDeepEquals(store.settings.excludedApps, []);
+
+        store.setSettings({ captureEnabled: false, excludedApps: ['org.keepassxc.KeePassXC.desktop'] });
+
+        const reloaded = new TaskStore({ directory });
+        reloaded.load();
+        assertEquals(reloaded.settings.captureEnabled, false);
+        assertDeepEquals(reloaded.settings.excludedApps, ['org.keepassxc.KeePassXC.desktop']);
+    });
+
+    test('setSettings only changes the keys it is given', () => {
+        const store = new TaskStore({ directory: scratchDir() });
+        store.setSettings({ excludedApps: ['a.desktop'] });
+        store.setSettings({ captureEnabled: false });
+
+        assertDeepEquals(store.settings.excludedApps, ['a.desktop']);
+        assertEquals(store.settings.captureEnabled, false);
+    });
+
+    test('a settings change is announced', () => {
+        const store = new TaskStore({ directory: scratchDir() });
+        const seen = [];
+        store.connect((kind, uuid) => seen.push(`${kind}:${uuid}`));
+
+        store.setSettings({ captureEnabled: false });
+
+        assertEquals(seen.join(' '), 'settings:');
+    });
+
+    test('an unknown setting is rejected rather than silently stored', () => {
+        const store = new TaskStore({ directory: scratchDir() });
+        assertThrows(() => store.setSettings({ nonsense: true }));
+    });
+
+    test('the current task and the settings share one state file', () => {
+        const directory = scratchDir();
+        const store = new TaskStore({ directory });
+        const task = store.create({ name: 'A' });
+        store.setCurrent(task.uuid);
+        store.setSettings({ captureEnabled: false });
+
+        const reloaded = new TaskStore({ directory });
+        reloaded.load();
+        assertEquals(reloaded.currentUuid, task.uuid);
+        assertEquals(reloaded.settings.captureEnabled, false);
     });
 
     test('list is ordered by name, so the switcher menu is stable', () => {

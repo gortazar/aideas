@@ -184,6 +184,19 @@ def main():
     tasks("StopTask", docs_task)
     tasks("DeleteTask", docs_task)
 
+    print("\n== step 8: the preferences window builds against the live daemon ==")
+    # The preferences process only exists inside a GNOME session, so this is the only place it can be
+    # exercised at all. It needs a display, which the nested session has.
+    preview = subprocess.run(
+        ["gjs", "-m", "tools/prefs-preview.js"],
+        capture_output=True, text=True, timeout=60,
+        env={**os.environ, "GNOME_TASKS_PREVIEW_SECONDS": "3"})
+    output = preview.stdout + preview.stderr
+    print("   " + output.strip().replace("\n", "\n   "))
+    check("the preferences window built without errors",
+          preview.returncode == 0 and "preferences window built" in output)
+    check("the preferences window saw the daemon's tasks", "daemon available: true" in output)
+
     print("\n== cleanup ==")
     for window in calculator_windows():
         shell("CloseWindow", window["id"])

@@ -9,6 +9,7 @@
 // because this code runs inside the compositor.
 
 import GLib from 'gi://GLib';
+import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
@@ -78,9 +79,14 @@ export default class GnomeTasksExtension extends Extension {
 
         for (const actor of global.get_window_actors())
             this._watchWindow(actor.meta_window);
+
+        this._addKeybindings();
     }
 
     disable() {
+        for (const name of ['cycle-tasks', 'cycle-tasks-backward'])
+            Main.wm.removeKeybinding(name);
+
         for (const id of this._matchTimeouts)
             GLib.source_remove(id);
         this._matchTimeouts.clear();
@@ -144,6 +150,38 @@ export default class GnomeTasksExtension extends Extension {
         } catch (error) {
             console.warn(`gnome-tasks: launch matching failed: ${error}`);
         }
+    }
+
+    /**
+     * Cycling through tasks from the keyboard. The binding lives in the extension's GSettings because
+     * that is the only place Mutter will read one from; what it *does* is a D-Bus call like every
+     * other action here.
+     */
+    _addKeybindings() {
+        const settings = this.getSettings();
+
+        for (const [name, step] of [['cycle-tasks', 1], ['cycle-tasks-backward', -1]]) {
+            Main.wm.addKeybinding(
+                name, settings,
+                Meta.KeyBindingFlags.NONE,
+                Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
+                () => this._cycleTask(step));
+        }
+    }
+
+    _cycleTask(step) {
+        const tasks = this._client?.tasks ?? [];
+        if (tasks.length === 0)
+            return;
+
+        const current = tasks.findIndex(task => task.uuid === this._client.currentTask);
+        // No current task means "start at the beginning", in whichever direction was asked for.
+        const next = current < 0
+            ? (step > 0 ? 0 : tasks.length - 1)
+            : (current + step + tasks.length) % tasks.length;
+
+        this._client.activate(tasks[next].uuid)
+            .catch(error => console.warn(`gnome-tasks: ${error}`));
     }
 
     _connect(object, signal, callback) {
