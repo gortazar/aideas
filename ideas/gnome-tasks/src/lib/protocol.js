@@ -125,10 +125,18 @@ export const DAEMON_IFACE_XML = `
     </method>
 
     <!-- Tier-2 entry point: a cooperating app or browser plugin pushes its own inner state
-         (browser tabs, editor project, terminal cwd) as JSON, keyed by adapter id. -->
+         (browser tabs, editor project, terminal cwd) as JSON, keyed by adapter id. Recorded against
+         whichever task is current, because that is the only context in which it means anything. -->
     <method name="ReportAppState">
       <arg type="s" name="adapterId" direction="in"/>
       <arg type="s" name="json" direction="in"/>
+    </method>
+
+    <!-- What a tier-2 adapter last reported for a task, as JSON; '{}' when there is nothing. -->
+    <method name="GetAppState">
+      <arg type="s" name="uuid" direction="in"/>
+      <arg type="s" name="adapterId" direction="in"/>
+      <arg type="s" name="json" direction="out"/>
     </method>
 
     <signal name="TaskAdded">
@@ -149,6 +157,14 @@ export const DAEMON_IFACE_XML = `
     </signal>
     <signal name="CommandsAwaitingConfirmation">
       <arg type="s" name="uuid"/>
+      <arg type="s" name="json"/>
+    </signal>
+
+    <!-- Tier 2 in the other direction: on activation the daemon hands each adapter back the state it
+         reported last time, and the adapter (a browser extension, through its native-messaging host)
+         rebuilds it. Nothing else can do this — the tabs were never on disk. -->
+    <signal name="RestoreAppState">
+      <arg type="s" name="adapterId"/>
       <arg type="s" name="json"/>
     </signal>
 

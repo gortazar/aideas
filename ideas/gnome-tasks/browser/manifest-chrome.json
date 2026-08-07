@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "gnome-tasks",
+  "version": "0.1.0",
+  "description": "Lets gnome-tasks remember and restore this browser's windows and tabs per task.",
+  "permissions": ["tabs", "nativeMessaging"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}

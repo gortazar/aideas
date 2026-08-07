@@ -1,0 +1,4 @@
+#!/bin/sh
+# Installed as gnome-tasks-browser-host-{firefox,chrome}; @BROWSER@ tells the host which browser is
+# on the other end, because neither Firefox nor Chrome reliably identifies itself to a native host.
+GNOME_TASKS_BROWSER=@BROWSER@ exec "@GJS@" -m "@LIB_DIR@/native-host/gnome-tasks-browser-host.js" "$@"

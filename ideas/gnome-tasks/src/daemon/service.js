@@ -19,6 +19,10 @@ import { serializeTask, summarizeTask } from '../lib/task.js';
 import { layoutFromWindows, restorePlan, sameLayout } from '../lib/layout.js';
 import { documentsFor } from '../lib/adapters/index.js';
 import { commandsToStart } from '../lib/commands.js';
+import {
+    BROWSER_ADAPTERS, correlateBrowserWindows, parseBrowserState, restoreRequestFor,
+    summariseBrowserState,
+} from '../lib/browserState.js';
 import { readProcessInfo } from './procReader.js';
 import { SystemdRunner } from './systemdRunner.js';
 
@@ -228,9 +232,45 @@ export class TasksService {
         return JSON.stringify({ commands: this._runner.unitsForTask(taskUuid) });
     }
 
+    /**
+     * Tier 2: an application (in practice a browser, through its native-messaging host) reports its
+     * own inner state. Stored against whichever task is current — the state only means anything in
+     * the context of the task the user was in when it was reported.
+     */
     ReportAppState(adapterId, json) {
-        throw notSupported(
-            `no adapter is registered for ${adapterId}; tier-2 app state lands in M6`);
+        if (!BROWSER_ADAPTERS.has(adapterId)) {
+            throw dbusError(Gio.DBusError.INVALID_ARGS,
+                `unknown adapter: ${adapterId} (known: ${[...BROWSER_ADAPTERS].join(', ')})`);
+        }
+
+        const state = parseBrowserState(json);
+        if (!state) {
+            throw dbusError(Gio.DBusError.INVALID_ARGS,
+                'the report is not a usable browser state document');
+        }
+
+        const uuid = this._store.currentUuid;
+        if (uuid === '' || !this._store.has(uuid)) {
+            // Not an error: a browser can report at any time, including when no task is current.
+            return;
+        }
+
+        if (!this._store.settings.captureEnabled)
+            return;
+
+        const task = this._store.get(uuid);
+        const appState = { ...(task.appState ?? {}), [adapterId]: state };
+        this._store.update(uuid, { appState });
+
+        print(`gnome-tasks-daemon: ${adapterId} reported ${summariseBrowserState(state)} ` +
+            `for ${task.name}`);
+    }
+
+    /** What a tier-2 adapter reported for a task, as JSON. '{}' when there is nothing. */
+    GetAppState(uuid, adapterId) {
+        const task = this._task(uuid);
+        const state = task.appState?.[adapterId] ?? null;
+        return JSON.stringify(state ?? {});
     }
 
     // --- properties ------------------------------------------------------------------------
@@ -279,9 +319,20 @@ export class TasksService {
             return;
 
         const windows = await this._shell.listWindows();
+
+        // Tie each browser window on screen to the browser's own idea of that window, so a saved
+        // layout knows which tab set belongs to which position. Correlation is by title and often
+        // fails; when it does, the entry simply has no browser window id.
+        const browserWindows = new Map();
+        for (const state of Object.values(task.appState ?? {})) {
+            for (const [windowId, browserWindowId] of correlateBrowserWindows(state, windows))
+                browserWindows.set(windowId, browserWindowId);
+        }
+
         const layout = layoutFromWindows(windows, {
             excludedAppIds: this._store.settings.excludedApps,
             documents: window => this._documentsFor(window),
+            browserWindowId: window => browserWindows.get(window.id) ?? null,
         });
 
         if (sameLayout(layout, task.apps ?? []))
@@ -320,7 +371,28 @@ export class TasksService {
             new GLib.Variant('(su)', [incoming.uuid, incoming.state]));
 
         await this._restore(incoming);
+        this._restoreAppState(incoming);
         await this._startCommands(this._store.get(incoming.uuid));
+    }
+
+    /**
+     * Ask each tier-2 adapter to rebuild what it reported for this task.
+     *
+     * Fire and forget: the daemon cannot know whether the browser is even running, and one that is
+     * not listening simply misses the signal — the same outcome as it not being open. Browser tabs
+     * were never on disk, so this is the only way they can come back at all.
+     */
+    _restoreAppState(task) {
+        for (const [adapterId, state] of Object.entries(task.appState ?? {})) {
+            const request = restoreRequestFor(state);
+            if (!request)
+                continue;
+
+            this._impl.emit_signal('RestoreAppState',
+                new GLib.Variant('(ss)', [adapterId, JSON.stringify(request)]));
+            print(`gnome-tasks-daemon: asked ${adapterId} to restore ` +
+                `${summariseBrowserState(state)} for ${task.name}`);
+        }
     }
 
     /**

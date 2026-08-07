@@ -1,0 +1,7 @@
+{
+  "name": "org.gnome.tasks.browser_host",
+  "description": "Reports this browser's windows and tabs to gnome-tasks, and restores them",
+  "path": "@BIN_DIR@/gnome-tasks-browser-host-firefox",
+  "type": "stdio",
+  "allowed_extensions": ["gnome-tasks@patxi.gortazar"]
+}

@@ -89,6 +89,30 @@ suite('layoutFromWindows', () => {
     });
 });
 
+suite('browser window correlation in a layout', () => {
+    test('a correlated browser window records which one it is', () => {
+        const layout = layoutFromWindows([win('firefox.desktop', { x: 10 })], {
+            browserWindowId: () => 11,
+        });
+
+        assertEquals(layout[0].browserWindowId, 11);
+    });
+
+    // An uncorrelated window must not carry a null id that later code could mistake for a real one.
+    test('an uncorrelated window has no browser window id at all', () => {
+        const layout = layoutFromWindows([win('firefox.desktop')], {
+            browserWindowId: () => null,
+        });
+
+        assert(!('browserWindowId' in layout[0]));
+    });
+
+    test('nothing is annotated when no hook is given', () => {
+        const layout = layoutFromWindows([win('firefox.desktop')]);
+        assert(!('browserWindowId' in layout[0]));
+    });
+});
+
 suite('sameLayout', () => {
     test('a layout equals itself', () => {
         const layout = layoutFromWindows([win('a.desktop')]);

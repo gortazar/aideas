@@ -12,7 +12,8 @@ SYSTEMD_DIR := $(HOME)/.config/systemd/user
 GJS ?= gjs
 
 .PHONY: help lint test test-unit test-dbus build check-bundle pack install install-extension \
-        install-daemon uninstall enable disable restart-daemon logs clean check smoke
+        install-daemon install-browser-host uninstall enable disable restart-daemon logs clean \
+        check smoke
 
 help:
 	@echo "gnome-tasks"
@@ -24,6 +25,7 @@ help:
 	@echo "  make check-bundle     validate the assembled bundle (metadata + imports)"
 	@echo "  make pack             build + gnome-extensions pack -> $(BUILD)/$(UUID).shell-extension.zip"
 	@echo "  make install          install the extension and the daemon into ~/.local"
+	@echo "  make install-browser-host  native-messaging host for Firefox and Chrome (see browser/)"
 	@echo "  make enable/disable   toggle the extension"
 	@echo "  make restart-daemon   restart the user daemon and follow its log"
 	@echo "  make logs             follow the Shell and daemon logs"
@@ -115,10 +117,44 @@ install-daemon:
 	    data/gnome-tasks-daemon.service.in > $(SYSTEMD_DIR)/gnome-tasks-daemon.service
 	systemctl --user daemon-reload
 
+# Tier-2 browser support: the host bridges a WebExtension's stdio to org.gnome.Tasks. Both browsers
+# look for their manifests in their own directory, hence two copies of it.
+FIREFOX_HOSTS_DIR := $(HOME)/.mozilla/native-messaging-hosts
+CHROME_HOSTS_DIR  := $(HOME)/.config/google-chrome/NativeMessagingHosts
+CHROMIUM_HOSTS_DIR := $(HOME)/.config/chromium/NativeMessagingHosts
+CHROME_EXTENSION_ID ?= REPLACE_WITH_THE_ID_CHROME_ASSIGNS
+
+install-browser-host:
+	mkdir -p $(LIB_DIR) $(BIN_DIR) $(FIREFOX_HOSTS_DIR) $(CHROME_HOSTS_DIR) $(CHROMIUM_HOSTS_DIR)
+	rm -rf $(LIB_DIR)/native-host
+	cp -r src/native-host $(LIB_DIR)/native-host
+	cp -r src/lib $(LIB_DIR)/lib
+	for browser in firefox chrome; do \
+	    sed -e 's|@LIB_DIR@|$(LIB_DIR)|g' -e 's|@GJS@|$(shell command -v gjs)|g' \
+	        -e "s|@BROWSER@|$$browser|g" \
+	        data/gnome-tasks-browser-host.in > $(BIN_DIR)/gnome-tasks-browser-host-$$browser; \
+	    chmod +x $(BIN_DIR)/gnome-tasks-browser-host-$$browser; \
+	done
+	sed -e 's|@BIN_DIR@|$(BIN_DIR)|g' data/org.gnome.tasks.browser_host.firefox.json.in \
+	    > $(FIREFOX_HOSTS_DIR)/org.gnome.tasks.browser_host.json
+	sed -e 's|@BIN_DIR@|$(BIN_DIR)|g' -e 's|@CHROME_EXTENSION_ID@|$(CHROME_EXTENSION_ID)|g' \
+	    data/org.gnome.tasks.browser_host.chrome.json.in \
+	    > $(CHROME_HOSTS_DIR)/org.gnome.tasks.browser_host.json
+	cp $(CHROME_HOSTS_DIR)/org.gnome.tasks.browser_host.json \
+	    $(CHROMIUM_HOSTS_DIR)/org.gnome.tasks.browser_host.json
+	@echo
+	@echo "Host installed. Load the extension from browser/ — see browser/README.md."
+	@echo "Chrome needs its extension id in the manifest:"
+	@echo "  make install-browser-host CHROME_EXTENSION_ID=<the id chrome://extensions shows>"
+
 uninstall:
 	rm -rf $(EXT_DIR) $(LIB_DIR)
 	rm -f $(BIN_DIR)/gnome-tasks-daemon $(DBUS_DIR)/org.gnome.Tasks.service
 	rm -f $(SYSTEMD_DIR)/gnome-tasks-daemon.service
+	rm -f $(BIN_DIR)/gnome-tasks-browser-host-firefox $(BIN_DIR)/gnome-tasks-browser-host-chrome
+	rm -f $(FIREFOX_HOSTS_DIR)/org.gnome.tasks.browser_host.json
+	rm -f $(CHROME_HOSTS_DIR)/org.gnome.tasks.browser_host.json
+	rm -f $(CHROMIUM_HOSTS_DIR)/org.gnome.tasks.browser_host.json
 	systemctl --user daemon-reload || true
 
 enable:

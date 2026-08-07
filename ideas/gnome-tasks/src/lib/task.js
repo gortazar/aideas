@@ -14,7 +14,9 @@ export const SCHEMA_VERSION = 1;
 const VALID_POLICIES = new Set(Object.values(DeactivatePolicy));
 
 /** Keys a client may change through SetTaskProperties. */
-const MUTABLE_KEYS = new Set(['name', 'icon', 'description', 'deactivatePolicy', 'apps', 'commands']);
+const MUTABLE_KEYS = new Set([
+    'name', 'icon', 'description', 'deactivatePolicy', 'apps', 'commands', 'appState',
+]);
 
 function requireName(value) {
     if (typeof value !== 'string')
@@ -52,7 +54,7 @@ function randomUuid() {
 export function createTask({ uuid, name, icon = '', description = '',
     // LEAVE rather than HIDE: a default has to be a behaviour that exists, and leaving windows
     // alone is also the safest thing to do with somebody's open work.
-    deactivatePolicy = DeactivatePolicy.LEAVE, apps = [], commands = [] } = {}) {
+    deactivatePolicy = DeactivatePolicy.LEAVE, apps = [], commands = [], appState = {} } = {}) {
     return {
         version: SCHEMA_VERSION,
         uuid: uuid ?? randomUuid(),
@@ -62,6 +64,9 @@ export function createTask({ uuid, name, icon = '', description = '',
         deactivatePolicy: requirePolicy(deactivatePolicy),
         apps: [...apps],
         commands: [...commands],
+        // Tier-2 state, keyed by adapter id: browser tabs and anything else only the application
+        // itself can report. See docs/app-adapters.md.
+        appState: { ...appState },
         // Runtime only: recomputed from the compositor, never read back from disk.
         state: TaskState.STOPPED,
     };
@@ -87,6 +92,11 @@ export function updateTask(task, properties) {
                 if (!Array.isArray(value))
                     throw new Error(`${key} must be an array`);
                 updated[key] = [...value];
+                break;
+            case 'appState':
+                if (!value || typeof value !== 'object' || Array.isArray(value))
+                    throw new Error('appState must be an object keyed by adapter id');
+                updated.appState = { ...value };
                 break;
             default:
                 if (typeof value !== 'string')
@@ -129,6 +139,7 @@ export function parseTask(text) {
         deactivatePolicy: migrated.deactivatePolicy ?? DeactivatePolicy.LEAVE,
         apps: migrated.apps ?? [],
         commands: migrated.commands ?? [],
+        appState: migrated.appState ?? {},
     });
 }
 

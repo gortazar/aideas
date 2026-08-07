@@ -13,7 +13,9 @@ import { canCapture } from './windowModel.js';
  * is on disk to decide whether to write; an order that followed the stacking order would make every
  * click look like a change.
  */
-export function layoutFromWindows(windows, { excludedAppIds = [], documents = null } = {}) {
+export function layoutFromWindows(windows, {
+    excludedAppIds = [], documents = null, browserWindowId = null,
+} = {}) {
     const excluded = new Set(excludedAppIds);
 
     return windows
@@ -24,6 +26,12 @@ export function layoutFromWindows(windows, { excludedAppIds = [], documents = nu
             // From the per-app adapters (src/lib/adapters/), which the daemon wires up because they
             // need to read /proc. Empty means "launch with no document", which is the tier-0 answer.
             documents: documents ? documents(window) : [],
+            // Which of a browser's own windows this is, when the two could be correlated (see
+            // src/lib/browserState.js). Absent for everything else, and absent for a browser window
+            // whose title matched nothing — in which case restore loses the per-window split.
+            ...(browserWindowId?.(window) != null
+                ? { browserWindowId: browserWindowId(window) }
+                : {}),
             placement: {
                 workspace: window.workspaceIndex,
                 geometry: { ...window.geometry },

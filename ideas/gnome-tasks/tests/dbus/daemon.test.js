@@ -162,27 +162,39 @@ suite('org.gnome.Tasks', () => {
 
     // Anything unavailable must fail loudly rather than as a silent no-op: this suite runs with no
     // Shell extension on the bus, so capture cannot work and must say why.
-    test('methods that cannot work raise NotSupported and explain themselves', async () => {
+    test('capture without the Shell extension raises NotSupported and explains itself', async () => {
         await daemon();
         const [uuid] = await call('CreateTask', new GLib.Variant('(ss)', ['Capture', '']), '(s)');
 
-        for (const [method, parameters, expected] of [
-            ['CaptureNow', new GLib.Variant('(s)', [uuid]), /Shell extension/],
-            ['ReportAppState', new GLib.Variant('(ss)', ['firefox', '{}']), /M\d/],
-        ]) {
-            let error = null;
-            try {
-                await call(method, parameters);
-            } catch (thrown) {
-                error = thrown;
-            }
-            assert(error !== null, `${method} should have raised`);
-            assert(error.matches(Gio.DBusError, Gio.DBusError.NOT_SUPPORTED),
-                `${method} should raise NotSupported, raised ${error}`);
-            assertMatch(error.message, expected, `${method} should explain why it cannot run`);
+        let error = null;
+        try {
+            await call('CaptureNow', new GLib.Variant('(s)', [uuid]));
+        } catch (thrown) {
+            error = thrown;
         }
 
+        assert(error !== null, 'CaptureNow should have raised');
+        assert(error.matches(Gio.DBusError, Gio.DBusError.NOT_SUPPORTED),
+            `expected NotSupported, raised ${error}`);
+        assertMatch(error.message, /Shell extension/, 'it should say what is missing');
+
         await call('DeleteTask', new GLib.Variant('(s)', [uuid]));
+    });
+
+    // Tier-2 reports are untrusted input arriving from a browser through a pipe, so a bad one is
+    // rejected rather than stored half-understood. (What a *good* one does is in browser.test.js.)
+    test('a malformed tier-2 report is rejected with InvalidArgs', async () => {
+        await daemon();
+        let error = null;
+        try {
+            await call('ReportAppState', new GLib.Variant('(ss)', ['firefox', '{}']));
+        } catch (thrown) {
+            error = thrown;
+        }
+
+        assert(error !== null, 'ReportAppState should have raised');
+        assert(error.matches(Gio.DBusError, Gio.DBusError.INVALID_ARGS),
+            `expected InvalidArgs, raised ${error}`);
     });
 
     test('tasks are still there after the daemon is restarted', async () => {

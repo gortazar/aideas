@@ -49,6 +49,21 @@ value of gnome-tasks depends on being clear about which 80% works.
   plus EDID vendor/product/serial from `org.gnome.Mutter.DisplayConfig`, because Mutter's monitor
   indices renumber. Whether that key is stable on real hardware is unverified.
 
+## Browsers specifically
+
+* **Which browser window a tab set belongs to** — confirmed weak, by construction. Correlation is by
+  window title (see [app-adapters.md](app-adapters.md#window-correlation-and-where-it-gives-up)); when
+  it fails, the tabs still come back but not necessarily in windows placed as they were.
+* **The extension has to be loaded by hand.** Per the answered open question in `PLAN.md`, these are
+  local unsigned extensions: Firefox forgets a temporary add-on on restart unless signature checks are
+  off, and Chrome needs its own generated extension id pasted into the host manifest.
+* **Nothing is captured before the extension is installed.** A browser without it is a tier-0
+  application: gnome-tasks can reopen the browser, with no tabs.
+* **Neither browser could be tested here.** Both are snap-confined on this machine, which blocks the
+  nested test session entirely (a snap refuses to launch from an arbitrary cgroup, and only sees
+  `wayland-N` sockets). The whole protocol is covered by tests against the real native-messaging host
+  and a real daemon, but the *browser* end has not been exercised against a real browser.
+
 ## Structural, from the platform
 
 * **X11 is not supported.** By decision (see the answered open questions in `PLAN.md`), Wayland
