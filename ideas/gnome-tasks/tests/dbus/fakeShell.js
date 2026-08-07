@@ -15,6 +15,11 @@ import { SHELL_IFACE_XML, SHELL_NAME, SHELL_OBJECT_PATH } from '../../src/lib/pr
 export class FakeShell {
     constructor() {
         this.windows = [];
+        // A single 1920x1080 laptop screen by default; tests that care about remapping set their own.
+        this.monitors = [
+            { index: 0, connector: 'eDP-1', x: 0, y: 0, width: 1920, height: 1080, primary: true },
+        ];
+        this.workspaces = { count: 4, active: 0, dynamic: false };
         this.calls = [];
         this._launchCounter = 0;
         this._impl = Gio.DBusExportedObject.wrapJSObject(SHELL_IFACE_XML, this);
@@ -62,6 +67,16 @@ export class FakeShell {
     ListWindows() {
         this.calls.push({ method: 'ListWindows' });
         return JSON.stringify({ windows: this.windows });
+    }
+
+    ListMonitors() {
+        this.calls.push({ method: 'ListMonitors' });
+        return JSON.stringify({ monitors: this.monitors });
+    }
+
+    ListWorkspaces() {
+        this.calls.push({ method: 'ListWorkspaces' });
+        return JSON.stringify(this.workspaces);
     }
 
     LaunchApp(desktopId, uris, placement) {

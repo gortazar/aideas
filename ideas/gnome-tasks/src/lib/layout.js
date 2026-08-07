@@ -14,8 +14,11 @@ import { canCapture } from './windowModel.js';
  * click look like a change.
  */
 export function layoutFromWindows(windows, {
-    excludedAppIds = [], documents = null, browserWindowId = null,
+    excludedAppIds = [], documents = null, browserWindowId = null, monitors = null,
 } = {}) {
+    const monitorByConnector = new Map(
+        (monitors ?? []).filter(monitor => monitor.connector)
+            .map(monitor => [monitor.connector, monitor]));
     const excluded = new Set(excludedAppIds);
 
     return windows
@@ -38,9 +41,18 @@ export function layoutFromWindows(windows, {
                 maximized: window.maximized,
                 fullscreen: window.fullscreen,
                 monitorConnector: window.monitorConnector,
+                // The monitor's own geometry, so that if this display is gone at restore time the
+                // window can keep its proportional place rather than just being clamped on screen.
+                ...(monitorByConnector.has(window.monitorConnector)
+                    ? { monitorGeometry: rectOf(monitorByConnector.get(window.monitorConnector)) }
+                    : {}),
             },
         }))
         .sort(compareEntries);
+}
+
+function rectOf(monitor) {
+    return { x: monitor.x, y: monitor.y, width: monitor.width, height: monitor.height };
 }
 
 function compareEntries(a, b) {

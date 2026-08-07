@@ -113,6 +113,30 @@ export class ShellClient {
         return parseWindows(reply[0]);
     }
 
+    /** The monitor set, or [] when the extension is not there. */
+    async listMonitors() {
+        const reply = await this._call('ListMonitors', null, '(s)');
+        if (!reply)
+            return [];
+        try {
+            return JSON.parse(reply[0]).monitors ?? [];
+        } catch {
+            return [];
+        }
+    }
+
+    /** `{ count, active, dynamic }`, or null when the extension is not there. */
+    async listWorkspaces() {
+        const reply = await this._call('ListWorkspaces', null, '(s)');
+        if (!reply)
+            return null;
+        try {
+            return JSON.parse(reply[0]);
+        } catch {
+            return null;
+        }
+    }
+
     /** Returns the launch id, or '' if the launch could not be requested. */
     async launchApp(appId, uris = [], placement = {}) {
         const reply = await this._call(

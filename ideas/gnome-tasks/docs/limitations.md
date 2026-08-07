@@ -45,9 +45,12 @@ value of gnome-tasks depends on being clear about which 80% works.
   matched to launches by application id and timing. With two launches of the same application in
   flight, a window can be attributed to the wrong slot. Every match records the strategy that
   produced it, so this is diagnosable.
-* **Monitor identity across a replug** — expected. Saved layouts key monitors by connector name
-  plus EDID vendor/product/serial from `org.gnome.Mutter.DisplayConfig`, because Mutter's monitor
-  indices renumber. Whether that key is stable on real hardware is unverified.
+* **Monitor identity across a replug** — partly confirmed. Saved layouts key monitors by connector
+  name from `org.gnome.Mutter.DisplayConfig`, because Mutter's monitor indices renumber. If the
+  connector is gone at restore time the window is moved onto the primary monitor, keeping its
+  proportional position and shrinking to fit (`src/lib/monitorRemap.js`). What is *not* verified is
+  whether connector names are stable across real replugs on real hardware — the nested test session
+  has one virtual monitor called `Meta-0`.
 
 ## Browsers specifically
 
@@ -83,6 +86,10 @@ value of gnome-tasks depends on being clear about which 80% works.
 
 * **Per-task wallpaper, favourites and theming** — out of scope by decision, unlike KDE
   Activities.
+* **Parking windows anywhere better than the last workspace.** The `hide` policy moves a task's
+  windows to the last workspace, which with dynamic workspaces is GNOME's always-empty spare and with
+  static workspaces is a compromise. With a single workspace there is nowhere out of sight, and the
+  daemon says so and leaves the windows alone.
 * **Publishing on extensions.gnome.org** — not a goal, which is what allows a separate daemon that
   spawns processes at all.
 * **Recording commands the user did not declare.** Per-task commands run as transient systemd

@@ -17,6 +17,7 @@ import {
 } from '../lib/protocol.js';
 import { serializeTask, summarizeTask } from '../lib/task.js';
 import { layoutFromWindows, restorePlan, sameLayout } from '../lib/layout.js';
+import { parkingWorkspace, remapPlacement } from '../lib/monitorRemap.js';
 import { documentsFor } from '../lib/adapters/index.js';
 import { commandsToStart } from '../lib/commands.js';
 import {
@@ -333,6 +334,7 @@ export class TasksService {
             excludedAppIds: this._store.settings.excludedApps,
             documents: window => this._documentsFor(window),
             browserWindowId: window => browserWindows.get(window.id) ?? null,
+            monitors: await this._shell.listMonitors(),
         });
 
         if (sameLayout(layout, task.apps ?? []))
@@ -451,13 +453,32 @@ export class TasksService {
                 return;
             }
 
-            case DeactivatePolicy.HIDE:
+            case DeactivatePolicy.HIDE: {
+                // Park the task's windows on the last workspace: out of sight, still running, and
+                // restored to their saved workspace when the task comes back. With dynamic workspaces
+                // the last one is GNOME's always-empty spare, so nothing the user arranged is
+                // displaced.
+                const workspaces = await this._shell.listWorkspaces();
+                const parking = parkingWorkspace(workspaces);
+
+                if (parking === null) {
+                    printerr(`gnome-tasks-daemon: nowhere to park ${task.name}'s windows ` +
+                        '(a single workspace); leaving them where they are');
+                    return;
+                }
+
+                const appIds = new Set((task.apps ?? []).map(entry => entry.appId));
+                const windows = await this._shell.listWindows();
+                for (const window of windows) {
+                    if (appIds.has(window.appId))
+                        await this._shell.placeWindow(window.id, { workspace: parking });
+                }
+                return;
+            }
+
             default:
-                // Parking windows out of sight needs a workspace policy that does not exist yet; see
-                // docs/limitations.md. Saying so is better than quietly doing nothing that looks
-                // like a bug.
-                printerr('gnome-tasks-daemon: the \'hide\' deactivation policy is not implemented ' +
-                    `yet; leaving ${task.name}'s windows where they are`);
+                printerr(`gnome-tasks-daemon: unknown deactivation policy ` +
+                    `"${task.deactivatePolicy}" for ${task.name}; leaving its windows alone`);
         }
     }
 
@@ -469,13 +490,18 @@ export class TasksService {
         this._restoring = true;
         try {
             const windows = await this._shell.listWindows();
+            const monitors = await this._shell.listMonitors();
             const plan = restorePlan(task.apps, windows);
 
+            // A layout saved while docked would otherwise put windows off-screen on a laptop that is
+            // not; remapPlacement moves them onto a monitor that exists.
             for (const place of plan.places)
-                await this._shell.placeWindow(place.windowId, place.placement);
+                await this._shell.placeWindow(place.windowId, remapPlacement(place.placement, monitors));
 
-            for (const launch of plan.launches)
-                await this._shell.launchApp(launch.appId, launch.uris, launch.placement);
+            for (const launch of plan.launches) {
+                await this._shell.launchApp(launch.appId, launch.uris,
+                    remapPlacement(launch.placement, monitors));
+            }
         } finally {
             this._restoring = false;
         }

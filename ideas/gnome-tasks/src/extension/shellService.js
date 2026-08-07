@@ -7,7 +7,10 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
+import Meta from 'gi://Meta';
+
 import * as Config from 'resource:///org/gnome/shell/misc/config.js';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {
     API_VERSION,
@@ -80,6 +83,30 @@ export class ShellService {
 
     ListWindows() {
         return this._windowsJson();
+    }
+
+    ListMonitors() {
+        const connectors = this._monitors.byIndex;
+        return JSON.stringify({
+            monitors: Main.layoutManager.monitors.map(monitor => ({
+                index: monitor.index,
+                connector: connectors[monitor.index] ?? null,
+                x: monitor.x,
+                y: monitor.y,
+                width: monitor.width,
+                height: monitor.height,
+                scale: monitor.geometry_scale,
+                primary: monitor.index === Main.layoutManager.primaryIndex,
+            })),
+        });
+    }
+
+    ListWorkspaces() {
+        return JSON.stringify({
+            count: global.workspace_manager.get_n_workspaces(),
+            active: global.workspace_manager.get_active_workspace_index(),
+            dynamic: Meta.prefs_get_dynamic_workspaces(),
+        });
     }
 
     LaunchApp(desktopId, uris, placement) {
