@@ -51,8 +51,13 @@ build:
 	cp -r src/extension/. $(BUNDLE)/
 	# The Shell-free modules are shared with the daemon; an extension can only import from
 	# inside its own directory, so they are copied in rather than referenced.
-	mkdir -p $(BUNDLE)/lib
+	mkdir -p $(BUNDLE)/lib $(BUNDLE)/prefs
 	cp src/lib/*.js $(BUNDLE)/lib/
+	mkdir -p $(BUNDLE)/lib/adapters
+	cp src/lib/adapters/*.js $(BUNDLE)/lib/adapters/
+	# The preferences window lives outside src/extension so it can be built by a plain gjs
+	# script for testing; it still has to ship inside the bundle.
+	cp src/prefs/*.js $(BUNDLE)/prefs/
 	if [ -d src/extension/schemas ]; then \
 	    glib-compile-schemas --strict $(BUNDLE)/schemas; \
 	fi

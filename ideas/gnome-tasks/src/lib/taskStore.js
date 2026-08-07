@@ -15,6 +15,19 @@ import { createTask, parseTask, serializeTask, updateTask } from './task.js';
 const STATE_FILE = 'state.json';
 const TASKS_DIR = 'tasks';
 
+/**
+ * Daemon-level settings, kept beside the tasks rather than in the extension's GSettings.
+ *
+ * The daemon is what acts on them — it does the capturing — and it has to keep working when the
+ * extension is not loaded at all, so the extension cannot be the place they live. The preferences
+ * window reads and writes them over D-Bus.
+ */
+const DEFAULT_SETTINGS = {
+    captureEnabled: true,
+    /** Applications never recorded into a layout, whatever is on screen. */
+    excludedApps: [],
+};
+
 function defaultDirectory() {
     return GLib.build_filenamev([GLib.get_user_data_dir(), 'gnome-tasks']);
 }
@@ -32,6 +45,7 @@ export class TaskStore {
         this._directory = directory;
         this._tasks = new Map();
         this._currentUuid = '';
+        this._settings = { ...DEFAULT_SETTINGS };
         this._listeners = new Set();
         this._loaded = false;
     }
@@ -44,6 +58,35 @@ export class TaskStore {
         return this._currentUuid;
     }
 
+    /** A copy, so a caller cannot mutate the settings without going through setSettings(). */
+    get settings() {
+        this._ensureLoaded();
+        return { ...this._settings, excludedApps: [...this._settings.excludedApps] };
+    }
+
+    /** Change some settings. Unknown keys are an error rather than silently stored. */
+    setSettings(changes) {
+        this._ensureLoaded();
+
+        const updated = { ...this._settings };
+        for (const [key, value] of Object.entries(changes)) {
+            if (!(key in DEFAULT_SETTINGS))
+                throw new Error(`unknown setting: ${key}`);
+
+            if (key === 'excludedApps') {
+                if (!Array.isArray(value))
+                    throw new Error('excludedApps must be an array');
+                updated.excludedApps = value.map(String);
+            } else {
+                updated[key] = Boolean(value);
+            }
+        }
+
+        this._settings = updated;
+        this._persistState();
+        this._notify('settings', '');
+    }
+
     /**
      * Read everything from disk. Returns an array of human-readable problems (a corrupt or
      * unreadable task file), because one bad document must not cost the user every other task —
@@ -53,6 +96,7 @@ export class TaskStore {
         const problems = [];
         this._tasks.clear();
         this._currentUuid = '';
+        this._settings = { ...DEFAULT_SETTINGS };
 
         const tasksDir = Gio.File.new_for_path(
             GLib.build_filenamev([this._directory, TASKS_DIR]));
@@ -92,6 +136,14 @@ export class TaskStore {
                 const state = JSON.parse(new TextDecoder().decode(bytes));
                 if (typeof state.current === 'string' && this._tasks.has(state.current))
                     this._currentUuid = state.current;
+
+                for (const key of Object.keys(DEFAULT_SETTINGS)) {
+                    if (state.settings && key in state.settings) {
+                        this._settings[key] = key === 'excludedApps'
+                            ? (state.settings[key] ?? []).map(String)
+                            : Boolean(state.settings[key]);
+                    }
+                }
             } catch (error) {
                 problems.push(`ignoring ${stateFile.get_path()}: ${error.message}`);
             }
@@ -197,7 +249,8 @@ export class TaskStore {
         GLib.mkdir_with_parents(this._directory, 0o700);
         writeAtomically(
             Gio.File.new_for_path(GLib.build_filenamev([this._directory, STATE_FILE])),
-            `${JSON.stringify({ current: this._currentUuid }, null, 2)}\n`);
+            `${JSON.stringify(
+                { current: this._currentUuid, settings: this._settings }, null, 2)}\n`);
     }
 
     _notify(kind, uuid) {

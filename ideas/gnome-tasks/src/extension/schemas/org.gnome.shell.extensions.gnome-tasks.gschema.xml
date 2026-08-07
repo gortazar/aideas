@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <!--
+    Only what has to live in the Shell's own settings: a keybinding, which Mutter reads from a
+    GSettings strv and nowhere else. Everything else the user can configure (capture on/off, the
+    exclusion list, per-task policies and commands) belongs to the daemon, which is what acts on it
+    and which keeps working when this extension is not loaded.
+  -->
+  <schema id="org.gnome.shell.extensions.gnome-tasks"
+          path="/org/gnome/shell/extensions/gnome-tasks/">
+    <key name="cycle-tasks" type="as">
+      <default><![CDATA[['<Super>grave']]]></default>
+      <summary>Switch to the next task</summary>
+      <description>
+        Cycles through the tasks in the order the switcher shows them, activating each one.
+      </description>
+    </key>
+    <key name="cycle-tasks-backward" type="as">
+      <default><![CDATA[['<Super><Shift>grave']]]></default>
+      <summary>Switch to the previous task</summary>
+      <description>Cycles backwards through the tasks.</description>
+    </key>
+  </schema>
+</schemalist>

@@ -47,7 +47,33 @@ development daemon) stay away from real data.
 | `description` | string | may be empty |
 | `deactivatePolicy` | `"hide"` \| `"close"` \| `"leave"` | what happens to the windows on switch-away |
 | `apps` | array | the captured layout; shape defined in M2/M3 |
-| `commands` | array | per-task commands; shape defined in M5 |
+| `commands` | array | per-task commands, one object each (below) |
+
+### A command
+
+```json
+{
+  "id": "c1d2e3f4-0000-4000-8000-000000000000",
+  "commandLine": "docker compose up",
+  "label": "the stack",
+  "workingDirectory": "/home/u/project",
+  "enabled": true,
+  "confirmed": false
+}
+```
+
+| Field | Notes |
+| --- | --- |
+| `id` | UUID; also part of the systemd unit name |
+| `commandLine` | split into argv, **never** passed to a shell — a `;` in here is an argument |
+| `label` | what the UI shows; defaults to the command line |
+| `workingDirectory` | empty means the user's home directory |
+| `enabled` | a command switched off is neither run nor asked about |
+| `confirmed` | **false until the user says otherwise, and nothing unconfirmed is ever executed** |
+
+`confirmed` is the important one. A task file is a plain JSON document that could be edited, synced or
+restored from a backup, so a command appearing in one must not be enough to make it run: the daemon
+emits `CommandsAwaitingConfirmation` and waits for `ConfirmCommand`.
 
 `state.json` is deliberately tiny:
 

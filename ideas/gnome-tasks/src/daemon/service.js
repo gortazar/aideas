@@ -18,7 +18,9 @@ import {
 import { serializeTask, summarizeTask } from '../lib/task.js';
 import { layoutFromWindows, restorePlan, sameLayout } from '../lib/layout.js';
 import { documentsFor } from '../lib/adapters/index.js';
+import { commandsToStart } from '../lib/commands.js';
 import { readProcessInfo } from './procReader.js';
+import { SystemdRunner } from './systemdRunner.js';
 
 /**
  * How long to wait after the compositor reports a change before saving. Window drags and workspace
@@ -71,10 +73,10 @@ function dictToVariants(object) {
 }
 
 export class TasksService {
-    constructor(store, shell = null) {
+    constructor(store, shell = null, runner = new SystemdRunner()) {
         this._store = store;
         this._shell = shell;
-        this._captureEnabled = true;
+        this._runner = runner;
         this._captureTimeoutId = 0;
         // Set while restore is running, so the windows restore itself creates are not immediately
         // captured back into the task — which would fight with what the user actually had.
@@ -87,7 +89,8 @@ export class TasksService {
 
     /** Called by the daemon when the compositor reports that windows changed. */
     onWindowsChanged() {
-        if (!this._captureEnabled || this._restoring || this._store.currentUuid === '')
+        if (!this._store.settings.captureEnabled || this._restoring ||
+            this._store.currentUuid === '')
             return;
 
         if (this._captureTimeoutId)
@@ -176,6 +179,9 @@ export class TasksService {
     StopTask(uuid) {
         const task = this._task(uuid);
 
+        this._runner.stopTask(uuid).catch(
+            error => printerr(`gnome-tasks-daemon: ${error.message}`));
+
         task.state = TaskState.STOPPED;
         if (this._store.currentUuid === uuid)
             this._store.setCurrent('');
@@ -198,6 +204,30 @@ export class TasksService {
             error => printerr(`gnome-tasks-daemon: capture failed: ${error.message}`));
     }
 
+    ConfirmCommand(taskUuid, commandId, confirmed) {
+        const task = this._task(taskUuid);
+        const commands = (task.commands ?? []).map(command =>
+            command.id === commandId ? { ...command, confirmed } : command);
+
+        if (!commands.some(command => command.id === commandId)) {
+            throw dbusError(Gio.DBusError.INVALID_ARGS,
+                `task ${taskUuid} has no command ${commandId}`);
+        }
+
+        this._store.update(taskUuid, { commands });
+
+        // Confirming a command while its task is already current is the natural moment to start it.
+        if (confirmed && this._store.currentUuid === taskUuid) {
+            this._startCommands(this._store.get(taskUuid)).catch(
+                error => printerr(`gnome-tasks-daemon: ${error.message}`));
+        }
+    }
+
+    ListRunningCommands(taskUuid) {
+        this._task(taskUuid);
+        return JSON.stringify({ commands: this._runner.unitsForTask(taskUuid) });
+    }
+
     ReportAppState(adapterId, json) {
         throw notSupported(
             `no adapter is registered for ${adapterId}; tier-2 app state lands in M6`);
@@ -214,14 +244,24 @@ export class TasksService {
     }
 
     get CaptureEnabled() {
-        return this._captureEnabled;
+        return this._store.settings.captureEnabled;
     }
 
     set CaptureEnabled(value) {
-        if (this._captureEnabled === value)
+        if (this._store.settings.captureEnabled === value)
             return;
-        this._captureEnabled = value;
+        this._store.setSettings({ captureEnabled: Boolean(value) });
         this._impl.emit_property_changed('CaptureEnabled', GLib.Variant.new_boolean(value));
+    }
+
+    get ExcludedApps() {
+        return this._store.settings.excludedApps;
+    }
+
+    set ExcludedApps(value) {
+        this._store.setSettings({ excludedApps: value });
+        this._impl.emit_property_changed('ExcludedApps',
+            new GLib.Variant('as', this._store.settings.excludedApps));
     }
 
     // --- capture and restore ---------------------------------------------------------------
@@ -239,7 +279,10 @@ export class TasksService {
             return;
 
         const windows = await this._shell.listWindows();
-        const layout = layoutFromWindows(windows, { documents: window => this._documentsFor(window) });
+        const layout = layoutFromWindows(windows, {
+            excludedAppIds: this._store.settings.excludedApps,
+            documents: window => this._documentsFor(window),
+        });
 
         if (sameLayout(layout, task.apps ?? []))
             return;
@@ -277,10 +320,48 @@ export class TasksService {
             new GLib.Variant('(su)', [incoming.uuid, incoming.state]));
 
         await this._restore(incoming);
+        await this._startCommands(this._store.get(incoming.uuid));
+    }
+
+    /**
+     * Start the task's confirmed commands, and ask about the rest. Nothing unconfirmed is ever run —
+     * the request goes out as a signal and the answer comes back through ConfirmCommand.
+     */
+    async _startCommands(task) {
+        const { start, needConfirmation, invalid } = commandsToStart(task.commands);
+
+        for (const command of start) {
+            try {
+                const result = await this._runner.start(task.uuid, command);
+                if (!result.alreadyRunning) {
+                    print(`gnome-tasks-daemon: started "${command.label}" for ${task.name} ` +
+                        `as ${result.unit}${result.adopted ? '' : ' (no systemd scope)'}`);
+                }
+            } catch (error) {
+                printerr(`gnome-tasks-daemon: could not start "${command.label}": ${error.message}`);
+            }
+        }
+
+        for (const command of invalid)
+            printerr(`gnome-tasks-daemon: skipping "${command.label}": ${command.problem}`);
+
+        if (needConfirmation.length > 0) {
+            this._impl.emit_signal('CommandsAwaitingConfirmation', new GLib.Variant('(ss)', [
+                task.uuid,
+                JSON.stringify({ commands: needConfirmation.map(
+                    ({ id, label, commandLine, workingDirectory }) =>
+                        ({ id, label, commandLine, workingDirectory })) }),
+            ]));
+        }
     }
 
     /** Apply a task's deactivation policy to the windows it owns. */
     async _deactivate(task) {
+        // Commands stop whenever the task stops being current, regardless of the window policy: a
+        // task that is not current should not be holding a port open. A task meant to keep running
+        // uses the 'leave' policy for its *windows*; its commands are still its own lifecycle.
+        await this._runner.stopTask(task.uuid);
+
         if (!this._shell)
             return;
 
