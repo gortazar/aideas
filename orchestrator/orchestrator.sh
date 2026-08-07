@@ -514,7 +514,9 @@ while agents_running; do
   fi
   sleep 5
 done
-wait || true
+# Wait only on the agents. A bare `wait` also waits on the lock renewer, which loops for
+# the life of the cycle and would hang here forever.
+wait ${AGENT_PIDS[@]+"${AGENT_PIDS[@]}"} 2>/dev/null || true
 
 # --- 9. Merge each agent's branch back, update status, commit ------------------------
 if lock_lost; then
