@@ -62,6 +62,8 @@ TZ_NAME=$(cfg timezone)
 STALE_MIN=$(cfg heartbeat_staleness_minutes)
 LOCK_TTL=$(cfg lock_ttl_minutes)
 STALE_IDEA_HOURS=$(cfg stale_idea_after_hours)
+LOCK_RENEW_SECONDS=$(cfg lock_renew_seconds)
+LOCK_RENEW_SECONDS="${LOCK_RENEW_SECONDS:-30}"
 PARALLEL_AGENTS=$(cfg parallel_agents)
 PARALLEL_AGENTS="${PARALLEL_AGENTS:-2}"
 [[ "${PARALLEL_AGENTS}" =~ ^[1-9][0-9]*$ ]] || PARALLEL_AGENTS=2
@@ -99,6 +101,13 @@ stop_requested() {
   fi
   if deadline_passed; then
     GRACEFUL_STOP="max_cycle_minutes=${MAX_CYCLE_MINUTES} reached"
+    return 0
+  fi
+  # Another cycle declared this one dead and took the lock — which is what happens after
+  # this process is stalled or suspended past the TTL. Stop rather than keep working
+  # alongside it.
+  if lock_lost; then
+    GRACEFUL_STOP="lock reclaimed by another cycle"
     return 0
   fi
   return 1
@@ -226,7 +235,7 @@ if fcmp "${stale_seconds}" "<" "${stale_threshold}" 0; then
 fi
 
 # --- 3. Lock ---------------------------------------------------------------------
-if ! acquire_lock "${LOCK_TTL}"; then
+if ! acquire_lock "${LOCK_TTL}" "${LOCK_RENEW_SECONDS}"; then
   log "Lock held by another run; exiting."
   exit 0
 fi
@@ -234,6 +243,16 @@ trap release_lock EXIT
 
 cd "${IDEAS_REPO_PATH}"
 git pull --quiet --ff-only || log "pull failed — continuing with the local tree"
+
+# Push anything a previous cycle committed but failed to send. Its own retry only happens
+# after the next cycle's agents have finished, so a transient network failure otherwise
+# leaves the work unpushed for another full cycle — and if this clone is disposable, until
+# it is deleted. Repair it before layering new work on top.
+if [[ -n "$(git log --oneline @{u}..HEAD 2>/dev/null)" ]]; then
+  unpushed=$(git rev-list --count @{u}..HEAD 2>/dev/null || echo "?")
+  log "${unpushed} commit(s) from a previous cycle are unpushed; pushing before starting work."
+  git push --quiet || log "push still failing — continuing; will retry at the end of this cycle"
+fi
 
 # Records a phase's real cost so the daily gate above has something true to read.
 record_usage() {
@@ -498,6 +517,14 @@ done
 wait || true
 
 # --- 9. Merge each agent's branch back, update status, commit ------------------------
+if lock_lost; then
+  # Finalize anyway: the agents' work is real and abandoning it would be worse than a
+  # brief overlap. Each finalize is seconds of git, and git takes its own ref locks.
+  log "WARNING: this cycle's lock was reclaimed while it ran — another cycle may be working"
+  log "WARNING: on this repo concurrently. Finalizing this cycle's work regardless; check"
+  log "WARNING: for merge conflicts and leftover agent/* branches afterwards."
+fi
+
 for slug in "${build_slugs[@]}"; do
   wt="${WT_OF[${slug}]}"
   out_file="${OUT_OF[${slug}]}"

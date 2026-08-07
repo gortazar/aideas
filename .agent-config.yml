@@ -46,21 +46,34 @@ heartbeat_staleness_minutes: 10
 # Wall-clock ceiling for the whole cycle, counted from when the script starts — planning
 # included, since systemd's TimeoutStartSec counts that too. When it's reached the agents
 # are asked to stop and the cycle still commits, merges and pushes what they had: a
-# graceful wind-down rather than a kill. This is the knob that keeps a cycle finishing on
-# its own terms instead of being SIGTERMed by systemd, so keep this ordering intact:
+# graceful wind-down rather than a kill. Keep it below TimeoutStartSec in the systemd
+# unit, with room to spare for the merge and push, so a cycle finishes on its own terms
+# rather than being SIGTERMed mid-merge.
 #
-#   max_cycle_minutes  <  lock_ttl_minutes  <  TimeoutStartSec in the systemd unit
+# It is a check, not a timer: a polling loop notices it, and a polling loop cannot run
+# while the machine is suspended. A laptop that sleeps mid-cycle sails straight through it
+# and only winds down on resume — once observed as a 17-hour cycle against this being set
+# to 45 minutes. Lock renewal below is what contains that; this setting alone does not.
 #
-# The first gap stops a second cycle reclaiming the lock while this one is still running;
-# the second leaves time for the merge and push after the agents stop. Accepts
-# "unlimited", which removes the ceiling — and with it the guarantee of either.
+# Accepts "unlimited", which removes the ceiling.
 max_cycle_minutes: 45
 
 # How long an agent gets to shut down after being asked, before it's killed outright.
 agent_grace_seconds: 90
 
-# How long the repo lock can be held before it's considered abandoned and reclaimed.
-lock_ttl_minutes: 60
+# How long the lock can go WITHOUT BEING RENEWED before another cycle reclaims it. A
+# running cycle refreshes the lock every lock_renew_seconds, so this is a liveness grace
+# period, not a cap on how long a cycle may run — a healthy cycle can run for hours and
+# keep its lock, while a crashed, killed or suspended one frees it within minutes.
+#
+# It used to time out from when the lock was taken, which meant it had to be longer than
+# the longest cycle you ever expected. That is why max_cycle_minutes previously had to sit
+# below it; with renewal the two are independent and the old ordering no longer applies.
+lock_ttl_minutes: 5
+
+# How often a running cycle refreshes its lock. Must be comfortably under
+# lock_ttl_minutes.
+lock_renew_seconds: 30
 
 # If the current top-priority idea has been "in_progress" for longer than this without
 # completing, allow the orchestrator to pick an easier unstarted idea instead this cycle.
