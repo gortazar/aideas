@@ -46,8 +46,38 @@ development daemon) stay away from real data.
 | `icon` | string | icon name, may be empty |
 | `description` | string | may be empty |
 | `deactivatePolicy` | `"hide"` \| `"close"` \| `"leave"` | what happens to the windows on switch-away |
-| `apps` | array | the captured layout; shape defined in M2/M3 |
+| `apps` | array | the captured layout, one entry per window (below) |
 | `commands` | array | per-task commands, one object each (below) |
+
+### A layout entry
+
+One per window worth restoring:
+
+```json
+{
+  "appId": "org.gnome.TextEditor.desktop",
+  "title": "notes.txt (~/docs) - Text Editor",
+  "documents": ["file:///home/u/docs/notes.txt"],
+  "placement": {
+    "workspace": 1,
+    "geometry": { "x": 10, "y": 20, "width": 700, "height": 520 },
+    "maximized": "none",
+    "fullscreen": false,
+    "monitorConnector": "DP-2",
+    "monitorGeometry": { "x": 1920, "y": 0, "width": 2560, "height": 1440 }
+  },
+  "browserWindowId": 11
+}
+```
+
+* `documents` comes from the per-app adapters ([app-adapters.md](app-adapters.md)); empty means the
+  application is relaunched with no arguments.
+* `monitorConnector` plus `monitorGeometry` are what let a layout survive undocking: if that connector
+  is gone, the window is moved onto the primary monitor keeping its proportional position.
+* `browserWindowId` appears only for a browser window that could be correlated with the browser's own
+  window (tier 2). Absent means the per-window split was lost.
+* `title` is recorded for diagnostics and for the adapters that parse it; it is deliberately ignored
+  when deciding whether the layout changed, since titles change constantly.
 
 ### A command
 

@@ -1,0 +1,17 @@
+{
+  "manifest_version": 2,
+  "name": "gnome-tasks",
+  "version": "0.1.0",
+  "description": "Lets gnome-tasks remember and restore this browser's windows and tabs per task.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "gnome-tasks@patxi.gortazar",
+      "strict_min_version": "115.0"
+    }
+  },
+  "permissions": ["tabs", "nativeMessaging"],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  }
+}

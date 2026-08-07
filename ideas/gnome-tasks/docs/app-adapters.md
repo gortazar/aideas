@@ -103,10 +103,53 @@ state inside the terminal cannot be recovered by anyone (see
 Matches everything, returns nothing. Reached by every application without a rule, and the reason an
 unfamiliar app is restored empty rather than wrongly.
 
-## What is not built yet
+## Tier 2: browsers
 
-* **Tier 2**, i.e. `ReportAppState` on the public API. The method exists and raises `NotSupported`
-  naming M6, so nothing can be built on a silent no-op.
+A browser is the case tier 1 cannot touch. Its command line says nothing, its "documents" are tabs it
+never writes to disk, and the interesting state is per *window*. So the browser reports itself:
+
+```
+browser extension  --(native messaging)-->  host  --(D-Bus)-->  org.gnome.Tasks.ReportAppState
+org.gnome.Tasks.RestoreAppState  --(D-Bus)-->  host  --(native messaging)-->  browser extension
+```
+
+* `browser/` is the WebExtension — one `background.js` for both browsers, two manifests. It reports
+  every normal window's tabs (URL, title, pinned, active), debounced 2.5 s, and rebuilds them on
+  request.
+* `src/native-host/gnome-tasks-browser-host.js` is the bridge. Native messaging is *browser*-initiated
+  and speaks 4-byte-length-prefixed JSON on stdin/stdout, so the host lives as long as the browser
+  keeps the port open, forwards reports to the daemon, and subscribes to `RestoreAppState` for the
+  other direction.
+* `src/lib/browserState.js` holds every rule about the payload, pure and unit tested: what a report
+  must look like, which tabs are worth keeping, and the window correlation below.
+
+**Private windows are never recorded**, and the report is dropped twice over — the extension filters
+incognito windows, and the daemon filters them again on the way in. Internal pages (`about:`,
+`chrome://`, `moz-extension://`) are not documents either.
+
+### Window correlation, and where it gives up
+
+`PLAN.md` calls this the hard part, and it is: a WebExtension window id and a `Meta.Window` share no
+identifier, and Wayland offers no way to invent one. What they *do* share is the title — a browser
+window's title is its active tab's title plus the browser's suffix. So `correlateBrowserWindows()`
+matches `"Example — Mozilla Firefox"` to the browser window whose active tab is `"Example"`, claiming
+each browser window at most once.
+
+When that fails — duplicate titles, an empty title, a browser whose suffix format differs — the
+window simply has no `browserWindowId`, and **the per-window split is lost**: restore reopens the
+tabs, but the geometry that belonged to a specific browser window cannot be reattached to it. That is
+the documented degradation from `PLAN.md`, chosen over guessing.
+
+### What is not built yet in tier 2
+
+* Placing the browser windows *after* the browser has rebuilt them. The daemon asks the browser to
+  recreate windows and the browser decides where they land; re-correlating the new windows by title
+  and then placing them is the obvious next step and is not done.
+* Any tier-2 adapter other than a browser. `ReportAppState` takes an adapter id and refuses unknown
+  ones, so adding an editor or a terminal multiplexer means extending `BROWSER_ADAPTERS` and giving
+  it a state shape.
+
+## What is not built yet
 * **The freedesktop recent-files store** (`~/.local/share/recently-used.xbel`) as a source. The probe
   saw nothing written during its runs, so its usefulness is unverified rather than assumed.
 * **`Meta.Window.get_gtk_window_object_path()` as a document source.** It identifies a window well

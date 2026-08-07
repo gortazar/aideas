@@ -21,8 +21,9 @@ Anything slow or risky stays out of the compositor: the extension only makes D-B
 The core loop works: **a task remembers the applications you opened — and, for some of them, the
 document each one had open — and switching back brings them back where they were**, and per-task
 commands start and stop with the task as transient systemd units. There is a preferences window and
-a keyboard shortcut (`Super`+`` ` ``) to cycle tasks. Verified end to end in a real (nested,
-headless) GNOME Shell 46 session by `make smoke`. The browser adapters are not built yet — see [STATUS.md](STATUS.md) for
+a keyboard shortcut (`Super`+`` ` ``) to cycle tasks, and tier-2 browser support for Firefox and
+Chrome (see [browser/](browser/README.md)) so a task can remember its tabs. Verified end to end in a
+real (nested, headless) GNOME Shell 46 session by `make smoke`. Per-task theming is out of scope — see [STATUS.md](STATUS.md) for
 exactly what works today, [docs/app-adapters.md](docs/app-adapters.md) for which applications can
 have their documents recovered, and [docs/limitations.md](docs/limitations.md) for what cannot work
 at all.
@@ -138,6 +139,9 @@ enough: the daemon has to be installed too (`make install-daemon`).
 ## Layout
 
 ```
+browser/          the WebExtension for Firefox and Chrome (tier 2)
+src/native-host/  the native-messaging bridge between a browser and org.gnome.Tasks
+src/prefs/        the preferences window's widgets, Gtk/Adw only
 src/lib/          Shell-free modules, shared by daemon + extension + tests
                   (protocol, task model, persistence, window interpretation)
 src/daemon/       gnome-tasks-daemon: state, persistence, restore orchestration

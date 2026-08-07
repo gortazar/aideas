@@ -45,9 +45,27 @@ value of gnome-tasks depends on being clear about which 80% works.
   matched to launches by application id and timing. With two launches of the same application in
   flight, a window can be attributed to the wrong slot. Every match records the strategy that
   produced it, so this is diagnosable.
-* **Monitor identity across a replug** — expected. Saved layouts key monitors by connector name
-  plus EDID vendor/product/serial from `org.gnome.Mutter.DisplayConfig`, because Mutter's monitor
-  indices renumber. Whether that key is stable on real hardware is unverified.
+* **Monitor identity across a replug** — partly confirmed. Saved layouts key monitors by connector
+  name from `org.gnome.Mutter.DisplayConfig`, because Mutter's monitor indices renumber. If the
+  connector is gone at restore time the window is moved onto the primary monitor, keeping its
+  proportional position and shrinking to fit (`src/lib/monitorRemap.js`). What is *not* verified is
+  whether connector names are stable across real replugs on real hardware — the nested test session
+  has one virtual monitor called `Meta-0`.
+
+## Browsers specifically
+
+* **Which browser window a tab set belongs to** — confirmed weak, by construction. Correlation is by
+  window title (see [app-adapters.md](app-adapters.md#window-correlation-and-where-it-gives-up)); when
+  it fails, the tabs still come back but not necessarily in windows placed as they were.
+* **The extension has to be loaded by hand.** Per the answered open question in `PLAN.md`, these are
+  local unsigned extensions: Firefox forgets a temporary add-on on restart unless signature checks are
+  off, and Chrome needs its own generated extension id pasted into the host manifest.
+* **Nothing is captured before the extension is installed.** A browser without it is a tier-0
+  application: gnome-tasks can reopen the browser, with no tabs.
+* **Neither browser could be tested here.** Both are snap-confined on this machine, which blocks the
+  nested test session entirely (a snap refuses to launch from an arbitrary cgroup, and only sees
+  `wayland-N` sockets). The whole protocol is covered by tests against the real native-messaging host
+  and a real daemon, but the *browser* end has not been exercised against a real browser.
 
 ## Structural, from the platform
 
@@ -68,6 +86,10 @@ value of gnome-tasks depends on being clear about which 80% works.
 
 * **Per-task wallpaper, favourites and theming** — out of scope by decision, unlike KDE
   Activities.
+* **Parking windows anywhere better than the last workspace.** The `hide` policy moves a task's
+  windows to the last workspace, which with dynamic workspaces is GNOME's always-empty spare and with
+  static workspaces is a compromise. With a single workspace there is nowhere out of sight, and the
+  daemon says so and leaves the windows alone.
 * **Publishing on extensions.gnome.org** — not a goal, which is what allows a separate daemon that
   spawns processes at all.
 * **Recording commands the user did not declare.** Per-task commands run as transient systemd

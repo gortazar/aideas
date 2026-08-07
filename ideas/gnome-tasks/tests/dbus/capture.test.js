@@ -307,6 +307,117 @@ suite('switching', () => {
     });
 });
 
+suite('monitor changes and the hide policy', () => {
+    test('a layout records which monitor a window was on, and how big it was', async () => {
+        const uuid = await createTask('Docked');
+        shell.monitors = [
+            { index: 0, connector: 'eDP-1', x: 0, y: 0, width: 1920, height: 1080, primary: true },
+            { index: 1, connector: 'DP-2', x: 1920, y: 0, width: 2560, height: 1440, primary: false },
+        ];
+        shell.windows = [{
+            ...fakeWindow('org.gnome.Calculator.desktop', { x: 2200, y: 200, width: 600, height: 500 }),
+            monitorConnector: 'DP-2',
+        }];
+
+        await call('CaptureNow', new GLib.Variant('(s)', [uuid]));
+        await sleep(700);
+
+        const placement = (await taskDocument(uuid)).apps[0].placement;
+        assertEquals(placement.monitorConnector, 'DP-2');
+        assertDeepEquals(placement.monitorGeometry,
+            { x: 1920, y: 0, width: 2560, height: 1440 });
+
+        await call('DeleteTask', new GLib.Variant('(s)', [uuid]));
+    });
+
+    // The undocking case: the saved geometry is off-screen on the monitor set that is actually there.
+    test('a window saved on a monitor that is gone is placed somewhere visible', async () => {
+        const uuid = await createTask('Undocked');
+        shell.monitors = [
+            { index: 0, connector: 'eDP-1', x: 0, y: 0, width: 1920, height: 1080, primary: true },
+            { index: 1, connector: 'DP-2', x: 1920, y: 0, width: 2560, height: 1440, primary: false },
+        ];
+        shell.windows = [{
+            ...fakeWindow('org.gnome.Calculator.desktop', { x: 2560, y: 300, width: 600, height: 500 }),
+            monitorConnector: 'DP-2',
+        }];
+        await call('CaptureNow', new GLib.Variant('(s)', [uuid]));
+        await sleep(700);
+
+        // The external screen goes away, and so does the window: restore has to launch it.
+        shell.monitors = [shell.monitors[0]];
+        shell.windows = [];
+        shell.reset();
+
+        await call('ActivateTask', new GLib.Variant('(s)', [uuid]));
+        await sleep(1200);
+
+        const launches = shell.callsTo('LaunchApp');
+        assertEquals(launches.length, 1);
+        const geometry = launches[0].placement.geometry;
+        assertEquals(launches[0].placement.monitorConnector, 'eDP-1');
+        assert(geometry.x >= 0 && geometry.x + geometry.width <= 1920,
+            `expected the window on the laptop screen, got x=${geometry.x} w=${geometry.width}`);
+
+        await call('StopTask', new GLib.Variant('(s)', [uuid]));
+        await call('DeleteTask', new GLib.Variant('(s)', [uuid]));
+    });
+
+    test('the hide policy parks the task\'s windows on the last workspace', async () => {
+        const hiding = await createTask('Hides');
+        const other = await createTask('Anywhere');
+        await call('SetTaskProperties', new GLib.Variant('(sa{sv})', [
+            hiding, { 'deactivate-policy': GLib.Variant.new_string(DeactivatePolicy.HIDE) },
+        ]));
+
+        shell.workspaces = { count: 4, active: 0, dynamic: false };
+        await call('ActivateTask', new GLib.Variant('(s)', [hiding]));
+        await sleep(400);
+        shell.windows = [fakeWindow('org.gnome.Calculator.desktop', { id: 'calc' })];
+        await call('CaptureNow', new GLib.Variant('(s)', [hiding]));
+        await sleep(700);
+        shell.reset();
+
+        await call('ActivateTask', new GLib.Variant('(s)', [other]));
+        await sleep(1500);
+
+        assertEquals(shell.callsTo('CloseWindow').length, 0, 'hide must not close anything');
+        const parked = shell.callsTo('PlaceWindow');
+        assertEquals(parked.length, 1);
+        assertEquals(parked[0].windowId, 'calc');
+        assertEquals(parked[0].placement.workspace, 3, 'the last of four workspaces');
+
+        await call('DeleteTask', new GLib.Variant('(s)', [hiding]));
+        await call('DeleteTask', new GLib.Variant('(s)', [other]));
+    });
+
+    test('with a single workspace there is nowhere to hide, and nothing is moved', async () => {
+        const hiding = await createTask('Nowhere to hide');
+        const other = await createTask('Elsewhere again');
+        await call('SetTaskProperties', new GLib.Variant('(sa{sv})', [
+            hiding, { 'deactivate-policy': GLib.Variant.new_string(DeactivatePolicy.HIDE) },
+        ]));
+
+        shell.workspaces = { count: 1, active: 0, dynamic: false };
+        await call('ActivateTask', new GLib.Variant('(s)', [hiding]));
+        await sleep(400);
+        shell.windows = [fakeWindow('org.gnome.Calculator.desktop', { id: 'calc' })];
+        await call('CaptureNow', new GLib.Variant('(s)', [hiding]));
+        await sleep(700);
+        shell.reset();
+
+        await call('ActivateTask', new GLib.Variant('(s)', [other]));
+        await sleep(1200);
+
+        assertEquals(shell.callsTo('PlaceWindow').length, 0);
+        assertEquals(shell.callsTo('CloseWindow').length, 0);
+
+        shell.workspaces = { count: 4, active: 0, dynamic: false };
+        await call('DeleteTask', new GLib.Variant('(s)', [hiding]));
+        await call('DeleteTask', new GLib.Variant('(s)', [other]));
+    });
+});
+
 suite('settings', () => {
     test('an excluded application is never recorded', async () => {
         const uuid = await createTask('Excluded');

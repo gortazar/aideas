@@ -41,9 +41,8 @@ export const TaskState = {
 /** What happens to a task's windows when the user switches away from it. */
 export const DeactivatePolicy = {
     /**
-     * Leave the apps running, parked out of sight. Fast, memory-hungry — and not implemented yet:
-     * parking needs a workspace policy that does not exist, so the daemon says so rather than
-     * silently doing nothing. See docs/limitations.md.
+     * Leave the apps running, parked on the last workspace. Fast, memory-hungry, and it needs at least
+     * two workspaces to have anywhere to park; the daemon says so when there is only one.
      */
     HIDE: 'hide',
     /** Ask the apps to quit politely, reopen on return. Slow, may prompt about unsaved work. */
@@ -125,10 +124,18 @@ export const DAEMON_IFACE_XML = `
     </method>
 
     <!-- Tier-2 entry point: a cooperating app or browser plugin pushes its own inner state
-         (browser tabs, editor project, terminal cwd) as JSON, keyed by adapter id. -->
+         (browser tabs, editor project, terminal cwd) as JSON, keyed by adapter id. Recorded against
+         whichever task is current, because that is the only context in which it means anything. -->
     <method name="ReportAppState">
       <arg type="s" name="adapterId" direction="in"/>
       <arg type="s" name="json" direction="in"/>
+    </method>
+
+    <!-- What a tier-2 adapter last reported for a task, as JSON; '{}' when there is nothing. -->
+    <method name="GetAppState">
+      <arg type="s" name="uuid" direction="in"/>
+      <arg type="s" name="adapterId" direction="in"/>
+      <arg type="s" name="json" direction="out"/>
     </method>
 
     <signal name="TaskAdded">
@@ -152,6 +159,14 @@ export const DAEMON_IFACE_XML = `
       <arg type="s" name="json"/>
     </signal>
 
+    <!-- Tier 2 in the other direction: on activation the daemon hands each adapter back the state it
+         reported last time, and the adapter (a browser extension, through its native-messaging host)
+         rebuilds it. Nothing else can do this — the tabs were never on disk. -->
+    <signal name="RestoreAppState">
+      <arg type="s" name="adapterId"/>
+      <arg type="s" name="json"/>
+    </signal>
+
     <property name="ApiVersion" type="u" access="read"/>
     <!-- Empty string when no task is current. -->
     <property name="CurrentTask" type="s" access="read"/>
@@ -169,6 +184,20 @@ export const SHELL_IFACE_XML = `
     <method name="Ping">
       <arg type="s" name="message" direction="in"/>
       <arg type="s" name="reply" direction="out"/>
+    </method>
+
+    <!-- The monitors, as JSON: index, connector name, geometry and which is primary. Connector names
+         come from org.gnome.Mutter.DisplayConfig, because Mutter's monitor indices renumber when a
+         display is plugged or unplugged, and a saved layout has to survive that. -->
+    <method name="ListMonitors">
+      <arg type="s" name="json" direction="out"/>
+    </method>
+
+    <!-- The workspaces: how many there are and whether GNOME is managing them dynamically. The
+         'hide' deactivation policy needs somewhere to park windows, and a saved workspace index can
+         be out of range on a desktop that has since changed. -->
+    <method name="ListWorkspaces">
+      <arg type="s" name="json" direction="out"/>
     </method>
 
     <!-- Every window the compositor knows about, as JSON: app id, title, pid, workspace,
