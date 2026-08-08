@@ -39,3 +39,19 @@ Reorder entries to reprioritise: position in this list *is* the priority.
    deactivated and reactivated later. The gnome-tasks idea requires a deep understanding on how Gnome works, events that are
    fired when apps are launched (like DBus), and where is the necessary info that needs to be kept for an activity. All this knowledge
    must be clearly documented within the idea folder. 
+
+3. [Restore workspaces](ideas/restore-wss/) - The goal of this tool is to restore all the workspaces as they were before the system powered off or rebooted.
+   The tool needs to record which apps were open on which workspace, and restore all of them. The restoration must left the different workspaces as they
+   were before the power off or reboot. If needed, the user can be asked about information that cannot be collected automatically, or
+   that cannot be collected with confidence. A config file must be stored in the home folder of the user in a dedicated hidden folder (such as .restore-wss)
+   and it must contain all the information needed to restore the workspaces. First, an in-depth study of similar tools must be done and reported as a markdown
+   file in the idea folder. The tool must support:
+   * Restoring apps opened and which file or folder are they working on. For instance, libreoffice with a "Thesis" document opened, or a Codium instance
+     with a my-app folder opened.
+   * Restoring command line apps and the commands with which they were started and from where. For instance, a terminal running an ssh session with a my-host node, or a claude session 
+     started with claude -r or claude -n from a my-repo folder.
+   * Restoring which vpn was active if any 
+
+4. [Restore workspaces](ideas/restore-wss) - Support for restoring browsers and the tabs that were open inside them (may require a browser extension). First, an in-depth research
+   must be done to find similar extensions that could be used as-is, and this report is to be written in the idea folder as "browser-extensions-research.md".
+   
