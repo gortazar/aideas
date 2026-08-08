@@ -15,7 +15,7 @@ const VALID_POLICIES = new Set(Object.values(DeactivatePolicy));
 
 /** Keys a client may change through SetTaskProperties. */
 const MUTABLE_KEYS = new Set([
-    'name', 'icon', 'description', 'deactivatePolicy', 'apps', 'commands', 'appState',
+    'name', 'icon', 'description', 'deactivatePolicy', 'apps', 'commands', 'appState', 'shortcut',
 ]);
 
 function requireName(value) {
@@ -25,6 +25,25 @@ function requireName(value) {
     if (name.length === 0)
         throw new Error('a task needs a name');
     return name;
+}
+
+/**
+ * A shortcut is a GTK accelerator string or empty. Only the *shape* is checked here — whether the
+ * compositor will actually grant the grab is something only the compositor knows, and the extension
+ * reports that when it tries.
+ */
+function requireShortcut(value) {
+    if (value === undefined || value === null || value === '')
+        return '';
+    if (typeof value !== 'string')
+        throw new Error('a shortcut must be a string');
+
+    const shortcut = value.trim();
+    if (shortcut === '')
+        return '';
+    if (!/^(<[A-Za-z]+>)*[A-Za-z0-9_]+$/.test(shortcut))
+        throw new Error(`not an accelerator: ${value} (try something like <Super><Alt>1)`);
+    return shortcut;
 }
 
 function requirePolicy(value) {
@@ -54,7 +73,8 @@ function randomUuid() {
 export function createTask({ uuid, name, icon = '', description = '',
     // LEAVE rather than HIDE: a default has to be a behaviour that exists, and leaving windows
     // alone is also the safest thing to do with somebody's open work.
-    deactivatePolicy = DeactivatePolicy.LEAVE, apps = [], commands = [], appState = {} } = {}) {
+    deactivatePolicy = DeactivatePolicy.LEAVE, apps = [], commands = [], appState = {},
+    shortcut = '' } = {}) {
     return {
         version: SCHEMA_VERSION,
         uuid: uuid ?? randomUuid(),
@@ -62,6 +82,9 @@ export function createTask({ uuid, name, icon = '', description = '',
         icon,
         description,
         deactivatePolicy: requirePolicy(deactivatePolicy),
+        // A GTK accelerator like '<Super><Alt>1' that activates this task, or '' for none. Grabbed
+        // dynamically by the extension: GSettings cannot hold a key per task.
+        shortcut: requireShortcut(shortcut),
         apps: [...apps],
         commands: [...commands],
         // Tier-2 state, keyed by adapter id: browser tabs and anything else only the application
@@ -97,6 +120,9 @@ export function updateTask(task, properties) {
                 if (!value || typeof value !== 'object' || Array.isArray(value))
                     throw new Error('appState must be an object keyed by adapter id');
                 updated.appState = { ...value };
+                break;
+            case 'shortcut':
+                updated.shortcut = requireShortcut(value);
                 break;
             default:
                 if (typeof value !== 'string')
@@ -140,6 +166,7 @@ export function parseTask(text) {
         apps: migrated.apps ?? [],
         commands: migrated.commands ?? [],
         appState: migrated.appState ?? {},
+        shortcut: migrated.shortcut ?? '',
     });
 }
 
@@ -178,5 +205,7 @@ export function summarizeTask(task) {
         icon: task.icon,
         description: task.description,
         state: task.state,
+        // Included so the extension can set up its key grabs from the task list alone.
+        shortcut: task.shortcut ?? '',
     };
 }

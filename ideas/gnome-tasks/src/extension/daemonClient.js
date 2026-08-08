@@ -102,6 +102,7 @@ export class DaemonClient {
                 name: task.name.deepUnpack(),
                 icon: task.icon.deepUnpack(),
                 state: task.state.deepUnpack(),
+                shortcut: task.shortcut?.deepUnpack() ?? '',
             }));
             return this._tasks;
         } catch (error) {

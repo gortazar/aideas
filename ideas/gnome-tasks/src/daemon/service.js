@@ -40,6 +40,7 @@ const PROPERTY_KEYS = {
     'icon': 'icon',
     'description': 'description',
     'deactivate-policy': 'deactivatePolicy',
+    'shortcut': 'shortcut',
     'apps': 'apps',
     'commands': 'commands',
 };
@@ -192,6 +193,18 @@ export class TasksService {
             this._store.setCurrent('');
         this._impl.emit_signal('TaskStateChanged',
             new GLib.Variant('(su)', [uuid, task.state]));
+    }
+
+    ForgetWindow(uuid, index) {
+        const task = this._task(uuid);
+        const apps = task.apps ?? [];
+
+        if (!Number.isInteger(index) || index < 0 || index >= apps.length) {
+            throw dbusError(Gio.DBusError.INVALID_ARGS,
+                `${task.name} has no remembered window at index ${index}`);
+        }
+
+        this._store.update(uuid, { apps: apps.filter((_, other) => other !== index) });
     }
 
     CaptureNow(uuid) {
@@ -477,7 +490,7 @@ export class TasksService {
             }
 
             default:
-                printerr(`gnome-tasks-daemon: unknown deactivation policy ` +
+                printerr('gnome-tasks-daemon: unknown deactivation policy ' +
                     `"${task.deactivatePolicy}" for ${task.name}; leaving its windows alone`);
         }
     }

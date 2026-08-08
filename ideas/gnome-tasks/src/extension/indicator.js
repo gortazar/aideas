@@ -14,10 +14,11 @@ import { TaskState } from './lib/protocol.js';
 
 export const TasksIndicator = GObject.registerClass(
 class TasksIndicator extends PanelMenu.Button {
-    _init(client) {
+    _init(client, { onOpenPreferences = () => {} } = {}) {
         super._init(0.5, 'gnome-tasks', false);
 
         this._client = client;
+        this._onOpenPreferences = onOpenPreferences;
 
         const box = new St.BoxLayout({ style_class: 'panel-status-menu-box' });
         this._icon = new St.Icon({
@@ -118,6 +119,12 @@ class TasksIndicator extends PanelMenu.Button {
         const create = new PopupMenu.PopupMenuItem(_('New Task…'));
         create.connect('activate', () => this._promptForNewTask());
         this.menu.addMenuItem(create);
+
+        // Renaming, deleting, shortcuts, commands and the capture controls all live in the
+        // preferences window; the menu is the switcher, not an editor.
+        const preferences = new PopupMenu.PopupMenuItem(_('Task Preferences'));
+        preferences.connect('activate', () => this._onOpenPreferences());
+        this.menu.addMenuItem(preferences);
     }
 
     // An inline entry rather than a dialog: a modal dialog from an extension is a heavier thing to

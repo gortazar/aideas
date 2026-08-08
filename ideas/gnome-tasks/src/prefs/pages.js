@@ -74,6 +74,36 @@ function buildTaskRow(client, task, onChanged) {
     });
     row.add_row(icon);
 
+    const capture = new Adw.ActionRow({
+        title: 'Save what is open now',
+        subtitle: 'Record this task\'s windows immediately, without waiting for the next change',
+    });
+    const captureButton = new Gtk.Button({
+        label: 'Save layout',
+        valign: Gtk.Align.CENTER,
+    });
+    captureButton.connect('clicked', () => {
+        client.captureNow(task.uuid);
+        onChanged();
+    });
+    capture.add_suffix(captureButton);
+    row.add_row(capture);
+
+    const shortcut = new Adw.EntryRow({
+        title: 'Shortcut',
+        text: task.shortcut ?? '',
+    });
+    shortcut.set_show_apply_button(true);
+    // An accelerator string rather than a key-capture widget: capturing keys properly means grabbing
+    // the keyboard from inside a preferences window, which is a lot of machinery for something a user
+    // sets once. The daemon validates the shape and the compositor reports a refused grab.
+    shortcut.set_tooltip_text('An accelerator like <Super><Alt>1, or empty for none');
+    shortcut.connect('apply', () => {
+        client.setTaskProperties(task.uuid, { shortcut: shortcut.get_text().trim() });
+        onChanged();
+    });
+    row.add_row(shortcut);
+
     const policy = new Adw.ComboRow({
         title: 'When switching away',
         subtitle: 'What happens to this task\'s windows',
@@ -88,11 +118,56 @@ function buildTaskRow(client, task, onChanged) {
     });
     row.add_row(policy);
 
+    for (const [index, app] of (task.apps ?? []).entries())
+        row.add_row(buildRememberedRow(client, task, app, index, onChanged));
+
     for (const command of task.commands ?? [])
         row.add_row(buildCommandRow(client, task, command, onChanged));
 
     row.add_row(buildAddCommandRow(client, task, onChanged));
     row.add_row(buildDeleteRow(client, task, onChanged));
+
+    return row;
+}
+
+/**
+ * One remembered window: which application, which document, and where it was. Removable, because a
+ * task that has learned something wrong — an application opened by accident, a document that should
+ * not be reopened — needs a way to forget it that is not "delete the whole task".
+ *
+ * Capture will record it again if the window is still open when the task is next captured, which is
+ * the correct behaviour: the layout is a description of what is open, not a wish list.
+ */
+function buildRememberedRow(client, task, app, index, onChanged) {
+    const documents = app.documents ?? [];
+    const geometry = app.placement?.geometry;
+
+    const details = [];
+    if (documents.length > 0)
+        details.push(documents.map(uri => decodeURIComponent(uri.replace(/^file:\/\//, ''))).join(', '));
+    if (geometry)
+        details.push(`${geometry.width}×${geometry.height} at ${geometry.x},${geometry.y}`);
+    if (Number.isInteger(app.placement?.workspace))
+        details.push(`workspace ${app.placement.workspace + 1}`);
+
+    const row = new Adw.ActionRow({
+        title: app.appId.replace(/\.desktop$/, ''),
+        subtitle: details.join(' · ') || 'no document',
+        subtitle_lines: 2,
+    });
+    row.add_prefix(new Gtk.Image({ icon_name: 'window-symbolic' }));
+
+    const forget = new Gtk.Button({
+        icon_name: 'user-trash-symbolic',
+        valign: Gtk.Align.CENTER,
+        css_classes: ['flat'],
+        tooltip_text: 'Forget this window',
+    });
+    forget.connect('clicked', () => {
+        client.forgetWindow(task.uuid, index);
+        onChanged();
+    });
+    row.add_suffix(forget);
 
     return row;
 }

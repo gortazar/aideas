@@ -118,7 +118,28 @@ suite('task model', () => {
             icon: 'folder',
             description: '',
             state: TaskState.ACTIVE,
+            shortcut: '',
         });
+    });
+
+    test('a task can carry a keyboard shortcut', () => {
+        assertEquals(createTask({ name: 'x', shortcut: '<Super><Alt>1' }).shortcut,
+            '<Super><Alt>1');
+        assertEquals(createTask({ name: 'x' }).shortcut, '', 'none by default');
+        assertEquals(createTask({ name: 'x', shortcut: '  <Super>F1  ' }).shortcut, '<Super>F1');
+    });
+
+    // Only the shape is checked: whether the compositor grants the grab is its business, and it
+    // reports that separately.
+    test('a shortcut that is not an accelerator is rejected', () => {
+        for (const bad of ['Super+1', '<Super> 1', 'ctrl-a', '<>'])
+            assertThrows(() => createTask({ name: 'x', shortcut: bad }), `expected ${bad} rejected`);
+    });
+
+    test('a shortcut survives serialization and can be cleared', () => {
+        const task = createTask({ name: 'x', shortcut: '<Super>1' });
+        assertEquals(parseTask(serializeTask(task)).shortcut, '<Super>1');
+        assertEquals(updateTask(task, { shortcut: '' }).shortcut, '');
     });
 });
 
