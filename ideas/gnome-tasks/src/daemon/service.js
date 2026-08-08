@@ -195,6 +195,18 @@ export class TasksService {
             new GLib.Variant('(su)', [uuid, task.state]));
     }
 
+    ForgetWindow(uuid, index) {
+        const task = this._task(uuid);
+        const apps = task.apps ?? [];
+
+        if (!Number.isInteger(index) || index < 0 || index >= apps.length) {
+            throw dbusError(Gio.DBusError.INVALID_ARGS,
+                `${task.name} has no remembered window at index ${index}`);
+        }
+
+        this._store.update(uuid, { apps: apps.filter((_, other) => other !== index) });
+    }
+
     CaptureNow(uuid) {
         const task = this._task(uuid);
 

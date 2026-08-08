@@ -104,6 +104,22 @@ export class PrefsClient {
         this.setTaskProperties(uuid, { commands: [...existing, command] });
     }
 
+    /**
+     * Drop one remembered window from a task's layout.
+     *
+     * A dedicated call rather than writing the whole `apps` array back: a layout entry is a nested
+     * structure that has already grown twice, and handing the client the job of reassembling it
+     * correctly is a good way to lose a field.
+     */
+    forgetWindow(uuid, index) {
+        this._call('ForgetWindow', new GLib.Variant('(su)', [uuid, index]), null);
+    }
+
+    /** Capture the desktop into a task now. Silently does nothing without the Shell extension. */
+    captureNow(uuid) {
+        this._call('CaptureNow', new GLib.Variant('(s)', [uuid]), null);
+    }
+
     confirmCommand(taskUuid, commandId, confirmed) {
         this._call('ConfirmCommand',
             new GLib.Variant('(ssb)', [taskUuid, commandId, confirmed]), null);

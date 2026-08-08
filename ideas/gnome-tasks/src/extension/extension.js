@@ -62,7 +62,9 @@ export default class GnomeTasksExtension extends Extension {
         this._shellService.export();
 
         this._client = new DaemonClient(() => this._onDaemonChanged());
-        this._indicator = new TasksIndicator(this._client);
+        this._indicator = new TasksIndicator(this._client, {
+            onOpenPreferences: () => this.openPreferences(),
+        });
         Main.panel.addToStatusArea('gnome-tasks', this._indicator, 0, 'right');
 
         this._connect(global.display, 'window-created', (display, window) => {

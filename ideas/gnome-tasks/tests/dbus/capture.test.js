@@ -2,8 +2,9 @@
 // The daemon is a real separate process; only the compositor is faked.
 
 import GLib from 'gi://GLib';
+import Gio from 'gi://Gio';
 
-import { suite, test, assert, assertEquals, assertDeepEquals } from '../harness.js';
+import { suite, test, assert, assertEquals, assertDeepEquals, assertMatch } from '../harness.js';
 import { DeactivatePolicy } from '../../src/lib/protocol.js';
 import {
     call, getProperty, setProperty, sleep, startDaemon, stopDaemon,
@@ -303,6 +304,46 @@ suite('switching', () => {
         assertEquals((await taskDocument(uuid)).apps.length, 1);
 
         await call('StopTask', new GLib.Variant('(s)', [uuid]));
+        await call('DeleteTask', new GLib.Variant('(s)', [uuid]));
+    });
+});
+
+suite('forgetting a window', () => {
+    // A task can learn something wrong — an application opened by accident, a document that should not
+    // reopen — and the fix must not be "delete the whole task".
+    test('a remembered window can be dropped from a task', async () => {
+        const uuid = await createTask('Forgetful');
+        shell.windows = [
+            fakeWindow('org.gnome.Calculator.desktop', { x: 0 }),
+            fakeWindow('org.gnome.Terminal.desktop', { x: 100 }),
+        ];
+        await call('CaptureNow', new GLib.Variant('(s)', [uuid]));
+        await sleep(700);
+        assertEquals((await taskDocument(uuid)).apps.length, 2);
+
+        await call('ForgetWindow', new GLib.Variant('(su)', [uuid, 0]));
+        await sleep(300);
+
+        const apps = (await taskDocument(uuid)).apps;
+        assertEquals(apps.length, 1);
+        assertEquals(apps[0].appId, 'org.gnome.Terminal.desktop');
+
+        await call('DeleteTask', new GLib.Variant('(s)', [uuid]));
+    });
+
+    test('an index that does not exist is an error, not a silent no-op', async () => {
+        const uuid = await createTask('Nothing to forget');
+        let error = null;
+        try {
+            await call('ForgetWindow', new GLib.Variant('(su)', [uuid, 5]));
+        } catch (thrown) {
+            error = thrown;
+        }
+
+        assert(error !== null, 'expected an error');
+        Gio.DBusError.strip_remote_error(error);
+        assertMatch(error.message, /no remembered window/);
+
         await call('DeleteTask', new GLib.Variant('(s)', [uuid]));
     });
 });

@@ -101,6 +101,14 @@ export const DAEMON_IFACE_XML = `
       <arg type="s" name="uuid" direction="in"/>
     </method>
 
+    <!-- Drop one remembered window from a task's layout, by its index in the apps array. For the
+         preferences window: a task that learned something wrong needs a way to forget it short of
+         being deleted. Capture records the window again if it is still open at the next capture. -->
+    <method name="ForgetWindow">
+      <arg type="s" name="uuid" direction="in"/>
+      <arg type="u" name="index" direction="in"/>
+    </method>
+
     <!-- Force a layout capture now, rather than waiting for the debounce. Mostly for tests and
          for the "save layout" affordance in the preferences window. -->
     <method name="CaptureNow">
