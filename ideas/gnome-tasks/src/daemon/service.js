@@ -477,7 +477,7 @@ export class TasksService {
             }
 
             default:
-                printerr(`gnome-tasks-daemon: unknown deactivation policy ` +
+                printerr('gnome-tasks-daemon: unknown deactivation policy ' +
                     `"${task.deactivatePolicy}" for ${task.name}; leaving its windows alone`);
         }
     }
