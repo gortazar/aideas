@@ -53,6 +53,13 @@ const CONTROL_IFACE_XML = `
       <arg type="s" name="path" direction="in"/>
       <arg type="s" name="result" direction="out"/>
     </method>
+    <!-- Press a chord through a virtual keyboard: the keyvals are pressed in order and released in
+         reverse, so [Super_L, Alt_L, 1] is <Super><Alt>1. The only way to test a real key grab. -->
+    <method name="PressKeys">
+      <arg type="au" name="keyvals" direction="in"/>
+      <arg type="s" name="result" direction="out"/>
+    </method>
+
     <!-- Click through a virtual pointer, the way mutter's own tests drive input. A headless session
          has no seat devices, and a panel menu opened programmatically loses its modal grab
          immediately (observed: isOpen goes false within 900ms). A real click keeps it. -->
@@ -373,6 +380,33 @@ export default class ProbeExtension extends Extension {
             return GLib.SOURCE_REMOVE;
         });
         return 'ok';
+    }
+
+    /**
+     * Press and release a chord on a virtual keyboard. A headless session has no keyboard at all, so
+     * this is the only way to find out whether a key grab actually fires.
+     */
+    PressKeys(keyvals) {
+        try {
+            const seat = Clutter.get_default_backend().get_default_seat();
+            this._keyboard ??= seat.create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+
+            let time = global.get_current_time() * 1000;
+            for (const keyval of keyvals) {
+                this._keyboard.notify_keyval(time, keyval, Clutter.KeyState.PRESSED);
+                time += 1000;
+            }
+            for (const keyval of [...keyvals].reverse()) {
+                this._keyboard.notify_keyval(time, keyval, Clutter.KeyState.RELEASED);
+                time += 1000;
+            }
+
+            emit('pressed-keys', { keyvals: [...keyvals] });
+            return 'ok';
+        } catch (error) {
+            emit('press-keys-error', { error: `${error}` });
+            return `error: ${error}`;
+        }
     }
 
     /** Click the centre of a panel indicator with a virtual pointer. */

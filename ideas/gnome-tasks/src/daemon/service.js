@@ -40,6 +40,7 @@ const PROPERTY_KEYS = {
     'icon': 'icon',
     'description': 'description',
     'deactivate-policy': 'deactivatePolicy',
+    'shortcut': 'shortcut',
     'apps': 'apps',
     'commands': 'commands',
 };

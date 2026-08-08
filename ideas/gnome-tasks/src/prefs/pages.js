@@ -74,6 +74,21 @@ function buildTaskRow(client, task, onChanged) {
     });
     row.add_row(icon);
 
+    const shortcut = new Adw.EntryRow({
+        title: 'Shortcut',
+        text: task.shortcut ?? '',
+    });
+    shortcut.set_show_apply_button(true);
+    // An accelerator string rather than a key-capture widget: capturing keys properly means grabbing
+    // the keyboard from inside a preferences window, which is a lot of machinery for something a user
+    // sets once. The daemon validates the shape and the compositor reports a refused grab.
+    shortcut.set_tooltip_text('An accelerator like <Super><Alt>1, or empty for none');
+    shortcut.connect('apply', () => {
+        client.setTaskProperties(task.uuid, { shortcut: shortcut.get_text().trim() });
+        onChanged();
+    });
+    row.add_row(shortcut);
+
     const policy = new Adw.ComboRow({
         title: 'When switching away',
         subtitle: 'What happens to this task\'s windows',

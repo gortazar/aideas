@@ -92,4 +92,17 @@ export default [
             globals: { ...gjsGlobals, ...shellGlobals },
         },
     },
+    {
+        // The WebExtension runs in a browser, not in gjs: `browser` on Firefox, `chrome` on Chrome.
+        files: ['browser/**/*.js'],
+        languageOptions: {
+            globals: {
+                browser: 'readonly',
+                chrome: 'readonly',
+                console: 'readonly',
+                setTimeout: 'readonly',
+                clearTimeout: 'readonly',
+            },
+        },
+    },
 ];

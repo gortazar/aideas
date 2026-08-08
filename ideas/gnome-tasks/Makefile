@@ -81,7 +81,8 @@ SMOKE_STATE ?= /tmp/gnome-tasks-smoke
 
 smoke: build
 	tools/nested-shell.sh stop --state $(SMOKE_STATE) >/dev/null 2>&1 || true
-	tools/nested-shell.sh start --extension $(BUNDLE) --state $(SMOKE_STATE)
+	tools/nested-shell.sh start --extension $(BUNDLE) --extension tools/probe \
+	    --state $(SMOKE_STATE)
 	set -a; . $(SMOKE_STATE)/env; set +a; \
 	    GNOME_TASKS_DATA_DIR=$(SMOKE_STATE)/tasks $(GJS) -m src/daemon/main.js \
 	        >$(SMOKE_STATE)/daemon.log 2>&1 & \

@@ -52,6 +52,8 @@ export default class GnomeTasksExtension extends Extension {
         this._windowSignals = new Map();
         this._matchTimeouts = new Set();
         this._matchedWindows = new WeakSet();
+        // Accelerator action id -> task uuid, for the per-task shortcuts.
+        this._taskAccelerators = new Map();
 
         this._monitors = new MonitorConnectors();
         this._monitors.refresh();
@@ -86,6 +88,14 @@ export default class GnomeTasksExtension extends Extension {
     disable() {
         for (const name of ['cycle-tasks', 'cycle-tasks-backward'])
             Main.wm.removeKeybinding(name);
+
+        for (const action of this._taskAccelerators.keys())
+            global.display.ungrab_accelerator(action);
+        this._taskAccelerators.clear();
+        if (this._acceleratorSignal) {
+            global.display.disconnect(this._acceleratorSignal);
+            this._acceleratorSignal = 0;
+        }
 
         for (const id of this._matchTimeouts)
             GLib.source_remove(id);
@@ -167,6 +177,50 @@ export default class GnomeTasksExtension extends Extension {
                 Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
                 () => this._cycleTask(step));
         }
+
+        // Per-task shortcuts cannot use addKeybinding: that needs a GSettings key per binding, and
+        // tasks are created at runtime. grab_accelerator is the dynamic equivalent, and is what the
+        // Shell itself uses for D-Bus-registered shortcuts.
+        this._acceleratorSignal = global.display.connect('accelerator-activated',
+            (display, action) => {
+                const uuid = this._taskAccelerators.get(action);
+                if (uuid)
+                    this._client?.activate(uuid).catch(error => console.warn(`gnome-tasks: ${error}`));
+            });
+    }
+
+    /**
+     * Re-grab the per-task accelerators after any change to the task list. Every change re-grabs
+     * everything, which is simpler than diffing and cheap; only *newly* grabbed shortcuts are logged,
+     * so a task rename does not put a line in the journal per shortcut.
+     */
+    _refreshTaskAccelerators(tasks) {
+        const previous = new Set(this._taskAccelerators.values());
+
+        for (const action of this._taskAccelerators.keys())
+            global.display.ungrab_accelerator(action);
+        this._taskAccelerators.clear();
+
+        for (const task of tasks) {
+            if (!task.shortcut)
+                continue;
+
+            const action = global.display.grab_accelerator(task.shortcut,
+                Meta.KeyBindingFlags.NONE);
+            if (action === Meta.KeyBindingAction.NONE) {
+                // Almost always because something else already owns the combination.
+                console.warn(`gnome-tasks: could not grab ${task.shortcut} for "${task.name}"`);
+                continue;
+            }
+
+            // The Shell only routes an accelerator to us once its name is in the keybinding action
+            // list for our action mode.
+            Main.wm.allowKeybinding(Meta.external_binding_name_for_action(action),
+                Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW);
+            this._taskAccelerators.set(action, task.uuid);
+            if (!previous.has(task.uuid))
+                console.log(`gnome-tasks: grabbed ${task.shortcut} for "${task.name}"`);
+        }
     }
 
     _cycleTask(step) {
@@ -215,7 +269,10 @@ export default class GnomeTasksExtension extends Extension {
         // Keeps the cache and the top-bar label current; the menu builds from that cache the moment
         // it opens.
         this._client.listTasks()
-            .then(tasks => this._indicator?.refresh(tasks))
+            .then(tasks => {
+                this._indicator?.refresh(tasks);
+                this._refreshTaskAccelerators(tasks);
+            })
             .catch(error => console.warn(`gnome-tasks: ${error}`));
     }
 }

@@ -28,6 +28,25 @@ DOCUMENT = os.path.join(DOCUMENT_DIR, "notes.txt")
 failures = []
 
 
+PROBE = "org.gnome.TasksProbe"
+
+# X11 keyvals: Super_L, Alt_L, and the digit keys.
+SUPER_L = 65515
+ALT_L = 65513
+
+
+def probe(method, *args):
+    return gdbus(PROBE, "/org/gnome/TasksProbe", PROBE, method, *args)
+
+
+def probe_available():
+    result = subprocess.run(
+        ["gdbus", "introspect", "--session", "--dest", PROBE,
+         "--object-path", "/org/gnome/TasksProbe"],
+        capture_output=True, text=True)
+    return result.returncode == 0
+
+
 def gdbus(dest, path, iface, method, *args):
     result = subprocess.run(
         ["gdbus", "call", "--session", "--dest", dest, "--object-path", path,
@@ -184,7 +203,27 @@ def main():
     tasks("StopTask", docs_task)
     tasks("DeleteTask", docs_task)
 
-    print("\n== step 8: the preferences window builds against the live daemon ==")
+    print("\n== step 8: a per-task keyboard shortcut activates its task ==")
+    # Needs the probe extension for its virtual keyboard: a headless session has no keyboard at all,
+    # so this is the only way to find out whether the key grab really fires.
+    if not probe_available():
+        print("   SKIPPED: the probe extension is not loaded (start the session with")
+        print("            --extension tools/probe to cover this)")
+    else:
+        shortcut_task = unwrap_string(tasks("CreateTask", "Shortcut target", ""))
+        tasks("SetTaskProperties", shortcut_task, "{'shortcut': <'<Super><Alt>7'>}")
+        time.sleep(3)
+
+        tasks("ActivateTask", other)
+        time.sleep(1)
+        probe("PressKeys", f"[{SUPER_L}, {ALT_L}, {ord('7')}]")
+        time.sleep(3)
+
+        check("pressing the shortcut made its task current", current_task() == shortcut_task)
+        tasks("StopTask", shortcut_task)
+        tasks("DeleteTask", shortcut_task)
+
+    print("\n== step 9: the preferences window builds against the live daemon ==")
     # The preferences process only exists inside a GNOME session, so this is the only place it can be
     # exercised at all. It needs a display, which the nested session has.
     preview = subprocess.run(
