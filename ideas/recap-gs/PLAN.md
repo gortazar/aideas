@@ -122,26 +122,26 @@ compositor is exercised in a nested Shell session by hand and recorded in `STATU
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **Blocking dependency.** Idea 5 (`recap`) is `not_started` and its own plan still has unanswered
+- [x] **Blocking dependency.** Idea 5 (`recap`) is `not_started` and its own plan still has unanswered
       questions, including which language it is written in. This idea's text says it "can't be started
       until recap has a clear API". Confirm: should `recap-gs` stay blocked until `recap --json` is
       implemented and its schema documented, or should it start now against a hand-written mock schema
-      that recap is then obliged to match?
-- [ ] How should the extension get data from recap: spawn `recap --json` on a timer, consume a D-Bus
+      that recap is then obliged to match? Recap now implemented completely and working.
+- [x] How should the extension get data from recap: spawn `recap --json` on a timer, consume a D-Bus
       service that recap publishes, or read a status file recap refreshes? Spawning needs no changes to
       recap but is the transport EGO reviewers scrutinise most; the other two require recap to grow a
-      daemon or a writer, which its plan currently rules out.
-- [ ] Where should this extension's code live? `ideas/pwgen` was answered with "work on the upstream
+      daemon or a writer, which its plan currently rules out. Spawn recap.
+- [x] Where should this extension's code live? `ideas/pwgen` was answered with "work on the upstream
       GitHub repo, keep only a submodule here". Is there an existing or intended
       `gortazar/gnome-shell-recap` repo to develop in and push to, or is this one built inside
-      `ideas/recap-gs/` and published later?
-- [ ] What does clicking a task row do — open a terminal in that project (which terminal?), resume the
-      agent session directly, copy the resume command to the clipboard, or nothing at all in v1?
-- [ ] Is "done" the same bar as pwgen — pushed to a repo with green CI checks — or does it also include
-      an actual submission to extensions.gnome.org?
-- [ ] Which Gnome Shell versions must be supported? Targeting only the version on this machine is
+      `ideas/recap-gs/` and published later? Build it inside.
+- [x] What does clicking a task row do — open a terminal in that project (which terminal?), resume the
+      agent session directly, copy the resume command to the clipboard, or nothing at all in v1? Resume the agent session.
+- [x] Is "done" the same bar as pwgen — pushed to a repo with green CI checks — or does it also include
+      an actual submission to extensions.gnome.org? Just green.
+- [x] Which Gnome Shell versions must be supported? Targeting only the version on this machine is
       simplest; EGO submission effectively requires listing several `shell-version` entries and testing
-      against each.
-- [ ] Should the extension notify (a desktop notification) when a session transitions to *awaiting
+      against each. Use the same versions as pwgen.
+- [x] Should the extension notify (a desktop notification) when a session transitions to *awaiting
       input* or *finished*, or is it strictly a passive readout? Notifications are the feature most
-      likely to make it genuinely useful and also the one most likely to become noise.
+      likely to make it genuinely useful and also the one most likely to become noise. Not for v1.
