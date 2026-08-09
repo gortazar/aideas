@@ -1,8 +1,18 @@
 status: done
 started_at: 2026-08-05T13:26:54+02:00
 last_session_id: 58e4e9b2-48c5-4ddf-bb7a-4bce8e161845
-last_run: 2026-08-08T16:56:24+02:00
-last_cycle_cost_usd: 21.542557000000002
+last_run: 2026-08-09T13:03:02+02:00
+last_cycle_cost_usd: 13.001496000000001
+
+## Log
+- 2026-08-09T13:03:02+02:00 — done ($13.001496000000001)
+- 2026-08-08T16:56:24+02:00 — in_progress ($21.542557000000002)
+- 2026-08-07T21:32:12+02:00 — in_progress ($20.986539999999994)
+- 2026-08-07T11:29:05+02:00 — in_progress ($19.358296000000006)
+- 2026-08-06T17:46:26+02:00 — in_progress ($26.866495500000003)
+- 2026-08-06T14:10:11+02:00 — in_progress ($12.033532499999998)
+- 2026-08-06T01:22:09+02:00 — in_progress ($10.616743999999999)
+- 2026-08-05T13:26:54+02:00 — in_progress ($13.361972999999997)
 
 Difficulty estimate: **hard**, as PLAN.md said — four programs, a platform that hides the
 information the idea needs, and a long tail of per-app work. Every feature in PLAN.md is now built,
@@ -97,13 +107,3 @@ terminal, unsaved work, documents for apps with no adapter).
 - The user's `org.gnome.mutter dynamic-workspaces` and `org.gnome.desktop.interface enable-animations`
   were reset to schema defaults while repairing that leak, because the prior values were not
   recoverable. Still worth confirming with them.
-
-## Log
-<!-- Newest entries on top. The orchestrator prepends here after each cycle. -->
-- 2026-08-08T16:56:24+02:00 — in_progress ($21.542557000000002)
-- 2026-08-07T21:32:12+02:00 — in_progress ($20.986539999999994)
-- 2026-08-07T11:29:05+02:00 — in_progress ($19.358296000000006)
-- 2026-08-06T17:46:26+02:00 — in_progress ($26.866495500000003)
-- 2026-08-06T14:10:11+02:00 — in_progress ($12.033532499999998)
-- 2026-08-06T01:22:09+02:00 — in_progress ($10.616743999999999)
-- 2026-08-05T13:26:54+02:00 — in_progress ($13.361972999999997)
