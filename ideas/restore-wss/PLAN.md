@@ -1,199 +1,254 @@
-# Plan: restore-wss — restore workspaces as they were before shutdown
+# Plan: restore-wss — put the workspaces back the way they were
 
-Difficulty estimate: hard — on Wayland nothing outside the compositor can enumerate windows or
-their workspaces, "which document is this window showing?" has no general answer, re-running a
-recorded shell command is a security decision rather than a mechanism, and the tool must survive
-an *unclean* power-off, so state has to be snapshotted continuously rather than saved at logout.
+Difficulty estimate: hard — a reboot destroys exactly the information needed (window↔app↔document
+links, process trees, cwds), Wayland refuses to hand window state to anything outside the
+compositor, and the snapshot has to survive an *unclean* power-off, so nothing can be deferred to a
+logout hook; on top of that, replaying stored command lines and reconnecting a VPN are
+security-sensitive by nature.
 
 ## Context
 
-The goal is narrow and concrete: after a reboot or a power cut, put the desktop back — the same
-apps, on the same workspaces, with the same documents open, the same terminals in the same
-directories running the same things, and the same VPN up.
+The user shuts the laptop down with seven workspaces full of work: a Thesis document in
+LibreOffice on one, Codium with `my-app` open on another, a terminal in `my-repo` running
+`claude -r`, another terminal holding an `ssh my-host` session, and a VPN up. After the reboot,
+the desktop is empty. `restore-wss` is the tool that puts it back.
 
-Three constraints shape the design and are worth stating before the feature list.
+Four facts shape the design, and they are worth stating before the feature list.
 
-1. **Recording must not depend on a clean shutdown.** The classic answer to this problem is
-   session management (XSMP, `ksmserver`, `xfce4-session`): the session manager asks clients to
-   save state *at logout*. That is exactly the case this idea does not care about — a power cut
-   never reaches logout. So restore-wss records **continuously**, on a timer plus on interesting
-   events, into rotating snapshots, and restores from the newest snapshot that looks sane.
-2. **Window→workspace mapping is compositor-private on Wayland.** There is no `_NET_CLIENT_LIST`,
-   no `wmctrl`, no cross-client window IDs, and `org.gnome.Shell.Eval` is disabled outside unsafe
-   mode. The only supported way to learn which workspace a window is on, and the only way to place
-   a window on restore, is code running *inside* GNOME Shell. So the tool is two pieces: a
-   **recorder/restorer daemon** (all the logic, all the I/O, all the process inspection) and a
-   **thin GNOME Shell extension** that exposes window/workspace facts and placement over D-Bus.
-   The daemon is useful on its own — apps, documents, terminals and VPN restore without it — but
-   without the extension everything lands on whatever workspace GNOME picks.
-3. **Restoring is a guess; the user is the tiebreaker.** The idea text already anticipates this
-   ("the user can be asked about information that cannot be collected automatically"). The design
-   makes that first-class: every recorded item carries a **confidence**, and restore runs as a
-   reviewable plan the user can confirm, edit or skip, not as a silent replay.
+1. **The snapshot must already exist when the power goes off.** A "save on logout" design — which
+   is what X11's XSMP and `gnome-session`'s old `saved-session` mechanism were — cannot help with a
+   crash, a kernel panic or a held-down power button, and on Wayland it barely helps at all. So
+   capture is *continuous*: a daemon keeps a current snapshot on disk at all times, written
+   atomically, and restore reads whatever the last good snapshot was. The saved state is a
+   consequence of running, not of shutting down properly.
+2. **Window state on Wayland is only visible from inside the compositor.** There is no `wmctrl`, no
+   `_NET_CLIENT_LIST`, no cross-client window IDs. Which workspace a window is on, which monitor,
+   its geometry, its `wm_class` and its PID are reachable only through `Meta.Window` /
+   `Shell.WindowTracker` — i.e. from a GNOME Shell extension running in the compositor process.
+   Everything else (reading `/proc`, writing files, spawning apps, talking to NetworkManager) must
+   happen *outside* it, or the desktop stutters and a crash takes the session down. Hence the same
+   two-part shape as idea 2: a thin **extension** that observes and places windows, and a
+   **daemon** that owns state and does the work, talking over the session bus.
+3. **The standards-track answer exists but is not usable yet.** `xx_session_management_v1` (the
+   staging Wayland session-management protocol) lets an app ask the compositor for a token, tag
+   each toplevel with a name, and get its state restored on the next run. KWin merged support for
+   Plasma 6.4 (June 2025); Mutter has groundwork landing but GNOME's own session save/restore is
+   *not* complete as of GNOME 51, and there is a parallel xdg-desktop-portal discussion about a
+   session save/restore portal. Crucially, even when it ships it only works for apps that opt in,
+   which will not include most of what this user runs for years. `restore-wss` is therefore built
+   on introspection and heuristics, and M0 verifies where the protocol actually stands on the
+   target machine so the design can prefer it for the apps that support it.
+4. **Restoring is a guess, and a guess that runs commands.** "Which document is this window
+   showing?" has no general answer on Linux, and "what was this terminal running?" is answered by
+   reading a process's `cmdline`, which can contain secrets and which it is not always safe to
+   replay. The design treats per-app knowledge as a *capability tier*, and treats stored commands
+   as *proposals the user confirms*, not as a script to execute.
 
-Assumption (stated rather than asked): the target is the GNOME Shell version on the development
-machine, Wayland session, with NetworkManager managing VPNs — matching the environment the sibling
-`gnome-tasks` idea targets. X11 is not a goal.
-
-**Relationship to sibling ideas.** `gnome-tasks` (idea 2) solves an overlapping problem — capture
-and restore a set of apps and their documents — but for *named tasks the user switches between*,
-not for *the machine that just rebooted*. The capture layer is nearly the same problem twice; see
-Open Questions for whether these should share code. Browser tabs are explicitly **out of scope
-here**: idea 4 is a separate entry covering browser/tab restore for this same folder.
+Assumptions, stated rather than asked: the target is the GNOME Shell version installed on the
+development machine, Wayland only, X11 not supported (this matches the answers already given for
+idea 2). Browser tabs are deliberately **out of scope here** — idea 4 covers them for this same
+folder — but the state schema leaves room for a browser adapter to fill in later.
 
 ## Features
 
-- **Continuous session recording** — a user-level daemon (`restore-wss-recorderd`, a systemd user
-  service) snapshots the session periodically and on significant events (window opened/closed,
-  window moved between workspaces, VPN up/down), debounced so a window drag does not cause a write
-  storm. Snapshots are written atomically to `~/.restore-wss/snapshots/`, rotated with a bounded
-  count, so an unclean power-off loses at most one interval.
-- **Config and state under `~/.restore-wss/`** — `config.toml` (intervals, exclusions, per-app
-  overrides, restore policy), `snapshots/<timestamp>.json` (versioned schema, atomic writes),
-  `answers.json` (facts the user has been asked about and confirmed, so the same question is never
-  asked twice), and `logs/`. The snapshot schema is versioned and documented, and contains
-  everything needed to restore — no hidden dependency on state elsewhere.
-- **Graphical app capture and restore** — for each window: the `.desktop` app id, its workspace
-  index, monitor and geometry, and the document or folder it is working on. Restore launches via
-  `Gio.DesktopAppInfo.launch_uris_async()` with an activation token so the window that appears can
-  be matched back to the slot that asked for it, then places it through the extension.
-- **Document/folder resolution, tiered by confidence** — no single mechanism covers everything, so
-  sources are tried in order and the result is tagged:
-  - *high* — the app exposes its own state (D-Bus interface, or the `org.gtk.Application` window
-    object path), or its open file is directly visible as an open fd under `/proc/<pid>/fd`
-    (LibreOffice with `Thesis.odt`);
-  - *medium* — `/proc/<pid>/cmdline` and `/proc/<pid>/cwd` (a Codium started as `codium ~/my-app`),
-    or the freedesktop recent-files store correlated by app and timestamp;
-  - *low* — window-title heuristics, declared explicitly per app rather than applied globally.
-  Anything below the configured threshold becomes a question at restore time instead of a guess.
-- **Terminal and command-line restore** — for each terminal window, walk the process tree from the
-  terminal's PID down through its ptys, take each pty's foreground process group, and record its
-  `cmdline` and `cwd`. That recovers `ssh my-host`, `claude -r` in `~/my-repo`, `docker compose
-  up`, and the plain-shell case (restore the directory, run nothing). Restore re-launches the
-  terminal with the recorded working directory and, for commands the user has approved, the
-  recorded command. Which terminal emulators are supported is declared per emulator (working
-  directory and command-argument flags differ), starting with the one on the development machine.
-- **Commands are never replayed without consent** — a recorded command line is shown before it is
-  ever run; the user approves it once (remembered in `answers.json` as an exact-match rule),
-  approves it for this restore only, or edits it. A denylist and an interactive-only default keep
-  a destructive command in a shell's history from being re-executed by a restore. This is a
-  deliberate constraint, not a missing feature.
-- **VPN capture and restore** — the active VPN/WireGuard connections are read from NetworkManager
-  (`nmcli -t -f NAME,TYPE,STATE connection show --active`, and the corresponding D-Bus properties)
-  and brought back up on restore. Secrets are never stored by restore-wss: connections whose
-  secrets live in the keyring come back automatically, and connections that need a password, OTP
-  or interactive auth are surfaced as a prompt. Non-NetworkManager VPNs (a `wg-quick@` or
-  `openvpn@` systemd unit) are recorded as unit names and restored by starting the unit.
-- **Reviewable restore, with questions** — `restore-wss restore` builds a plan from the newest
-  snapshot, shows it grouped by workspace (what will be launched, with which document, on which
-  workspace, which commands, which VPN), asks about the low-confidence and consent-requiring
-  items, and then executes, reporting per-item success or failure. `--dry-run` prints the plan and
-  exits; `--yes` runs the pre-approved subset and skips anything that would ask.
-- **Double-restore avoidance** — apps that restore their own session (editors, browsers, anything
-  with "reopen last files") are marked in config so restore-wss launches them bare and lets them
-  do it, instead of forcing documents and getting each one twice.
-- **Exclusions and privacy controls** — recording is local-only, with an app/path exclusion list, a
-  `restore-wss pause`/`resume` switch, and no capture of window titles for excluded apps. What is
-  recorded is a list of the documents a user opens, so the tool says so plainly and keeps the file
-  readable and hand-editable.
-- **GNOME Shell companion extension** — a deliberately thin extension owning
-  `org.gnome.RestoreWss.Shell` on the session bus: list windows with app id, workspace, monitor,
-  geometry and PID; emit window/workspace change signals; move a window to a workspace and
-  geometry on request. All logic, spawning and file I/O stays in the daemon so a bug cannot take
-  the compositor down.
-- **CLI** — `restore-wss save` (snapshot now), `restore`, `status`, `list`, `show <snapshot>`,
-  `edit`, `pause`/`resume`, `enable`/`disable` (install the systemd user units, including the
-  optional restore-on-login unit).
-- **Prior-art study** — `similar-tools-research.md` in this folder (see below), written before the
-  design is locked.
-- **Reproducible environment + green CI** — `flake.nix` providing the runtime and test tooling,
-  `nix flake check` running lint and the test suite, and `.github/workflows/ci-restore-wss.yml`
-  path-filtered on push and PR.
+- **In-depth study of prior art** — `docs/similar-tools.md`, written first and from actual
+  inspection rather than recollection, covering at minimum: X11 session management (XSMP,
+  `gnome-session`'s `~/.config/gnome-session/saved-session` `.desktop` files and why it is dead on
+  Wayland); KDE's `ksmserver` session restore and what it does that GNOME does not;
+  `xx_session_management_v1` and the xdg-desktop-portal session-restore discussion; the GNOME
+  extensions in this space (`smart-auto-move`, its `SmartAutoMoveNG` fork, `window-session-manager`,
+  `window-state-manager`) and specifically how they solve window identity — `smart-auto-move`
+  matches on `wm_class` plus a character-histogram distance over window titles, which is the best
+  documented heuristic available and a candidate to reuse; the tiling-WM tools (`i3-resurrect`,
+  `i3-restore`), which are the closest thing to what this idea asks for and get the *programs* half
+  right by saving each window's `cmdline` and `cwd` from `/proc`; `tmux-resurrect`/`tmux-continuum`,
+  whose default of restoring only a conservative whitelist of programs is the safety precedent this
+  plan adopts; `xsession-manager`; and CRIU, with a written reason for rejecting true
+  checkpoint/restore. Each entry says what it does, what it cannot do, and what `restore-wss` takes
+  from it.
+- **Continuous session capture** — a user-level daemon (`restore-wss-daemon`) that maintains a live
+  picture of every workspace: for each window, the application (desktop-file id / `wm_class`), the
+  workspace index, the monitor (identified by connector + EDID so replugging a display does not
+  invalidate the snapshot), geometry, maximised/fullscreen/minimised state, stacking order, window
+  title, and PID. Fed by events the extension forwards (`window-created`, `workspace-changed`,
+  `position-changed`, `size-changed`, `unmanaged`, `app-state-changed`), debounced so dragging a
+  window does not cause a write storm.
+- **Crash-safe snapshot storage** — the state lives in `~/.restore-wss/` as the idea requires:
+  `config.toml` (user settings, per-app overrides, exclusions) and `state/session.json` (the
+  current snapshot, versioned schema, written to a temp file and `rename(2)`d over the old one,
+  with the previous generation retained as `session.prev.json`). A snapshot is never half-written,
+  and a torn or unreadable snapshot falls back to the previous generation instead of losing
+  everything. Both files are human-readable and hand-editable on purpose.
+- **Document and folder tracking, tiered by app** — what "LibreOffice with the Thesis document" is
+  recorded as, with an honest ladder rather than one mechanism pretending to cover everything:
+  - *Tier 0 — app only.* Restore launches the app with no arguments.
+  - *Tier 1 — document/folder recovered by introspection.* In order of preference: the app's own
+    D-Bus interface where it has one; the GTK application/window object path exposed on the window;
+    open files under `/proc/<pid>/fd` and the process's `/proc/<pid>/cwd`, filtered to real
+    documents; the freedesktop recent-files store (`~/.local/share/recently-used.xbel`) correlated
+    by app and timestamp; and last, per-app title parsing declared explicitly for that app (this is
+    how "Thesis — LibreOffice Writer" and a Codium window titled after `my-app` become a path).
+  - *Tier 2 — app cooperates.* Reserved for apps that can report their own state; the browser
+    adapter of idea 4 is the first one. Not built here, but the schema and the D-Bus API allow it.
+  Every restored document carries a *confidence* value, and low-confidence guesses are what the
+  review step (below) puts in front of the user.
+- **Command-line session capture** — for terminal windows, the part `i3-resurrect` gets right and
+  the desktop tools ignore: from the window's PID, walk the process tree in `/proc` to find the
+  foreground descendants, and record each one's `cmdline`, `cwd`, and the terminal tab it lived in.
+  This is what turns a window into "a terminal in `~/git/my-repo` running `claude -r`" or "a
+  terminal running `ssh my-host`". Secrets are handled up front: arguments matching configurable
+  patterns (`--password`, `--token`, anything that looks like a key) are redacted at capture time,
+  never written to disk, and marked so restore knows to ask.
+- **Command restore with a confirmation gate** — commands are proposals, not a script. A restored
+  terminal is always reopened at the right `cwd` on the right workspace; whether the command is
+  *re-run* follows a three-level policy in `config.toml`: `never` (open the shell only),
+  `whitelist` (the default — re-run only commands whose program is on an allow-list, seeded with
+  the obvious safe ones like `ssh`, `claude`, `top`, `htop`, editors, and extendable by the user),
+  or `always`. Anything not covered by the policy is offered in the review step. `rm -rf`-shaped
+  history never runs by accident, and a command containing a redaction is never auto-run.
+- **Workspace-faithful restore** — restore recreates the workspaces themselves (creating enough of
+  them under GNOME's dynamic-workspaces setting), launches each application via
+  `Gio.DesktopAppInfo` with its documents, and places the resulting window on the recorded
+  workspace, monitor and geometry. New windows are matched back to the launch that asked for them
+  using activation tokens (`XDG_ACTIVATION_TOKEN`), falling back to app id and then PID within a
+  time window. Restore is **idempotent**: running it when some of the session is already up matches
+  existing windows first and only launches what is missing, so it can be re-run safely and can
+  finish a partial restore.
+- **Interactive review, only where it earns its place** — the idea explicitly allows asking the
+  user, so `restore-wss restore` shows what it is about to do and lets the user accept, skip or
+  edit each item, with everything it is confident about pre-ticked. Unattended use is a flag
+  (`--yes`), not the default. The same mechanism handles capture-time unknowns: an app whose
+  document could not be determined can be annotated once by the user and remembered in
+  `config.toml` for next time.
+- **VPN capture and restore** — record which VPN was active, via NetworkManager's D-Bus API
+  (`nmcli`-equivalent, covering NM's OpenVPN/WireGuard/IPsec connection types) as the primary
+  source, plus detection of VPNs NetworkManager does not own: `wg-quick`/`wg show` interfaces,
+  `tailscale`, and `openvpn`/`openconnect` running as systemd user or system units. Only the
+  connection's identity is stored — never credentials. Restore reactivates the connection where
+  that can be done non-interactively (secrets already in the keyring), and otherwise reports what
+  needs to be brought up by hand and offers to open the right dialog. A VPN that needs a password
+  or 2FA is a prompt, not a failure.
+- **CLI with a small honest surface** — `restore-wss status` (what is currently captured),
+  `save` (force a snapshot now), `restore` (the review-and-restore flow), `list` (snapshots
+  available), `diff` (what the snapshot says versus what is running now), and `daemon` (run the
+  capture loop, normally started as a systemd user unit). `--json` output on the read-only
+  commands.
+- **Login integration** — a systemd user unit starts the daemon on session start, and an optional
+  autostart entry offers the restore on first login after a reboot, detected by comparing the
+  snapshot's boot id with the current one so that logging out and back in does not trigger it
+  spuriously.
+- **Exclusions, pause, and privacy** — a per-app and per-path exclusion list, a global pause
+  switch, and a rule that nothing ever leaves the machine. Recording which documents a user opens
+  and which commands they run is a surveillance-shaped feature; the file is theirs, local,
+  readable, and deletable, and `~/.restore-wss/state/` is created mode `0700`.
+- **Reproducible environment + green CI** — `flake.nix` for dev/test/build, unit tests over
+  committed fixtures (recorded `/proc` trees, window-event traces, NetworkManager states) so the
+  logic is testable without a live desktop, and a path-filtered
+  `.github/workflows/ci-restore-wss.yml`.
+- **README with real evidence** — install, usage, the config-file reference, the snapshot schema,
+  the safety model for commands, and screenshots of a real before/after restore.
 
 ## Documentation deliverables
 
-- **`similar-tools-research.md`** — the in-depth study the idea calls for, written from checking
-  what the tools actually do, with a table of what each one restores, how it captures it, and what
-  restore-wss should take or reject. At minimum it must cover: X11 session management (XSMP,
-  `ksmserver`, `xfce4-session`, `lxsession`) and why GNOME dropped session saving; the Wayland
-  session-management protocol work and whether Mutter implements any of it yet; KDE Plasma 6's
-  session restore on Wayland; KDE Activities and this repo's own `gnome-tasks`; GNOME extensions
-  in this space (Auto Move Windows and the various "save/restore window position" extensions);
-  `tmux-resurrect`/`tmux-continuum`, which is the closest prior art for the command-line half,
-  including its process-whitelist model; CRIU, as the "actually checkpoint the processes" approach
-  and why it is not the answer here; per-app self-restore (browsers, VS Code/Codium, LibreOffice);
-  and macOS/Windows equivalents for the interaction model.
-- **`docs/state-schema.md`** — the snapshot and config format, versioning and migration rules.
-- **`docs/capture-sources.md`** — every source used to answer "what is this window showing?" and
-  "what is this terminal running?", with its confidence tier and its failure modes.
-- **`docs/limitations.md`** — the honest list of what cannot be restored (unsaved buffers, shell
-  history and in-process state, interactive TUI state, anything behind a login).
+- `docs/similar-tools.md` — the prior-art study described above. This is the first deliverable, and
+  its conclusions are allowed to change the rest of the plan.
+- `docs/state-schema.md` — the `session.json` and `config.toml` formats, versioning and migration.
+- `docs/app-adapters.md` — the tier model, the adapter interface, and how to add an app; one worked
+  example per tier (a plain GTK app, LibreOffice, Codium, a terminal).
+- `docs/limitations.md` — the honest list of what cannot be restored and why: unsaved buffers,
+  scroll positions, shell history and in-shell state, `sudo` sessions, anything behind a login.
 
 ## Approach
 
-Sequenced so the research that could invalidate the design happens first, and so each milestone
-leaves something usable on its own.
+Sequenced so the research that could invalidate the design comes first, and so each milestone
+leaves something a person can actually use.
 
-1. **M0 — Prior art and probe.** Write `similar-tools-research.md`. In parallel build
-   `tools/probe.py`, which dumps everything reachable about the current session (processes,
-   `/proc` fds and cwds, pty foreground groups, NetworkManager active connections) and a throwaway
-   Shell extension that logs window/workspace facts. Deliverable: knowledge, plus a go/no-go on
-   each capture source.
-2. **M1 — Skeleton.** Flake, lint, test runner, CI green on a tool that only writes and reads back
-   an empty snapshot. A green baseline before behaviour lands.
-3. **M2 — Capture and restore apps.** App ids and documents from the high/medium-confidence
-   sources; `restore` launches them; no workspace placement yet. First genuinely useful version.
-4. **M3 — Workspaces.** The companion extension, the D-Bus surface, window→workspace capture, and
-   placement on restore including launch-to-window matching.
-5. **M4 — Terminals and commands.** Process-tree walk, cwd/cmdline capture, the consent model, and
-   per-emulator restore.
-6. **M5 — VPN.** NetworkManager capture and restore, systemd-unit VPNs, the secrets prompt.
-7. **M6 — Polish.** Reviewable restore UI and the question flow, exclusions, systemd units,
-   `restore-wss enable`, README, screenshots, `docs/limitations.md`.
+1. **M0 — Prior art + probe.** Write `docs/similar-tools.md`. In parallel, build a throwaway probe
+   extension that dumps every reachable window property and a `/proc` walker for a realistic
+   desktop (LibreOffice, Codium, GNOME Terminal with an ssh and a `claude` session, a Flatpak app),
+   and check the current state of `xx_session_management_v1` in the installed Mutter. Deliverable:
+   knowledge, fixtures, and a go/no-go on the tier-1 sources.
+2. **M1 — Skeleton.** Flake, test runner, CI green, daemon and extension that do nothing but talk
+   to each other over D-Bus, and `restore-wss status` printing an empty session.
+3. **M2 — Capture and snapshot.** Window inventory per workspace, atomic writes to
+   `~/.restore-wss/state/session.json`, the schema, `save`/`status`/`diff`. Verified by killing the
+   daemon mid-write and checking the snapshot is still readable.
+4. **M3 — Restore, apps only.** Launch apps, recreate workspaces, place windows, token matching,
+   idempotency. First genuinely useful version.
+5. **M4 — Documents (tier 1).** Adapter framework plus adapters for the apps M0 showed to be
+   tractable, with confidence scoring.
+6. **M5 — Terminals and commands.** Process-tree capture, cwd, redaction, the whitelist policy, and
+   the confirmation gate.
+7. **M6 — VPN.** NetworkManager first, then the non-NM detectors.
+8. **M7 — Review UX, login integration, README, screenshots, `docs/limitations.md`.**
 
-Testing, per the repo's tests-first rule, splits three ways: snapshot schema, migration, plan
-building, confidence scoring, consent matching and process-tree analysis are pure logic tested
-against recorded fixtures (captured `/proc` trees and `nmcli` output) and run headless in CI; the
-D-Bus surfaces are tested against a private bus with `dbus-run-session`; and real capture/restore
-against a live GNOME session is a manual smoke test, recorded in `STATUS.md`, unless a nested
-headless Shell turns out to be runnable on the CI runners.
+Per the repo's tests-first rule the suite splits three ways: snapshot schema, migration, window
+matching, monitor remapping, redaction, command policy and confidence scoring are pure logic tested
+against fixtures; the daemon's D-Bus surface is tested on a private bus with `dbus-run-session`;
+and full capture/restore is a manual smoke test whose result is recorded in `STATUS.md`, with a
+nested headless Shell attempted in CI but treated as a risk rather than a plan.
 
 ## Risks / things to verify early
 
-- **Tests must never touch the real desktop.** A capture-and-restore tool that runs its own smoke
-  test can launch apps, switch workspaces, write `dconf` and bring a VPN up or down on the
-  developer's actual machine. `dbus-run-session` alone does *not* isolate `dconf`. Every test
-  runs with `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME` and `XDG_RUNTIME_DIR` pointed at a
-  temporary directory, and anything that would spawn a process or change network state is behind
-  an injected executor that is stubbed by default. Verify this before the first capture test.
-- **Wayland geometry control.** Whether Mutter honours `move_resize_frame()` for Wayland clients
-  from an extension is the main assumption in M3. If it only holds for XWayland, placement
-  degrades to workspace-only and `docs/limitations.md` says so.
-- **Single-instance and Electron apps** hand a second launch to an existing process, producing no
-  new window and no usable activation token — expect per-app handling and a matching fallback on
-  app id and PID within a time window.
-- **Snapshot freshness vs. write churn.** Too long an interval loses the last minutes of work; too
-  short thrashes the disk and records transient states (an app mid-launch, a window mid-drag). The
-  interval and the debounce need to be measured, not guessed, and a snapshot taken while the
-  session was tearing down must be rejected as unsane.
-- **Dynamic workspaces and changed monitors.** GNOME's workspace count varies with use, and a
-  monitor may have been unplugged since capture; workspaces must be restored by index with
-  creation as needed, and monitors identified by connector/EDID with a documented fallback.
-- **`/proc` inspection is best-effort.** Open fds do not always name the document (memory-mapped
-  or re-created files), `cwd` may have been changed since launch, and a flatpak or snap app's
-  paths are namespaced. Each of these needs an explicit answer in `docs/capture-sources.md`.
-- **Replaying commands is the sharpest edge in this tool.** Consent-first is the mitigation; it
-  must not be softened into "remember everything and just run it" for convenience.
+- **Window identity across a reboot.** There is no stable window ID, so matching a saved slot to a
+  newly appeared window is heuristic. `smart-auto-move`'s `wm_class` + title-histogram approach is
+  the reference; expect it to mismatch when several windows of the same app are open, and design
+  the review step so a mismatch is correctable rather than silent.
+- **Single-instance, Flatpak and Electron apps.** A second launch handed to an existing process
+  produces no new window and no usable activation token, and Flatpak sandboxing hides `/proc` of
+  the app from us. These need per-app handling and may cap out at tier 0.
+- **Terminals are the hard case and the most valuable one.** Which process is "the" foreground one,
+  what a multi-tab terminal looks like from outside, and whether the terminal emulator can even be
+  told to open N tabs with N different cwds and commands all vary per emulator. Verify against the
+  emulator actually in use before promising multi-tab restore.
+- **Replaying commands is the sharpest edge in the whole idea.** The whitelist default, redaction,
+  and the confirmation gate exist because a stored `cmdline` is untrusted input that was captured
+  without the user thinking about it. Anything that weakens those three needs to be a deliberate
+  user choice.
+- **VPN reconnection may be impossible unattended** — credentials, 2FA and captive portals. Report
+  clearly instead of retrying blindly.
+- **Wayland geometry control.** Whether Mutter honours `move_resize_frame()` for all Wayland
+  clients from an extension is the main assumption in M3; if it holds only for some, placement
+  degrades to workspace + monitor and `docs/limitations.md` says so.
+- **Unclean shutdown is the normal case, not the edge case.** The snapshot cadence has to be
+  frequent enough that "as they were before the power off" is true, and cheap enough not to hurt
+  battery or SSD. Measure it.
+- **Overlap with idea 2 (`gnome-tasks`).** Capture, placement, adapters and the extension/daemon
+  split are nearly the same machinery for a different purpose. Building both independently means
+  writing it twice — see the first open question.
 
 ## Open Questions
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] How should restore-wss relate to `gnome-tasks` (idea 2)? They need almost the same capture layer (windows, workspaces, documents, terminals) and both want a GNOME Shell extension. Options: build restore-wss standalone and accept the duplication; build it as a consumer of gnome-tasks' `org.gnome.Tasks` daemon; or keep them separate now and extract a shared library later. `AGENTS.md` forbids touching another idea's folder, so this decides whether restore-wss can depend on gnome-tasks at all.
-- [ ] Should restore happen automatically at login, or only when the user runs `restore-wss restore`? Automatic is what "restore the workspaces as they were" implies, but it means launching apps and possibly re-running commands before anyone has confirmed anything. Proposed default: automatic restore of the app/document/workspace/VPN parts, with commands and low-confidence items collected into a prompt shown once the session is up — is that the wanted behaviour?
-- [ ] Is a GNOME Shell extension acceptable as a required companion component? Without one there is no way to know or set which workspace a window is on under Wayland; with one, the tool needs an install step beyond a package. If it is not acceptable, is "everything except workspace placement" an acceptable definition of done?
-- [ ] Which terminal emulator(s) must be supported for command-line restore, and is it acceptable that a terminal is restored as *a fresh terminal in the right directory running the recorded command*, with scrollback, shell history and in-process state lost? Should multi-tab/multi-pane terminals restore their tab layout, or is one tab per recorded command enough?
-- [ ] For VPNs, is restoring **only NetworkManager-managed connections** enough for now, with `wg-quick@`/`openvpn@` systemd units as a stretch? And when a connection needs a password or OTP that is not in the keyring, should restore-wss prompt at restore time, or just report "VPN X was active, reconnect it yourself"?
-- [ ] How aggressive should document restore be for apps that already restore their own session (Codium, LibreOffice, browsers)? Letting the app do it risks restoring a *different* set than was open; forcing documents risks opening everything twice. Which default, and should it be per-app configurable from the start?
-- [ ] What does the tool do when the user is *already* logged in with windows open and asks to restore — merge into the current session, refuse, or restore only the missing items? This also decides what happens if a restore is interrupted halfway and re-run.
-- [ ] How is "done" verified given CI has no graphical session? Is unit-tests-plus-lint CI plus a manual smoke test recorded in `STATUS.md` acceptable, or must a nested headless GNOME Shell be made to work on the runners first?
+- [ ] How should `restore-wss` relate to `gnome-tasks` (idea 2)? They need the same window-capture
+      extension, the same app adapters and the same placement logic, differing mainly in what
+      triggers a restore (a reboot versus a task switch). Options: (a) build `restore-wss`
+      standalone and accept the duplication, (b) build it as a client of the `gnome-tasks` daemon,
+      treating "the session at shutdown" as an implicit task, (c) extract the shared capture/restore
+      core into a component both use. Which?
+- [ ] Should restore happen automatically at the first login after a reboot, or only when the user
+      runs `restore-wss restore` (or clicks a notification)? Automatic is what "restore the
+      workspaces" literally asks for, but it launches a dozen apps and possibly commands
+      unattended, which is a lot to do to someone who just wanted to check their email.
+- [ ] Is the command re-run policy right? The plan defaults to `whitelist` — reopen every terminal
+      at its correct working directory, but only re-execute commands whose program is on an
+      allow-list (`ssh`, `claude`, editors, …), offering the rest in the review step. Is that the
+      wanted default, or should captured commands always be re-run, or never?
+- [ ] Which VPN setups actually need supporting on this machine — NetworkManager connections only,
+      or also `wg-quick`, `tailscale`, or an `openvpn`/`openconnect` invocation? Supporting only NM
+      is a fraction of the work.
+- [ ] What should the interactive review look like: a terminal TUI (fine when the user runs
+      `restore` themselves, wrong for an automatic login restore), a GTK/libadwaita dialog, or a
+      GNOME notification that opens one? This follows from the automatic-versus-manual answer.
+- [ ] Should only the latest snapshot be kept, or a short history the user can restore from
+      ("yesterday morning's workspaces"), and should the user be able to save a snapshot under a
+      name and restore it deliberately? History is cheap to store but adds a whole selection UX.
+- [ ] What is the daemon written in? The extension must be GJS (compositor access), but the daemon
+      does `/proc` parsing, D-Bus and NetworkManager work where Python 3 + PyGObject is the boring,
+      well-supported choice. The alternative is GJS everywhere so the two halves share code — which
+      also matters for the first question above. Preference?
+- [ ] Does "restore the workspaces as they were" include restoring the *desktop-level* state around
+      them — workspace names, which workspace was active, and window stacking/focus order — or only
+      which apps are where? The plan captures active workspace and stacking but treats names and
+      exact focus order as best-effort.
