@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gortazar/recap/internal/claude"
+	"github.com/gortazar/recap/internal/opencode"
 	"github.com/gortazar/recap/internal/proc"
 	"github.com/gortazar/recap/internal/render"
 	"github.com/gortazar/recap/internal/report"
@@ -31,6 +32,8 @@ Flags:
 type Env struct {
 	// ClaudeProjects is Claude Code's store, ~/.claude/projects by default.
 	ClaudeProjects string
+	// OpencodeStore is opencode's SQLite store.
+	OpencodeStore string
 	// ProcRoot is the process table, /proc by default.
 	ProcRoot string
 	// Roots limits which projects are reported. Empty means the user's home directory.
@@ -47,6 +50,7 @@ func DefaultEnv() Env {
 	}
 	return Env{
 		ClaudeProjects: claude.DefaultProjectsDir(),
+		OpencodeStore:  opencode.DefaultStore(),
 		ProcRoot:       proc.DefaultRoot,
 		Roots:          roots,
 		Now:            time.Now,
@@ -129,11 +133,20 @@ func RunWith(args []string, stdout, stderr io.Writer, env Env) int {
 		filters.Agent = a
 	}
 
-	sessions, err := claude.Discover(env.ClaudeProjects)
+	// One agent's store being unreadable must not cost you the other's sessions, so each
+	// failure is reported and the report is built from whatever was readable.
+	var sessions []*session.Session
+	claudeSessions, err := claude.Discover(env.ClaudeProjects)
 	if err != nil {
 		fmt.Fprintln(stderr, "recap: reading Claude Code sessions:", err)
-		return 1
 	}
+	sessions = append(sessions, claudeSessions...)
+
+	opencodeSessions, err := opencode.Discover(env.OpencodeStore)
+	if err != nil {
+		fmt.Fprintln(stderr, "recap: reading opencode sessions:", err)
+	}
+	sessions = append(sessions, opencodeSessions...)
 
 	procs, supported := proc.Scan(env.ProcRoot)
 	live := proc.NewIndex(procs, supported)

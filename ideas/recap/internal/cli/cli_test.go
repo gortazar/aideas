@@ -2,12 +2,15 @@ package cli
 
 import (
 	"bytes"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 var now = time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
@@ -120,6 +123,47 @@ func TestProjectFilter(t *testing.T) {
 	_, stdout, _ := run(t, env, "-project", "alpha")
 	if strings.Contains(stdout, "beta") || !strings.Contains(stdout, "alpha") {
 		t.Errorf("--project alpha printed the wrong thing:\n%s", stdout)
+	}
+}
+
+// opencodeStore builds a store from the opencode package's own fixtures, so there is one
+// copy of them and the CLI is exercised against the schema the real agent writes.
+func opencodeStore(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "opencode.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, f := range []string{"schema.sql", "states.sql"} {
+		body, err := os.ReadFile(filepath.Join("..", "opencode", "testdata", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(string(body)); err != nil {
+			t.Fatalf("loading %s: %v", f, err)
+		}
+	}
+	return path
+}
+
+func TestBothAgentsAreReportedTogether(t *testing.T) {
+	env := testEnv(t)
+	env.OpencodeStore = opencodeStore(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/claude-only", "s1", time.Hour)
+
+	_, stdout, stderr := run(t, env, "-all")
+	if !strings.Contains(stdout, "claude-only (Claude Code)") {
+		t.Errorf("Claude session missing:\n%s\n%s", stdout, stderr)
+	}
+	if !strings.Contains(stdout, "(opencode)") {
+		t.Errorf("opencode sessions missing:\n%s\n%s", stdout, stderr)
+	}
+
+	_, stdout, _ = run(t, env, "-all", "-agent", "opencode")
+	if strings.Contains(stdout, "claude-only") {
+		t.Errorf("--agent opencode still printed a Claude session:\n%s", stdout)
 	}
 }
 
