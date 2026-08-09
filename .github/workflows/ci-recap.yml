@@ -23,4 +23,6 @@ jobs:
       - uses: cachix/install-nix-action@v27
         with:
           extra_nix_config: "experimental-features = nix-command flakes"
-      - run: nix flake check
+      # --print-build-logs so a failing `go test` shows its output in the job log
+      # instead of just "builder failed with exit code 1".
+      - run: nix flake check --print-build-logs
