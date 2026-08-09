@@ -79,6 +79,22 @@ func TestVerboseAddsALinePerSession(t *testing.T) {
 	}
 }
 
+// A session that never said where it ran is grouped under the escaped store directory it
+// came from, which is far too long for a column. Its tail is the part worth keeping.
+func TestOverlongProjectNamesAreCutFromTheFront(t *testing.T) {
+	sessions := []*session.Session{{
+		ID:           "bad",
+		Agent:        session.AgentClaude,
+		Source:       "/home/user/.claude/projects/-tmp-claude-scratchpad-repo-orchestrator-worktrees-beta-ideas-beta/bad.jsonl",
+		Unreadable:   "no recognisable records",
+		LastActivity: ago(time.Hour),
+	}}
+	got := render(t, report.Build(sessions, fakeLive{}, now), Options{Now: now})
+	if !strings.Contains(got, "…-orchestrator-worktrees-beta-ideas-beta (Claude Code)") {
+		t.Errorf("long project name was not cut from the front:\n%s", got)
+	}
+}
+
 func TestEmptyReportSaysSoOnStderrNotStdout(t *testing.T) {
 	got := render(t, nil, Options{Now: now})
 	if got != "" {

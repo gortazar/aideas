@@ -2,43 +2,172 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
-func run(t *testing.T, args ...string) (code int, stdout, stderr string) {
+var now = time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+
+// transcript writes the smallest Claude Code transcript recap can make sense of: a request
+// and an answer, in a project directory, at a given age.
+func transcript(t *testing.T, store, projectDir, id string, age time.Duration) {
+	t.Helper()
+	dir := filepath.Join(store, strings.ReplaceAll(projectDir, "/", "-"))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ts := now.Add(-age).UTC().Format(time.RFC3339)
+	body := fmt.Sprintf(`{"type":"user","sessionId":%q,"cwd":%q,"gitBranch":"main","version":"2.1.0","timestamp":%q,"message":{"role":"user","content":[{"type":"text","text":"Run the suite"}]}}
+{"type":"assistant","sessionId":%q,"cwd":%q,"timestamp":%q,"message":{"role":"assistant","model":"claude-opus-5","content":[{"type":"text","text":"All green."}]}}
+`, id, projectDir, ts, id, projectDir, ts)
+	if err := os.WriteFile(filepath.Join(dir, id+".jsonl"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// testEnv is a machine with a Claude store, no readable process table and no root limit.
+func testEnv(t *testing.T) Env {
+	t.Helper()
+	return Env{
+		ClaudeProjects: t.TempDir(),
+		ProcRoot:       filepath.Join(t.TempDir(), "no-proc-here"),
+		Now:            func() time.Time { return now },
+	}
+}
+
+func run(t *testing.T, env Env, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
 	var out, errb bytes.Buffer
-	code = Run(args, &out, &errb)
+	code = RunWith(args, &out, &errb, env)
 	return code, out.String(), errb.String()
 }
 
-func TestNoArgsSucceedsQuietly(t *testing.T) {
-	code, stdout, stderr := run(t)
+func TestReportsOneLinePerProject(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Hour)
+	transcript(t, env.ClaudeProjects, "/home/user/git/beta", "s2", 30*time.Minute)
+
+	code, stdout, stderr := run(t, env)
 	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+		t.Fatalf("exit %d (stderr: %s)", code, stderr)
 	}
+	lines := strings.Split(strings.TrimSuffix(stdout, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("got %d lines, want 2:\n%s", len(lines), stdout)
+	}
+	if !strings.Contains(lines[0], "beta") {
+		t.Errorf("first line is not the most recent project:\n%s", stdout)
+	}
+	if !strings.Contains(lines[0], "(Claude Code)") {
+		t.Errorf("line does not name the agent:\n%s", stdout)
+	}
+}
+
+// Without a readable process table recap cannot claim a quiet session is merely idle.
+func TestUnknownLivenessIsReportedAsUnclear(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Hour)
+
+	_, stdout, _ := run(t, env, "-no-icons")
+	if !strings.HasPrefix(stdout, "unclear") {
+		t.Errorf("want an unclear status without a process table, got:\n%s", stdout)
+	}
+}
+
+func TestSinceWindowHidesOlderSessions(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", 40*time.Hour)
+
+	_, stdout, stderr := run(t, env)
 	if stdout != "" {
-		t.Errorf("stdout = %q, want empty", stdout)
+		t.Errorf("stdout = %q, want nothing outside the default 24h window", stdout)
+	}
+	if !strings.Contains(stderr, "nothing to report") {
+		t.Errorf("stderr = %q, want an explanation", stderr)
+	}
+
+	if _, stdout, _ = run(t, env, "-all"); !strings.Contains(stdout, "alpha") {
+		t.Errorf("--all did not bring the old session back:\n%s", stdout)
+	}
+	if _, stdout, _ = run(t, env, "-since", "2d"); !strings.Contains(stdout, "alpha") {
+		t.Errorf("--since 2d did not bring the old session back:\n%s", stdout)
+	}
+}
+
+func TestRootsHideProjectsOutsideThem(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Hour)
+	transcript(t, env.ClaudeProjects, "/tmp/scratch", "s2", time.Hour)
+
+	_, stdout, _ := run(t, env, "-root", "/home/user/git")
+	if strings.Contains(stdout, "scratch") {
+		t.Errorf("a session outside the root was reported:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "alpha") {
+		t.Errorf("the session inside the root was not reported:\n%s", stdout)
+	}
+}
+
+func TestProjectFilter(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Hour)
+	transcript(t, env.ClaudeProjects, "/home/user/git/beta", "s2", time.Hour)
+
+	_, stdout, _ := run(t, env, "-project", "alpha")
+	if strings.Contains(stdout, "beta") || !strings.Contains(stdout, "alpha") {
+		t.Errorf("--project alpha printed the wrong thing:\n%s", stdout)
+	}
+}
+
+func TestBadFlagValuesFailWithAMessage(t *testing.T) {
+	env := testEnv(t)
+	for _, args := range [][]string{
+		{"-since", "yesterday"},
+		{"-agent", "cursor"},
+		{"-nope"},
+	} {
+		code, _, stderr := run(t, env, args...)
+		if code == 0 {
+			t.Errorf("%v: exit 0, want non-zero", args)
+		}
+		if stderr == "" {
+			t.Errorf("%v: no message on stderr", args)
+		}
+	}
+}
+
+func TestLegendExplainsTheVocabulary(t *testing.T) {
+	code, stdout, _ := run(t, testEnv(t), "-legend")
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	for _, word := range []string{"running", "waiting", "idle", "interrupted", "finished", "unclear"} {
+		if !strings.Contains(stdout, word) {
+			t.Errorf("legend does not mention %q:\n%s", word, stdout)
+		}
 	}
 }
 
 func TestHelpGoesToStdout(t *testing.T) {
-	code, stdout, _ := run(t, "--help")
+	code, stdout, _ := run(t, testEnv(t), "--help")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	if !strings.Contains(stdout, "recap") {
-		t.Errorf("--help output does not mention recap: %q", stdout)
+	if !strings.Contains(stdout, "recap") || !strings.Contains(stdout, "-since") {
+		t.Errorf("--help output is not the usage text: %q", stdout)
 	}
 }
 
-func TestUnknownFlagFails(t *testing.T) {
-	code, _, stderr := run(t, "--nope")
-	if code == 0 {
-		t.Fatalf("exit code = 0, want non-zero for an unknown flag")
-	}
-	if stderr == "" {
-		t.Errorf("unknown flag produced no message on stderr")
+func TestVerboseAddsSessionLines(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Hour)
+
+	_, stdout, _ := run(t, env, "-v")
+	if !strings.Contains(stdout, "s1") || !strings.Contains(stdout, "1h ago") {
+		t.Errorf("-v did not add a session line:\n%s", stdout)
 	}
 }

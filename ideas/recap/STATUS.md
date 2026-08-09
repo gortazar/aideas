@@ -36,8 +36,9 @@ wanted Rust and it will be swapped while the code is still small.
       surviving unreadable ones
 - [x] M4b — grouping into one line per project (busiest session leads) and rendering it:
       icons, `--no-icons` word column, `--legend`, `-v` session lines, human ages
-- [ ] M4c — CLI wiring and the filter flags (`--since`, `--all`, `--agent`, `--project`,
-      `--running`, project roots)
+- [x] M4c — CLI wiring and the filter flags: `--since` (default 24h, understands days),
+      `--all`, `--agent`, `--project`, `--running`, `--root` (default: your home), plus
+      `--legend`, `--no-icons`, `-v`. Runs against the real store in 0.17s
 - [ ] M5 — opencode reader
 - [ ] M6 — `--json`, `-v`, caching, config file, README screenshot
 - [ ] M7 — `--smart`: the same sentence written by a model, for when the heuristic one
@@ -47,5 +48,4 @@ Difficulty estimate: medium — unchanged. The formats turned out to be readable
 carry more structure than feared (opencode in particular has `title`, `agent`, `model` and
 a todo list as columns), so the risk is concentrated in the status rules and liveness.
 
-Next: M4c — wire it together in the CLI: read the real store, scan the real process
-table, and add the filter flags.
+Next: M5 — the opencode reader, behind the same interface, against its SQLite store.

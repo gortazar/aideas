@@ -29,15 +29,29 @@ func Sentence(s *Session, st Status) string {
 	return fmt.Sprintf("Asked to %q — %s.", was, now)
 }
 
+// minRequest is the length below which a request says nothing useful. "Yes", "go on" and
+// "continue" are real requests, but as a recap line they are worse than the session's title.
+const minRequest = 12
+
 // requestClause picks what the session was asked to do. The most recent request is the most
-// informative; the agent's own title and the opening request are the fallbacks.
+// informative; the agent's own title and the opening request are the fallbacks, and they
+// also stand in when the last request was a one-word nudge.
 func requestClause(s *Session) string {
-	for _, candidate := range []string{s.LastRequest, s.Title, s.FirstRequest} {
-		if c := trimToClause(candidate); c != "" {
+	candidates := []string{s.LastRequest, s.Title, s.FirstRequest}
+	var first string
+	for _, candidate := range candidates {
+		c := trimToClause(candidate)
+		if c == "" {
+			continue
+		}
+		if len([]rune(c)) >= minRequest {
 			return c
 		}
+		if first == "" {
+			first = c
+		}
 	}
-	return ""
+	return first
 }
 
 func nowClause(s *Session, st Status) string {
@@ -128,6 +142,10 @@ func trimToClause(text string) string {
 		}
 	}
 	text = strings.TrimSpace(text)
+
+	// Trailing punctuation left by the cut, or by the way the request was written, reads as
+	// a typo in the middle of the sentence recap builds around it.
+	text = strings.TrimRight(text, " .,;:-")
 
 	runes := []rune(text)
 	if len(runes) <= maxRequest {

@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -377,16 +378,12 @@ func isInterruptMarker(text string) bool {
 	return strings.HasPrefix(text, "[Request interrupted")
 }
 
-// isPlumbing recognises the synthetic user turns Claude Code writes for slash commands,
-// hooks and caveats. They start with an XML-ish tag, which no ordinary request does.
+// plumbingTag matches the XML-ish opening tag that Claude Code wraps its synthetic user
+// turns in: slash commands, hook output, caveats, task notifications. The list of tags keeps
+// growing between releases, so recap recognises the shape rather than the names — no
+// request a person types starts with a tag.
+var plumbingTag = regexp.MustCompile(`^<[a-zA-Z][a-zA-Z0-9_-]*>`)
+
 func isPlumbing(text string) bool {
-	for _, tag := range []string{
-		"<command-name>", "<command-message>", "<local-command-",
-		"<user-prompt-submit-hook>", "<system-reminder>", "<session-start-hook>",
-	} {
-		if strings.HasPrefix(text, tag) {
-			return true
-		}
-	}
-	return false
+	return plumbingTag.MatchString(text)
 }

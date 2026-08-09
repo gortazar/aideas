@@ -118,6 +118,29 @@ func TestSyntheticUserTurnsAreNotRequests(t *testing.T) {
 
 // A transcript recap cannot make sense of must still produce a session, so one bad file
 // cannot hide the good ones.
+// The set of tags Claude Code wraps synthetic turns in keeps growing between releases, so
+// recap recognises the shape rather than a list of names.
+func TestAnyXMLTagAtTheStartOfAUserTurnIsPlumbing(t *testing.T) {
+	for _, text := range []string{
+		"<command-name>/usage</command-name>",
+		"<task-notification>idea 7 stopped</task-notification>",
+		"<some-future-tag>whatever</some-future-tag>",
+	} {
+		if !isPlumbing(text) {
+			t.Errorf("%q was not recognised as plumbing", text)
+		}
+	}
+	for _, text := range []string{
+		"<- this arrow starts a real sentence",
+		"Compare a < b in the parser",
+		"3 < 4 is true",
+	} {
+		if isPlumbing(text) {
+			t.Errorf("%q was wrongly treated as plumbing", text)
+		}
+	}
+}
+
 func TestUnparseableSessionDegradesGracefully(t *testing.T) {
 	s := read(t, "stub.jsonl")
 	if s.Unreadable == "" {

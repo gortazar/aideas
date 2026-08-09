@@ -32,7 +32,7 @@ func Text(w io.Writer, projects []report.Project, opts Options) error {
 		if opts.NoIcons {
 			mark = fmt.Sprintf("%-*s", width, p.Status().Word())
 		}
-		if _, err := fmt.Fprintf(w, "%s %s (%s) -> %s\n", mark, p.Name, agentList(p.Agents), p.Lead.Sentence); err != nil {
+		if _, err := fmt.Fprintf(w, "%s %s (%s) -> %s\n", mark, shortName(p.Name), agentList(p.Agents), p.Lead.Sentence); err != nil {
 			return err
 		}
 		if !opts.Verbose {
@@ -92,6 +92,19 @@ func Age(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
+}
+
+// maxName bounds the project column. Real project names are short; the long ones are the
+// escaped store directory a session that never said where it ran fell back to, and their
+// tail is the informative end.
+const maxName = 40
+
+func shortName(name string) string {
+	r := []rune(name)
+	if len(r) <= maxName {
+		return name
+	}
+	return "…" + string(r[len(r)-maxName+1:])
 }
 
 func agentList(agents []session.Agent) string {

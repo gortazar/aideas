@@ -120,6 +120,28 @@ func TestSentence(t *testing.T) {
 			want: `Interrupted mid-Bash.`,
 		},
 		{
+			name: "a one-word nudge is not a useful recap, so the title stands in",
+			s: Session{
+				LastRequest: "Yes",
+				Title:       "Rework the CI workflow",
+				Tail:        TailAssistantText,
+			},
+			st:   StatusIdle,
+			want: `Asked to "Rework the CI workflow" — done for now, nothing running.`,
+		},
+		{
+			name: "a one-word nudge is still better than nothing",
+			s:    Session{LastRequest: "Yes", Tail: TailAssistantText},
+			st:   StatusIdle,
+			want: `Asked to "Yes" — done for now, nothing running.`,
+		},
+		{
+			name: "punctuation left dangling by the writer is trimmed",
+			s:    Session{LastRequest: "Check the realtime overview ..", Tail: TailAssistantText},
+			st:   StatusIdle,
+			want: `Asked to "Check the realtime overview" — done for now, nothing running.`,
+		},
+		{
 			name: "the agent's own title stands in for a missing request",
 			s:    Session{Title: "Wire up the GNOME extension", Tail: TailAssistantText},
 			st:   StatusIdle,
