@@ -23,7 +23,8 @@ wanted Rust and it will be swapped while the code is still small.
       records recap keys on, and what invalidates the status rules
 - [x] M1 — skeleton: flake (dev shell, `nix build`, `nix flake check` running `go test` +
       gofmt), Go module, `recap` binary that exits 0, CI wired to the real test command
-- [ ] M2a — Claude Code reader: tail-read a session JSONL into a domain Session
+- [x] M2a — Claude Code reader: tail-read a session JSONL into a domain Session,
+      against six scrubbed fixtures covering the tail shapes seen in the real store
 - [ ] M2b — status classification rules over fixtures
 - [ ] M2c — recap sentence assembly
 - [ ] M3 — liveness detection behind a seam
@@ -35,5 +36,5 @@ Difficulty estimate: medium — unchanged. The formats turned out to be readable
 carry more structure than feared (opencode in particular has `title`, `agent`, `model` and
 a todo list as columns), so the risk is concentrated in the status rules and liveness.
 
-Next: M2a — a Claude Code reader that tail-reads one session's JSONL into a domain Session,
-against a committed scrubbed fixture.
+Next: M2b — the status rules that turn a transcript tail plus liveness into one of
+running / awaiting input / interrupted / idle / finished / unknown.

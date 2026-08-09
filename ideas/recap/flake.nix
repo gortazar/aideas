@@ -18,7 +18,6 @@
           fileset = fileset.unions [
             ./cmd
             ./internal
-            ./testdata
             ./go.mod
           ];
         };

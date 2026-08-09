@@ -66,6 +66,19 @@ recursion in v1, so sidechain records are ignored when picking the last event.
 | model | `message.model` on `assistant` records |
 | branch | `gitBranch` |
 
+### Fixtures
+
+`tools/scrub-claude-fixture.py` derives the fixtures in `internal/claude/testdata/` from real
+transcripts. It is **not** reproducible: the source sessions are live and keep growing, so
+re-running it produces different content and will break the expectations pinned in the tests.
+It is there to record *how* a fixture was made and to make new ones, not to regenerate the
+existing ones. `tool-result-tail.jsonl` was additionally truncated at its last `tool_result`,
+because no live session happened to end on one.
+
+No session on this machine has ever used `TodoWrite`, so there is no recorded fixture for the
+"3 of 7 done" progress marker on the Claude side; opencode's `todo` table is the source that
+does exist.
+
 ### Empty / stub sessions
 
 A file with a single unparseable or typeless line exists in the store (a stub written by
