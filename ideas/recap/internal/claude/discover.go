@@ -1,0 +1,69 @@
+package claude
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/gortazar/recap/internal/session"
+)
+
+// DefaultProjectsDir is where Claude Code keeps one directory per project.
+func DefaultProjectsDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".claude", "projects")
+}
+
+// Discover reads every session under a ~/.claude/projects-shaped directory.
+//
+// The directory names there are the project paths with the separators replaced, which is not
+// reversible — `-home-user-a-b` could be a/b or a-b — so recap never inverts them. Each
+// session's real working directory is read from the transcript instead.
+//
+// A missing directory is not an error: it just means this agent was never used here.
+func Discover(projectsDir string) ([]*session.Session, error) {
+	if projectsDir == "" {
+		return nil, nil
+	}
+	projects, err := os.ReadDir(projectsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var sessions []*session.Session
+	for _, project := range projects {
+		if !project.IsDir() {
+			continue
+		}
+		dir := filepath.Join(projectsDir, project.Name())
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			continue // a project directory we cannot read tells us nothing; skip it
+		}
+		for _, f := range files {
+			if f.IsDir() || !strings.HasSuffix(f.Name(), ".jsonl") {
+				continue
+			}
+			path := filepath.Join(dir, f.Name())
+			s, err := ReadSession(path)
+			if err != nil {
+				// Report it rather than dropping it: a session recap cannot open is
+				// exactly the kind of thing the user wants to hear about.
+				s = &session.Session{
+					Agent:      session.AgentClaude,
+					ID:         strings.TrimSuffix(f.Name(), ".jsonl"),
+					Source:     path,
+					Unreadable: err.Error(),
+				}
+			}
+			sessions = append(sessions, s)
+		}
+	}
+	return sessions, nil
+}
