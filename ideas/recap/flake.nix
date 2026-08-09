@@ -19,6 +19,7 @@
             ./cmd
             ./internal
             ./go.mod
+            ./go.sum
           ];
         };
 
@@ -26,9 +27,9 @@
         pname = "recap";
         version = "0.1.0";
         src = sourceFor pkgs;
-        # Stdlib-only so far. When the opencode reader lands (it needs a SQLite driver)
-        # this becomes a real vendorHash.
-        vendorHash = null;
+        # modernc.org/sqlite and its dependencies, for reading opencode's store. Update
+        # this hash whenever go.sum changes: `nix build` prints the one it wanted.
+        vendorHash = "sha256-5WaCZ29wuU/aP05IBHTM0WhELYrYoerGlIS3QxoXL5o=";
         ldflags = [ "-s" "-w" ];
         meta = {
           description = "One-line recap of what every local coding agent session was doing";
@@ -45,6 +46,8 @@
             gotools # goimports
             sqlite # for poking at opencode.db by hand
             jq
+            python3 # tools/scrub-*-fixture.py and tools/demo-store.py
+            charm-freeze # tools/screenshot.sh renders the README screenshot
           ];
           shellHook = ''
             echo "recap dev shell — go test ./... | go build ./cmd/recap"

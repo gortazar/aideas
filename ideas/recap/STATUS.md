@@ -41,8 +41,18 @@ wanted Rust and it will be swapped while the code is still small.
 - [x] M4c — CLI wiring and the filter flags: `--since` (default 24h, understands days),
       `--all`, `--agent`, `--project`, `--running`, `--root` (default: your home), plus
       `--legend`, `--no-icons`, `-v`. Runs against the real store in 0.17s
-- [ ] M5 — opencode reader
-- [ ] M6 — `--json`, `-v`, caching, config file, README screenshot
+- [x] M5 — opencode reader: the same domain type out of its SQLite store, read-only,
+      against a scrubbed dump of the real store plus hand-written rows for the states this
+      machine never produced; wired into the CLI alongside Claude Code
+- [x] M6a — `--json`: a versioned document (schema version 1) with a project entry per
+      line of the text report and a session entry under each, plus a `liveness` field so a
+      consumer knows whether an unclear status means 'no process table'
+- [x] M6b — config file at ~/.config/recap/config.toml: `since`, `roots`, `ignore`,
+      `icons` and an `[icon]` table of per-status glyphs, with flags taking precedence and
+      a mistake in the file reported with its line number
+- [x] M6c — cache parsed sessions on file size + mtime under ~/.cache/recap, with
+      `--no-cache` to bypass it: 156ms cold, 11ms warm on this machine's 25 projects
+- [ ] M6d — README with the icon vocabulary, the JSON schema and a screenshot
 - [ ] M7 — `--smart`: the same sentence written by a model, for when the heuristic one
       reads too blunt (answered open question in PLAN.md)
 
@@ -50,4 +60,5 @@ Difficulty estimate: medium — unchanged. The formats turned out to be readable
 carry more structure than feared (opencode in particular has `title`, `agent`, `model` and
 a todo list as columns), so the risk is concentrated in the status rules and liveness.
 
-Next: M5 — the opencode reader, behind the same interface, against its SQLite store.
+Next: M6d — the README: install, usage, the icon vocabulary, the JSON schema, the config
+file, and a screenshot of real output.

@@ -22,13 +22,24 @@ type Options struct {
 	NoIcons bool
 	// Verbose adds a line per session under each project.
 	Verbose bool
+	// Icons overrides the glyph for individual statuses. Anything not named here keeps its
+	// built-in icon.
+	Icons map[session.Status]string
+}
+
+// icon is the glyph for a status, after any configured override.
+func (o Options) icon(s session.Status) string {
+	if glyph, ok := o.Icons[s]; ok && glyph != "" {
+		return glyph
+	}
+	return s.Icon()
 }
 
 // Text writes the human-readable report.
 func Text(w io.Writer, projects []report.Project, opts Options) error {
 	width := wordWidth()
 	for _, p := range projects {
-		mark := p.Status().Icon()
+		mark := opts.icon(p.Status())
 		if opts.NoIcons {
 			mark = fmt.Sprintf("%-*s", width, p.Status().Word())
 		}
@@ -51,7 +62,7 @@ func Text(w io.Writer, projects []report.Project, opts Options) error {
 func Legend(w io.Writer, opts Options) error {
 	width := wordWidth()
 	for _, s := range session.Statuses() {
-		if _, err := fmt.Fprintf(w, "%s  %-*s  %s\n", s.Icon(), width, s.Word(), s.Describe()); err != nil {
+		if _, err := fmt.Fprintf(w, "%s  %-*s  %s\n", opts.icon(s), width, s.Word(), s.Describe()); err != nil {
 			return err
 		}
 	}

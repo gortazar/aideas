@@ -2,12 +2,16 @@ package cli
 
 import (
 	"bytes"
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 var now = time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
@@ -120,6 +124,193 @@ func TestProjectFilter(t *testing.T) {
 	_, stdout, _ := run(t, env, "-project", "alpha")
 	if strings.Contains(stdout, "beta") || !strings.Contains(stdout, "alpha") {
 		t.Errorf("--project alpha printed the wrong thing:\n%s", stdout)
+	}
+}
+
+// opencodeStore builds a store from the opencode package's own fixtures, so there is one
+// copy of them and the CLI is exercised against the schema the real agent writes.
+func opencodeStore(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "opencode.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, f := range []string{"schema.sql", "states.sql"} {
+		body, err := os.ReadFile(filepath.Join("..", "opencode", "testdata", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(string(body)); err != nil {
+			t.Fatalf("loading %s: %v", f, err)
+		}
+	}
+	return path
+}
+
+func TestBothAgentsAreReportedTogether(t *testing.T) {
+	env := testEnv(t)
+	env.OpencodeStore = opencodeStore(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/claude-only", "s1", time.Hour)
+
+	_, stdout, stderr := run(t, env, "-all")
+	if !strings.Contains(stdout, "claude-only (Claude Code)") {
+		t.Errorf("Claude session missing:\n%s\n%s", stdout, stderr)
+	}
+	if !strings.Contains(stdout, "(opencode)") {
+		t.Errorf("opencode sessions missing:\n%s\n%s", stdout, stderr)
+	}
+
+	_, stdout, _ = run(t, env, "-all", "-agent", "opencode")
+	if strings.Contains(stdout, "claude-only") {
+		t.Errorf("--agent opencode still printed a Claude session:\n%s", stdout)
+	}
+}
+
+func TestJSONOutputIsAValidDocument(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Hour)
+
+	code, stdout, stderr := run(t, env, "-json")
+	if code != 0 {
+		t.Fatalf("exit %d (stderr: %s)", code, stderr)
+	}
+	var doc struct {
+		Version  int `json:"version"`
+		Projects []struct {
+			Name   string `json:"name"`
+			Status string `json:"status"`
+		} `json:"projects"`
+		Liveness string `json:"liveness"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &doc); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, stdout)
+	}
+	if doc.Version == 0 {
+		t.Error("document has no version")
+	}
+	if len(doc.Projects) != 1 || doc.Projects[0].Name != "alpha" {
+		t.Errorf("projects = %v, want just alpha", doc.Projects)
+	}
+	// This machine has no readable process table in the test environment, and the document
+	// says so rather than leaving the consumer to guess why the status is unclear.
+	if doc.Liveness != "unavailable" {
+		t.Errorf("liveness = %q, want %q", doc.Liveness, "unavailable")
+	}
+
+	// Nothing to report is still a document, not an empty stream.
+	_, stdout, _ = run(t, env, "-json", "-project", "nothing-called-this")
+	if err := json.Unmarshal([]byte(stdout), &doc); err != nil {
+		t.Fatalf("empty report is not JSON: %v\n%s", err, stdout)
+	}
+}
+
+func configFile(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestConfigFileSuppliesDefaults(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", 40*time.Hour)
+	transcript(t, env.ClaudeProjects, "/home/user/git/scratch", "s2", time.Hour)
+	env.ConfigPath = configFile(t, `
+since = "3d"
+roots = ["/home/user/git"]
+ignore = ["/home/user/git/scratch"]
+icons = false
+`)
+
+	_, stdout, stderr := run(t, env)
+	if !strings.Contains(stdout, "alpha") {
+		t.Errorf("since = 3d from the config file did not take effect:\n%s\n%s", stdout, stderr)
+	}
+	if strings.Contains(stdout, "scratch") {
+		t.Errorf("an ignored directory was reported:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "unclear ") {
+		t.Errorf("icons = false from the config file did not take effect:\n%s", stdout)
+	}
+}
+
+// The answered question in PLAN.md: flags take precedence over the config file.
+func TestFlagsBeatTheConfigFile(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", 40*time.Hour)
+	env.ConfigPath = configFile(t, "since = \"3d\"\n")
+
+	_, stdout, _ := run(t, env, "-since", "1h")
+	if strings.Contains(stdout, "alpha") {
+		t.Errorf("--since 1h did not override the config file's 3d:\n%s", stdout)
+	}
+}
+
+func TestConfigFileCanReplaceAnIcon(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Hour)
+	env.ConfigPath = configFile(t, "[icon]\nunclear = \"??\"\n")
+
+	_, stdout, _ := run(t, env)
+	if !strings.HasPrefix(stdout, "?? alpha") {
+		t.Errorf("the configured icon was not used:\n%s", stdout)
+	}
+}
+
+func TestABrokenConfigFileStopsRecapWithAnExplanation(t *testing.T) {
+	env := testEnv(t)
+	env.ConfigPath = configFile(t, "sicne = \"3d\"\n")
+
+	code, _, stderr := run(t, env)
+	if code == 0 {
+		t.Error("exit 0 for a config file recap could not understand")
+	}
+	if !strings.Contains(stderr, "unknown setting") {
+		t.Errorf("stderr = %q, want it to name the mistake", stderr)
+	}
+}
+
+func TestSecondRunReadsTheCache(t *testing.T) {
+	env := testEnv(t)
+	env.CachePath = filepath.Join(t.TempDir(), "sessions.json")
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Hour)
+
+	_, first, _ := run(t, env)
+	if _, err := os.Stat(env.CachePath); err != nil {
+		t.Fatalf("no cache was written: %v", err)
+	}
+
+	// Same report, this time without re-reading the transcript.
+	_, second, _ := run(t, env)
+	if first != second {
+		t.Errorf("the cached run printed something different:\n%s\n%s", first, second)
+	}
+
+	// And --no-cache still works when the cache is there.
+	_, third, _ := run(t, env, "-no-cache")
+	if third != first {
+		t.Errorf("--no-cache printed something different:\n%s\n%s", first, third)
+	}
+}
+
+// The cache must never be the reason a report is wrong: a transcript that has grown since
+// it was cached is read again.
+func TestAGrownTranscriptIsNotServedFromTheCache(t *testing.T) {
+	env := testEnv(t)
+	env.CachePath = filepath.Join(t.TempDir(), "sessions.json")
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", 2*time.Hour)
+	run(t, env)
+
+	// Rewrite it with a newer timestamp, as a live session would.
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Minute)
+
+	_, stdout, _ := run(t, env, "-v")
+	if !strings.Contains(stdout, "1m ago") {
+		t.Errorf("stale cache entry was used; output:\n%s", stdout)
 	}
 }
 
