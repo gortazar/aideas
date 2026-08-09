@@ -112,6 +112,132 @@ class Config:
         return value if value > 0 else default
 
 
+# ------------------------------------------------------------------------ README queue
+
+
+ENTRY_NUMBER_RE = re.compile(r"^(\s*)\d+\.\s+")
+
+
+@dataclass
+class Entry:
+    """One numbered entry in a README section: its slug and its raw lines."""
+    slug: str
+    lines: list[str]
+
+    @property
+    def text(self) -> str:
+        return "\n".join(self.lines)
+
+
+def parse_entries(section: str) -> list[Entry]:
+    """Blank-line-separated blocks; a block is an entry if it links to an idea folder.
+
+    The first `ideas/<slug>` in a block wins, so a description that mentions another idea
+    doesn't change which folder the entry belongs to.
+    """
+    blocks: list[list[str]] = []
+    current: list[str] = []
+    for line in section.splitlines():
+        if not line.strip():
+            if current:
+                blocks.append(current)
+                current = []
+            continue
+        current.append(line)
+    if current:
+        blocks.append(current)
+
+    entries = []
+    for block in blocks:
+        match = SLUG_RE.search("\n".join(block))
+        if match:
+            entries.append(Entry(match.group(0), block))
+    return entries
+
+
+class ReadmeQueue:
+    """Reads and rewrites README.md as a work queue.
+
+    An idea folder may appear more than once under `## Ideas`; each entry is a separate
+    piece of work on that folder, done in list order. Identity is positional, which only
+    works because a completed entry is *moved out* to `## Finished` — so the active list
+    only ever holds work that has not been done yet.
+    """
+
+    def __init__(self, path: Path):
+        self.path = path
+
+    def _split(self) -> tuple[str, str, str]:
+        """(everything up to and including the `## Ideas` heading, its body, the rest)."""
+        text = self.path.read_text()
+        match = re.search(r"^##\s+Ideas\s*$", text, re.M)
+        if not match:
+            return text, "", ""
+        body_start = match.end()
+        following = re.search(r"^##\s", text[body_start:], re.M)
+        body_end = body_start + following.start() if following else len(text)
+        return text[:body_start], text[body_start:body_end], text[body_end:]
+
+    def ideas_body(self) -> str:
+        return self._split()[1]
+
+    def entries(self) -> list[Entry]:
+        return parse_entries(self.ideas_body())
+
+    def pending_for(self, slug: str) -> list[Entry]:
+        return [e for e in self.entries() if e.slug == slug]
+
+    @staticmethod
+    def _renumber(entries: list[Entry], start: int = 1) -> str:
+        out: list[str] = []
+        for number, entry in enumerate(entries, start):
+            lines = list(entry.lines)
+            first = ENTRY_NUMBER_RE.sub(r"\1", lines[0]).lstrip()
+            lines[0] = f"{number}. {first}"
+            out.append("\n".join(lines))
+        return "\n\n".join(out)
+
+    def move_to_finished(self, slug: str, when: str) -> bool:
+        """Move this slug's topmost `## Ideas` entry into `## Finished`.
+
+        Topmost is the one that was just built: entries are taken in list order and a
+        completed one leaves the list, so the head of the queue is always the current
+        piece of work. Returns False when there is nothing to move.
+        """
+        before, body, after = self._split()
+        entries = self.entries()
+        index = next((i for i, e in enumerate(entries) if e.slug == slug), None)
+        if index is None:
+            return False
+        done_entry = entries.pop(index)
+
+        finished_line = done_entry.lines[0]
+        if "(finished " not in finished_line:
+            finished_line = f"{finished_line.rstrip()} (finished {when})"
+        done_entry = Entry(slug, [finished_line, *done_entry.lines[1:]])
+
+        new_body = "\n\n" + self._renumber(entries) + "\n\n" if entries else "\n\n"
+
+        finished_match = re.search(r"^##\s+Finished\s*$", after, re.M)
+        if finished_match:
+            start = finished_match.end()
+            following = re.search(r"^##\s", after[start:], re.M)
+            end = start + following.start() if following else len(after)
+            finished_entries = parse_entries(after[start:end]) + [done_entry]
+            after = (after[:start] + "\n\n" + self._renumber(finished_entries) + "\n\n"
+                     + after[end:])
+        else:
+            after = (after.rstrip("\n") + "\n\n## Finished\n\n"
+                     + self._renumber([done_entry]) + "\n")
+
+        # Each move splices sections together and every splice can leave its own blank
+        # line, so runs of them compound over successive moves. Normalise instead of
+        # trying to make every branch splice perfectly.
+        text = re.sub(r"\n{3,}", "\n\n", before + new_body + after)
+        self.path.write_text(text.rstrip("\n") + "\n")
+        return True
+
+
 # ----------------------------------------------------------------------------- lock
 
 
@@ -785,6 +911,46 @@ class Orchestrator:
         ]
         status_file.write_text("\n".join(out).rstrip() + "\n")
 
+    def advance_queue(self, slug: str) -> None:
+        """An entry is finished: retire it, and start the next one for the same folder.
+
+        The completed entry moves to `## Finished`, which is both the record you asked for
+        and what keeps positional identity honest — the active list then holds only work
+        still to do. If more entries for this folder remain, the idea is not finished at
+        all, just this piece of it: its PLAN.md is archived and removed so the planning
+        pass drafts one for the next entry, and the status goes back to not_started so it
+        is eligible again. The session id is deliberately kept, so the next entry resumes
+        the same conversation and the agent remembers the code it just wrote.
+        """
+        queue = ReadmeQueue(self.repo / "README.md")
+        today = datetime.now().strftime("%Y-%m-%d")
+        if not queue.move_to_finished(slug, today):
+            log(f"{slug}: done, but no '## Ideas' entry to retire — leaving README alone.")
+            return
+        log(f"{slug}: retired its entry to '## Finished'.")
+
+        remaining = queue.pending_for(slug)
+        if not remaining:
+            return
+
+        idea_dir = self.repo / "ideas" / slug
+        plan = idea_dir / "PLAN.md"
+        if plan.is_file():
+            archive_dir = idea_dir / "plans"
+            archive_dir.mkdir(exist_ok=True)
+            number = len(list(archive_dir.glob("*.md"))) + 1
+            archived = archive_dir / f"{number:02d}-{today}.md"
+            plan.rename(archived)
+            log(f"{slug}: archived its plan to {archived.relative_to(self.repo)}.")
+
+        status_file = idea_dir / "STATUS.md"
+        if status_file.is_file():
+            text = status_file.read_text()
+            status_file.write_text(
+                re.sub(r"^status:.*$", "status: not_started", text, count=1, flags=re.M))
+        log(f"{slug}: {len(remaining)} further entr{'y' if len(remaining) == 1 else 'ies'} "
+            "queued; reopened for the next one.")
+
     def finalize(self, agent: Agent) -> None:
         slug = agent.slug
         result = agent.load_result()
@@ -834,6 +1000,8 @@ class Orchestrator:
 
         cost = float(result.get("total_cost_usd", 0) or 0)
         self.rewrite_status(slug, new_status, session_id, cost)
+        if new_status == "done":
+            self.advance_queue(slug)
 
         git("add", "-A", cwd=self.repo)
         note = "blocked on new question" if new_status == "blocked" else "progress"
