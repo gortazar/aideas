@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -164,6 +165,44 @@ func TestBothAgentsAreReportedTogether(t *testing.T) {
 	_, stdout, _ = run(t, env, "-all", "-agent", "opencode")
 	if strings.Contains(stdout, "claude-only") {
 		t.Errorf("--agent opencode still printed a Claude session:\n%s", stdout)
+	}
+}
+
+func TestJSONOutputIsAValidDocument(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Hour)
+
+	code, stdout, stderr := run(t, env, "-json")
+	if code != 0 {
+		t.Fatalf("exit %d (stderr: %s)", code, stderr)
+	}
+	var doc struct {
+		Version  int `json:"version"`
+		Projects []struct {
+			Name   string `json:"name"`
+			Status string `json:"status"`
+		} `json:"projects"`
+		Liveness string `json:"liveness"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &doc); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, stdout)
+	}
+	if doc.Version == 0 {
+		t.Error("document has no version")
+	}
+	if len(doc.Projects) != 1 || doc.Projects[0].Name != "alpha" {
+		t.Errorf("projects = %v, want just alpha", doc.Projects)
+	}
+	// This machine has no readable process table in the test environment, and the document
+	// says so rather than leaving the consumer to guess why the status is unclear.
+	if doc.Liveness != "unavailable" {
+		t.Errorf("liveness = %q, want %q", doc.Liveness, "unavailable")
+	}
+
+	// Nothing to report is still a document, not an empty stream.
+	_, stdout, _ = run(t, env, "-json", "-project", "nothing-called-this")
+	if err := json.Unmarshal([]byte(stdout), &doc); err != nil {
+		t.Fatalf("empty report is not JSON: %v\n%s", err, stdout)
 	}
 }
 

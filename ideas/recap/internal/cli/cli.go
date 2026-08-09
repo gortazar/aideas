@@ -80,6 +80,7 @@ func RunWith(args []string, stdout, stderr io.Writer, env Env) int {
 		root     = newRepeatable(fs, "root", "only report projects under this directory (repeatable)")
 		noIcons  = fs.Bool("no-icons", false, "print status words instead of emoji")
 		legend   = fs.Bool("legend", false, "explain the status vocabulary and exit")
+		asJSON   = fs.Bool("json", false, "print the report as JSON (a versioned public interface)")
 		verbose  = fs.Bool("v", false, "add a line per session under each project")
 		verbose2 = fs.Bool("verbose", false, "add a line per session under each project")
 	)
@@ -153,6 +154,16 @@ func RunWith(args []string, stdout, stderr io.Writer, env Env) int {
 
 	projects := report.Build(report.FilterSessions(sessions, filters, opts.Now), live, opts.Now)
 	projects = report.FilterProjects(projects, filters)
+
+	if *asJSON {
+		// Always a document, even with nothing to report: a consumer should not have to
+		// tell "no sessions" apart from "recap failed" by parsing stderr.
+		if err := render.JSON(stdout, projects, opts, render.LivenessSource(live.Supported())); err != nil {
+			fmt.Fprintln(stderr, "recap:", err)
+			return 1
+		}
+		return 0
+	}
 
 	if len(projects) == 0 {
 		fmt.Fprintln(stderr, "recap: nothing to report")
