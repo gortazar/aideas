@@ -74,10 +74,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 func RunWith(args []string, stdout, stderr io.Writer, env Env) int {
 	fs := flag.NewFlagSet("recap", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	fs.Usage = func() {
-		fmt.Fprint(stderr, usage)
-		fs.PrintDefaults()
-	}
+	// Silent: the flag package calls this both for -h and after a bad flag, and it has
+	// already written the error message itself. Help is answered on stdout below, where a
+	// user piping `recap --help` into a pager expects it.
+	fs.Usage = func() {}
 
 	var (
 		since    = fs.String("since", "24h", "hide sessions untouched for longer than this (e.g. 90m, 2d)")
@@ -102,6 +102,7 @@ func RunWith(args []string, stdout, stderr io.Writer, env Env) int {
 			fs.PrintDefaults()
 			return 0
 		}
+		fmt.Fprintf(stderr, "recap: try --help\n")
 		return 2
 	}
 

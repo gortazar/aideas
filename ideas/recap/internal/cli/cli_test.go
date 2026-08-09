@@ -344,7 +344,10 @@ func TestLegendExplainsTheVocabulary(t *testing.T) {
 }
 
 func TestHelpGoesToStdout(t *testing.T) {
-	code, stdout, _ := run(t, testEnv(t), "--help")
+	code, stdout, stderr := run(t, testEnv(t), "--help")
+	if stderr != "" {
+		t.Errorf("--help wrote to stderr as well: %q", stderr)
+	}
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
