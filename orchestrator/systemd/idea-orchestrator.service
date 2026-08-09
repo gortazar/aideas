@@ -8,7 +8,7 @@ Wants=network-online.target
 Type=oneshot
 User=CHANGEME_USER
 EnvironmentFile=/etc/idea-agent.env
-ExecStart=/opt/idea-agent/orchestrator/orchestrator.sh
+ExecStart=/usr/bin/python3 /opt/idea-agent/orchestrator/orchestrator.py
 
 # systemd's default PATH has neither `claude` (~/.local/bin) nor `nix` — and the build
 # agent shells out to both. Adjust the home directory to the service user's.

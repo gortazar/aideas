@@ -5,7 +5,7 @@ Three pieces:
 1. **This repo** — the ranked idea list ([README.md](README.md)), the global rules
    ([AGENTS.md](AGENTS.md)), the tunable knobs ([.agent-config.yml](.agent-config.yml)),
    and one self-contained folder per idea under `ideas/`.
-2. **Orchestrator box** — always-on, VPN-reachable. Runs `orchestrator.sh` on a systemd
+2. **Orchestrator box** — always-on, VPN-reachable. Runs `orchestrator.py` on a systemd
    timer and `heartbeat_server.py` as a long-lived service.
 3. **Laptop** — Claude Code hooks push a heartbeat to the box over VPN whenever a session
    starts, uses a tool, or ends. Push, not pull: the laptop's VPN IP isn't stable and it
@@ -130,7 +130,7 @@ Only an unticked `- [ ]` blocks. A question written as prose won't be noticed.
 
 ## How a cycle works
 
-The docstring at the top of [orchestrator/orchestrator.sh](orchestrator/orchestrator.sh)
+The docstring at the top of [orchestrator/orchestrator.py](orchestrator/orchestrator.py)
 is the authoritative spec. Everything else is supporting infrastructure for that script.
 
 ## Budget
