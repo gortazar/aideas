@@ -54,4 +54,12 @@ Reorder entries to reprioritise: position in this list *is* the priority.
 
 4. [Restore workspaces](ideas/restore-wss) - Support for restoring browsers and the tabs that were open inside them (may require a browser extension). First, an in-depth research
    must be done to find similar extensions that could be used as-is, and this report is to be written in the idea folder as "browser-extensions-research.md".
-   
+
+5. [Recap](ideas/recap) - recap is a command line tool that provides quick info (a very brief report) about what your agents were doing when you left it, and what's the status right now. 
+   It should work with claude code and opencode. The info shown must be something like this (each item must provide at the beginning some icon or emoticon stating if the task is running, awaiting for input, finished): 
+      * aideas (Claude Code) -> Was running the orchestrator against ideas 6 and 8. Idea 7 stopped and requested further info. It is not running at the moment.
+      * ov-blog (Claude Code) -> Was implementing utm support but was interrupted mid-task by laptop suspension and is now resuming work. Not finished yet.
+      * ov-marketing (Claude Code) -> Already implemented GA4 support.
+      * ollama (opencode) -> Still downloading instance files. 
+
+6. [Recap.gs](ideas/recap-gs) - A gnome shell plugin for recap (can't be started until recap has a clear API). It shows a list of AI tasks, and their statuses. 
