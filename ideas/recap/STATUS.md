@@ -34,8 +34,8 @@ wanted Rust and it will be swapped while the code is still small.
       by working directory; tested against a fake /proc tree
 - [x] M4a — discovery: walk a ~/.claude/projects tree and read every session in it,
       surviving unreadable ones
-- [ ] M4b — grouping into one line per project and rendering it (icons, `--no-icons`,
-      `--legend`, sorting)
+- [x] M4b — grouping into one line per project (busiest session leads) and rendering it:
+      icons, `--no-icons` word column, `--legend`, `-v` session lines, human ages
 - [ ] M4c — CLI wiring and the filter flags (`--since`, `--all`, `--agent`, `--project`,
       `--running`, project roots)
 - [ ] M5 — opencode reader
@@ -47,5 +47,5 @@ Difficulty estimate: medium — unchanged. The formats turned out to be readable
 carry more structure than feared (opencode in particular has `title`, `agent`, `model` and
 a todo list as columns), so the risk is concentrated in the status rules and liveness.
 
-Next: M4b — group sessions by project, pick the busiest status per project, and render
-one line each.
+Next: M4c — wire it together in the CLI: read the real store, scan the real process
+table, and add the filter flags.
