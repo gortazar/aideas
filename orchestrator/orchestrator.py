@@ -47,6 +47,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 UNLIMITED = {"unlimited", "none", "off"}
+
+# Planning reads and researches; it must not build, so it gets no Bash and no Edit.
+# WebFetch and WebSearch are the point of the set: three consecutive planning runs were
+# denied Bash while trying to check an upstream repo or probe the environment, and asked
+# the user questions they could have answered by looking.
+PLAN_TOOLS_DEFAULT = "Read,Write,Glob,Grep,WebFetch,WebSearch"
+BUILD_TOOLS_DEFAULT = "Bash,Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
 LOG_ENTRY_RE = re.compile(
     r"^- \d{4}-\d{2}-\d{2}T\S+ — (in_progress|blocked|done) "
 )
@@ -529,6 +536,23 @@ class Orchestrator:
         value = self.config.get(key, "")
         return [] if is_unlimited(value) else ["--max-budget-usd", value]
 
+    def claude_tool_args(self, key: str, default: str) -> list[str]:
+        """Both flags, because they do different jobs.
+
+        `--tools` sets which tools exist at all — that is the real boundary, verified by
+        asking an agent with `--tools Read,Write` to delete a file: it answered "NO BASH
+        TOOL" and the file survived. `--allowed-tools` only auto-approves; on its own it
+        does not remove a tool, and it is unioned with whatever the *user's* settings
+        already permit, so a scoped `Bash(ls:*)` did not stop `rm` from running.
+        Note there is no read-only Bash: `Bash` is all of Bash or none of it.
+
+        `--strict-mcp-config` stops each agent inheriting the user's MCP servers. Without
+        it a planning agent reported having the OpenSEO MCP tools — capability nobody
+        intended, and their definitions burn context on every turn.
+        """
+        tools = self.config.get(key, "") or default
+        return ["--tools", tools, "--allowed-tools", tools, "--strict-mcp-config"]
+
     # -- planning pass ----------------------------------------------------------------
 
     def planning_pass(self, slugs: list[str]) -> None:
@@ -577,7 +601,7 @@ class Orchestrator:
             )
             command = [
                 "claude", "-p", prompt,
-                "--allowed-tools", "Read,Write",
+                *self.claude_tool_args("plan_tools", PLAN_TOOLS_DEFAULT),
                 "--permission-mode", "acceptEdits",
                 *self.claude_budget_args("max_plan_cost_usd"),
                 "--output-format", "json",
@@ -658,7 +682,7 @@ class Orchestrator:
 
         command = [
             "claude", "-p", "Continue implementing this idea per CLAUDE.md.",
-            "--allowed-tools", "Bash,Read,Edit,Write,Glob,Grep",
+            *self.claude_tool_args("build_tools", BUILD_TOOLS_DEFAULT),
             "--permission-mode", "acceptEdits",
             *self.claude_budget_args("max_cycle_cost_usd"),
             "--output-format", "json",

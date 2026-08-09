@@ -7,6 +7,18 @@
 # of my allowance did this burn" — your real ceiling is the plan's rolling 5-hour and
 # weekly windows, not a daily dollar figure.
 
+# Which tools each pass gets. Both --tools (what exists) and --allowed-tools (what is
+# auto-approved) are set from these, plus --strict-mcp-config so agents don't inherit
+# your own MCP servers.
+#
+# There is no read-only Bash: naming Bash grants all of it. A scoped "Bash(ls:*)" was
+# measured NOT to prevent `rm` — --allowed-tools governs approval, not availability, and
+# it is unioned with your own settings. So planning gets no Bash at all; it researches
+# with WebFetch and WebSearch instead. Add Bash to plan_tools only if you accept giving
+# the planner a full shell.
+plan_tools: "Read,Write,Glob,Grep,WebFetch,WebSearch"
+build_tools: "Bash,Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
+
 # How many ideas to build concurrently, each by its own agent. Agents get a private git
 # worktree and branch, so their commits don't collide; the branches are merged back at
 # the end of the cycle. Raising this multiplies spend by roughly the same factor, and
