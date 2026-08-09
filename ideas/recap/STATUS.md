@@ -29,7 +29,9 @@ wanted Rust and it will be swapped while the code is still small.
       running / waiting / idle / interrupted / finished / unclear, table-tested
 - [x] M2c — recap sentence assembly: `Asked to "X" — interrupted mid-Bash.`, pure
       logic over the session fields, table-tested
-- [ ] M3 — liveness detection behind a seam
+- [x] M3 — liveness: read the process table, recognise agents by argv[0] (not by a
+      substring of the command line, which would count the shells they spawn), correlate
+      by working directory; tested against a fake /proc tree
 - [ ] M4 — rendering: icons, one line per project, `--no-icons`, `--legend`, sorting, filters
 - [ ] M5 — opencode reader
 - [ ] M6 — `--json`, `-v`, caching, config file, README screenshot
@@ -40,5 +42,5 @@ Difficulty estimate: medium — unchanged. The formats turned out to be readable
 carry more structure than feared (opencode in particular has `title`, `agent`, `model` and
 a todo list as columns), so the risk is concentrated in the status rules and liveness.
 
-Next: M3 — liveness detection: find the agent processes and correlate them with sessions,
-behind a seam with a fake in tests.
+Next: M4 — discovery and rendering: walk ~/.claude/projects, group sessions by project,
+and print one line per project with icons, sorting and the filter flags.
