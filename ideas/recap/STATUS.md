@@ -50,7 +50,8 @@ wanted Rust and it will be swapped while the code is still small.
 - [x] M6b — config file at ~/.config/recap/config.toml: `since`, `roots`, `ignore`,
       `icons` and an `[icon]` table of per-status glyphs, with flags taking precedence and
       a mistake in the file reported with its line number
-- [ ] M6c — caching parsed summaries on size + mtime
+- [x] M6c — cache parsed sessions on file size + mtime under ~/.cache/recap, with
+      `--no-cache` to bypass it: 156ms cold, 11ms warm on this machine's 25 projects
 - [ ] M6d — README with the icon vocabulary, the JSON schema and a screenshot
 - [ ] M7 — `--smart`: the same sentence written by a model, for when the heuristic one
       reads too blunt (answered open question in PLAN.md)
@@ -59,5 +60,5 @@ Difficulty estimate: medium — unchanged. The formats turned out to be readable
 carry more structure than feared (opencode in particular has `title`, `agent`, `model` and
 a todo list as columns), so the risk is concentrated in the status rules and liveness.
 
-Next: M6c — cache parsed summaries on file size + mtime under ~/.cache/recap, to keep the
-sub-300ms target as transcripts grow.
+Next: M6d — the README: install, usage, the icon vocabulary, the JSON schema, the config
+file, and a screenshot of real output.

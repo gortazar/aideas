@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gortazar/recap/internal/cache"
 	"github.com/gortazar/recap/internal/claude"
 	"github.com/gortazar/recap/internal/config"
 	"github.com/gortazar/recap/internal/opencode"
@@ -37,6 +38,8 @@ type Env struct {
 	OpencodeStore string
 	// ConfigPath is the optional config file, ~/.config/recap/config.toml by default.
 	ConfigPath string
+	// CachePath is where parsed sessions are remembered between runs.
+	CachePath string
 	// ProcRoot is the process table, /proc by default.
 	ProcRoot string
 	// Roots limits which projects are reported. Empty means the user's home directory.
@@ -55,6 +58,7 @@ func DefaultEnv() Env {
 		ClaudeProjects: claude.DefaultProjectsDir(),
 		OpencodeStore:  opencode.DefaultStore(),
 		ConfigPath:     config.DefaultPath(),
+		CachePath:      cache.DefaultPath(),
 		ProcRoot:       proc.DefaultRoot,
 		Roots:          roots,
 		Now:            time.Now,
@@ -86,6 +90,7 @@ func RunWith(args []string, stdout, stderr io.Writer, env Env) int {
 		legend   = fs.Bool("legend", false, "explain the status vocabulary and exit")
 		asJSON   = fs.Bool("json", false, "print the report as JSON (a versioned public interface)")
 		confPath = fs.String("config", "", "read this config file instead of ~/.config/recap/config.toml")
+		noCache  = fs.Bool("no-cache", false, "re-read every transcript instead of using ~/.cache/recap")
 		verbose  = fs.Bool("v", false, "add a line per session under each project")
 		verbose2 = fs.Bool("verbose", false, "add a line per session under each project")
 	)
@@ -167,8 +172,13 @@ func RunWith(args []string, stdout, stderr io.Writer, env Env) int {
 
 	// One agent's store being unreadable must not cost you the other's sessions, so each
 	// failure is reported and the report is built from whatever was readable.
+	var store *cache.Cache
+	if !*noCache {
+		store = cache.Open(env.CachePath)
+	}
+
 	var sessions []*session.Session
-	claudeSessions, err := claude.Discover(env.ClaudeProjects)
+	claudeSessions, err := claude.Discover(env.ClaudeProjects, store)
 	if err != nil {
 		fmt.Fprintln(stderr, "recap: reading Claude Code sessions:", err)
 	}
@@ -179,6 +189,12 @@ func RunWith(args []string, stdout, stderr io.Writer, env Env) int {
 		fmt.Fprintln(stderr, "recap: reading opencode sessions:", err)
 	}
 	sessions = append(sessions, opencodeSessions...)
+
+	// Saving the cache is an optimisation for next time, so a cache directory that cannot
+	// be written is worth a word on stderr and nothing more.
+	if err := store.Save(); err != nil {
+		fmt.Fprintln(stderr, "recap: could not save the cache:", err)
+	}
 
 	procs, supported := proc.Scan(env.ProcRoot)
 	live := proc.NewIndex(procs, supported)

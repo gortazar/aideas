@@ -274,6 +274,46 @@ func TestABrokenConfigFileStopsRecapWithAnExplanation(t *testing.T) {
 	}
 }
 
+func TestSecondRunReadsTheCache(t *testing.T) {
+	env := testEnv(t)
+	env.CachePath = filepath.Join(t.TempDir(), "sessions.json")
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Hour)
+
+	_, first, _ := run(t, env)
+	if _, err := os.Stat(env.CachePath); err != nil {
+		t.Fatalf("no cache was written: %v", err)
+	}
+
+	// Same report, this time without re-reading the transcript.
+	_, second, _ := run(t, env)
+	if first != second {
+		t.Errorf("the cached run printed something different:\n%s\n%s", first, second)
+	}
+
+	// And --no-cache still works when the cache is there.
+	_, third, _ := run(t, env, "-no-cache")
+	if third != first {
+		t.Errorf("--no-cache printed something different:\n%s\n%s", first, third)
+	}
+}
+
+// The cache must never be the reason a report is wrong: a transcript that has grown since
+// it was cached is read again.
+func TestAGrownTranscriptIsNotServedFromTheCache(t *testing.T) {
+	env := testEnv(t)
+	env.CachePath = filepath.Join(t.TempDir(), "sessions.json")
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", 2*time.Hour)
+	run(t, env)
+
+	// Rewrite it with a newer timestamp, as a live session would.
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Minute)
+
+	_, stdout, _ := run(t, env, "-v")
+	if !strings.Contains(stdout, "1m ago") {
+		t.Errorf("stale cache entry was used; output:\n%s", stdout)
+	}
+}
+
 func TestBadFlagValuesFailWithAMessage(t *testing.T) {
 	env := testEnv(t)
 	for _, args := range [][]string{

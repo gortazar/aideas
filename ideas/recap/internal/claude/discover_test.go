@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/gortazar/recap/internal/session"
 )
 
 // projectsTree lays out a ~/.claude/projects-shaped directory from the committed fixtures.
@@ -35,7 +38,7 @@ func TestDiscoverReadsEverySessionInEveryProject(t *testing.T) {
 		"-home-user-git-beta/notes.txt": "stub.jsonl",
 	})
 
-	sessions, err := Discover(root)
+	sessions, err := Discover(root, nil)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -61,7 +64,7 @@ func TestDiscoverKeepsGoingPastABrokenSession(t *testing.T) {
 		"-home-user-git-alpha/bad.jsonl":  "stub.jsonl",
 	})
 
-	sessions, err := Discover(root)
+	sessions, err := Discover(root, nil)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -80,11 +83,63 @@ func TestDiscoverKeepsGoingPastABrokenSession(t *testing.T) {
 }
 
 func TestDiscoverOfAMissingDirectoryIsNotAnError(t *testing.T) {
-	sessions, err := Discover(filepath.Join(t.TempDir(), "no-claude-here"))
+	sessions, err := Discover(filepath.Join(t.TempDir(), "no-claude-here"), nil)
 	if err != nil {
 		t.Fatalf("Discover of a missing directory: %v", err)
 	}
 	if len(sessions) != 0 {
 		t.Errorf("found %d sessions in a missing directory", len(sessions))
+	}
+}
+
+// countingCache proves Discover asks the cache before parsing, and tells it what it parsed.
+type countingCache struct {
+	sessions map[string]*session.Session
+	lookups  int
+	stores   int
+}
+
+func (c *countingCache) Lookup(path string, size int64, mod time.Time) (*session.Session, bool) {
+	c.lookups++
+	s, ok := c.sessions[path]
+	return s, ok
+}
+
+func (c *countingCache) Store(path string, size int64, mod time.Time, s *session.Session) {
+	c.stores++
+	if c.sessions == nil {
+		c.sessions = map[string]*session.Session{}
+	}
+	c.sessions[path] = s
+}
+
+func TestDiscoverUsesTheCacheAndFillsIt(t *testing.T) {
+	root := projectsTree(t, map[string]string{
+		"-home-user-git-alpha/one.jsonl": "awaiting-input.jsonl",
+		"-home-user-git-beta/two.jsonl":  "tool-pending.jsonl",
+	})
+
+	c := &countingCache{}
+	if _, err := Discover(root, c); err != nil {
+		t.Fatal(err)
+	}
+	if c.stores != 2 {
+		t.Errorf("stored %d sessions, want 2", c.stores)
+	}
+
+	// Second run: everything is a hit, and the sessions still come back.
+	before := c.lookups
+	sessions, err := Discover(root, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("got %d sessions from the cache, want 2", len(sessions))
+	}
+	if c.lookups-before != 2 {
+		t.Errorf("%d lookups on the second run, want 2", c.lookups-before)
+	}
+	if c.stores != 2 {
+		t.Errorf("%d stores after a fully cached run, want the original 2", c.stores)
 	}
 }
