@@ -50,7 +50,10 @@ UNLIMITED = {"unlimited", "none", "off"}
 LOG_ENTRY_RE = re.compile(
     r"^- \d{4}-\d{2}-\d{2}T\S+ — (in_progress|blocked|done) "
 )
-SLUG_RE = re.compile(r"(?<=ideas/)[a-z0-9-]+(?=/)")
+# The trailing slash is optional: requiring it silently swallowed every entry written as
+# `(ideas/recap)` rather than `(ideas/recap/)` — no error, the idea simply never existed.
+# The negative lookahead stops `recap` from also matching inside `ideas/recap-gs`.
+SLUG_RE = re.compile(r"(?<=ideas/)[a-z0-9][a-z0-9-]*(?![a-z0-9-])")
 
 
 def log(message: str) -> None:
@@ -457,10 +460,13 @@ class Orchestrator:
 
     def idea_description(self, slug: str) -> str:
         """The entry's lines, from its link to the next blank line."""
+        # Bounded so `recap` doesn't match the `ideas/recap-gs` entry, and slash-optional
+        # so it finds the link however it was written.
+        link = re.compile(rf"ideas/{re.escape(slug)}(?![a-z0-9-])")
         lines = (self.repo / "README.md").read_text().splitlines()
         collected: list[str] = []
         for line in lines:
-            if not collected and f"ideas/{slug}/" not in line:
+            if not collected and not link.search(line):
                 continue
             if collected and not line.strip():
                 break

@@ -8,9 +8,12 @@ rules every idea is built under.
 ## Format (the orchestrator parses this — keep it)
 
 Each idea is a numbered entry whose first line links to its folder as `ideas/<slug>/`,
-where `<slug>` is lowercase letters, digits and hyphens only. Lines immediately after the
-link, up to the next blank line, are passed to the planner as the idea description — so
-don't leave a blank line between the link and its description.
+where `<slug>` is lowercase letters, digits and hyphens only. The trailing slash is
+optional — `ideas/recap` and `ideas/recap/` both work. Lines immediately after the link,
+up to the next blank line, are passed to the planner as the idea description — so don't
+leave a blank line between the link and its description.
+
+The link *text* is ignored; the folder in the URL is what identifies the idea.
 
 Reorder entries to reprioritise: position in this list *is* the priority.
 
