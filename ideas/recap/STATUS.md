@@ -32,7 +32,12 @@ wanted Rust and it will be swapped while the code is still small.
 - [x] M3 — liveness: read the process table, recognise agents by argv[0] (not by a
       substring of the command line, which would count the shells they spawn), correlate
       by working directory; tested against a fake /proc tree
-- [ ] M4 — rendering: icons, one line per project, `--no-icons`, `--legend`, sorting, filters
+- [x] M4a — discovery: walk a ~/.claude/projects tree and read every session in it,
+      surviving unreadable ones
+- [ ] M4b — grouping into one line per project and rendering it (icons, `--no-icons`,
+      `--legend`, sorting)
+- [ ] M4c — CLI wiring and the filter flags (`--since`, `--all`, `--agent`, `--project`,
+      `--running`, project roots)
 - [ ] M5 — opencode reader
 - [ ] M6 — `--json`, `-v`, caching, config file, README screenshot
 - [ ] M7 — `--smart`: the same sentence written by a model, for when the heuristic one
@@ -42,5 +47,5 @@ Difficulty estimate: medium — unchanged. The formats turned out to be readable
 carry more structure than feared (opencode in particular has `title`, `agent`, `model` and
 a todo list as columns), so the risk is concentrated in the status rules and liveness.
 
-Next: M4 — discovery and rendering: walk ~/.claude/projects, group sessions by project,
-and print one line per project with icons, sorting and the filter flags.
+Next: M4b — group sessions by project, pick the busiest status per project, and render
+one line each.
