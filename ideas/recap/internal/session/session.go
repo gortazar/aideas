@@ -91,6 +91,12 @@ type Session struct {
 	TodoDone  int
 	TodoTotal int
 
+	// Completed is set only when the agent left an explicit marker that the session ended
+	// having finished what it was asked. recap never infers it: without a model there is no
+	// reliable "the task was done" signal, and claiming success wrongly is worse than
+	// saying nothing.
+	Completed bool
+
 	// Source is where this came from, for --verbose and for error messages.
 	Source string
 	// Unreadable explains why a session could not be parsed. A session with this set is

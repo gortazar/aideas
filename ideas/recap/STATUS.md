@@ -25,7 +25,8 @@ wanted Rust and it will be swapped while the code is still small.
       gofmt), Go module, `recap` binary that exits 0, CI wired to the real test command
 - [x] M2a — Claude Code reader: tail-read a session JSONL into a domain Session,
       against six scrubbed fixtures covering the tail shapes seen in the real store
-- [ ] M2b — status classification rules over fixtures
+- [x] M2b — status rules: transcript tail + liveness + clock -> one of
+      running / waiting / idle / interrupted / finished / unclear, table-tested
 - [ ] M2c — recap sentence assembly
 - [ ] M3 — liveness detection behind a seam
 - [ ] M4 — rendering: icons, one line per project, `--no-icons`, `--legend`, sorting, filters
@@ -36,5 +37,5 @@ Difficulty estimate: medium — unchanged. The formats turned out to be readable
 carry more structure than feared (opencode in particular has `title`, `agent`, `model` and
 a todo list as columns), so the risk is concentrated in the status rules and liveness.
 
-Next: M2b — the status rules that turn a transcript tail plus liveness into one of
-running / awaiting input / interrupted / idle / finished / unknown.
+Next: M2c — recap sentence assembly, the "was doing X, now Y" line, as pure logic over
+the session fields.
