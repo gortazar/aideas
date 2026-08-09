@@ -33,13 +33,17 @@ at all.
 The top bar shows the current task ("Client work"); the window was launched and placed by
 gnome-tasks when that task was activated.
 
-| Tasks | Capture and privacy |
+| A task, expanded | Capture and privacy |
 | --- | --- |
-| ![The preferences window listing three tasks](screenshots/preferences.png) | ![The capture page, with the recording switch and the exclusion list](screenshots/preferences-capture.png) |
+| ![The preferences window showing a task's name, icon, shortcut, switch-away policy, one remembered window and one unconfirmed command](screenshots/preferences.png) | ![The capture page, with the recording switch and the exclusion list](screenshots/preferences-capture.png) |
 
-The preferences window is a view over the daemon: renaming a task, changing what happens to its
-windows on switch-away, allowing a command to run, or excluding an application from capture all go
-straight to `org.gnome.Tasks`.
+The preferences window is a view over the daemon: renaming a task, giving it a shortcut, changing
+what happens to its windows on switch-away, forgetting a remembered window, allowing a command to
+run, or excluding an application from capture all go straight to `org.gnome.Tasks`.
+
+Note the command's switch in that screenshot: it is **off**, and a command stays off until you turn
+it on. A task file is a plain JSON document that could be synced or restored from a backup, so its
+mere presence never makes something run.
 
 All three screenshots are taken inside the nested test session described under [Tests](#tests). The
 switcher's *popup menu* cannot be captured there — a panel menu needs a pointer grab that a headless

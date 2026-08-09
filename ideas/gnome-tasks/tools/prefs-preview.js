@@ -41,6 +41,29 @@ window.present();
 if (GLib.getenv('GNOME_TASKS_PREVIEW_PAGE') === 'capture')
     window.set_visible_page(capturePage);
 
+// ...and the detail of a task: GNOME_TASKS_PREVIEW_EXPAND=1 opens the first task row, which is what
+// a screenshot of "what a task actually holds" needs.
+if (GLib.getenv('GNOME_TASKS_PREVIEW_EXPAND')) {
+    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
+        expandFirstRow(tasksPage);
+        return GLib.SOURCE_REMOVE;
+    });
+}
+
+function expandFirstRow(page) {
+    // Adw does not expose its rows directly; walk the widget tree for the first ExpanderRow.
+    const queue = [page];
+    while (queue.length > 0) {
+        const widget = queue.shift();
+        if (widget instanceof Adw.ExpanderRow) {
+            widget.set_expanded(true);
+            return;
+        }
+        for (let child = widget.get_first_child(); child; child = child.get_next_sibling())
+            queue.push(child);
+    }
+}
+
 print('preferences window built and presented');
 
 if (quitAfter > 0) {
