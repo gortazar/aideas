@@ -2,7 +2,8 @@
 
 You left several coding agents running across several repos, closed the laptop, and came
 back. `recap` is the one command that answers "what were they doing, and is anything still
-going?" — a few lines of output, no interaction, no network, no daemon.
+going?" — a few lines of output, no interaction, no daemon, and (unless you ask for
+`--smart`) no network.
 
 ![recap output](screenshots/recap.svg)
 
@@ -39,6 +40,7 @@ recap --running          # only what is working right now
 recap -v                 # a line per session under each project
 recap --json             # the same data, machine-readable
 recap --legend           # what the icons mean
+recap --smart            # have a model write the sentences instead
 ```
 
 One line per project, most recently active first:
@@ -67,6 +69,7 @@ what that line says — a project with something still running is never reported
 | `--legend` | print the status vocabulary |
 | `--config <path>` | use this config file |
 | `--no-cache` | re-read every transcript instead of using `~/.cache/recap` |
+| `--smart` | have a model write the sentences (see below) |
 
 ## What the icons mean
 
@@ -105,6 +108,7 @@ since  = "12h"                       # default time window
 roots  = ["~/git", "~/work"]         # only report projects under these
 ignore = ["~/git/scratch"]           # ...except these
 icons  = true                        # false is the same as always passing --no-icons
+smart_model = "claude-sonnet-5"      # which model --smart asks
 
 [icon]                               # override individual glyphs
 running     = "▶"
@@ -172,14 +176,42 @@ Guarantees for consumers of version 1:
 - Fields marked optional in the example (`title`, `branch`, `model`, `last_tool`,
   `last_file`, `todo_done`, `todo_total`, `unreadable`) may be absent.
 
+## `--smart`
+
+The sentences are assembled from the transcript by plain logic, which is instant, free and
+offline, but blunt. `--smart` has a model write them instead:
+
+```sh
+export ANTHROPIC_API_KEY=...
+recap --smart
+```
+
+What this does and does not do:
+
+- **It sends a short summary of each project** — name, agent, status, the last request and
+  the agent's last message (both clipped to 300 characters), the last tool, progress counts,
+  an age, and the sentence recap wrote itself. That is the whole list, and a test pins it.
+  No file contents, no tool output, no transcript, no paths into your store.
+- **It never withholds the report.** No key, no network, a rate limit, a reply recap cannot
+  parse: it says so on stderr and prints the plain sentences.
+- **It does not spawn an agent.** It is one HTTPS call to the Messages API, not a
+  `claude -p` subprocess — running an agent to describe your agents would write a new
+  session into the very store recap reads.
+- One request covers the whole report, so `--smart` costs one call regardless of how many
+  projects you have.
+
+The model defaults to `claude-sonnet-5`; `smart_model` in the config file changes it.
+
 ## Speed and privacy
 
 - **Fast**: 156 ms cold and 11 ms warm across 25 projects on the machine it was built on,
   against a 300 ms target. Transcripts reach tens of megabytes, so recap reads only the tail
   of each, and caches what it parsed under `~/.cache/recap`, keyed on file size and mtime.
-- **Side-effect free**: recap never writes to an agent's directories, never starts an agent,
-  and never uses the network.
+- **Side-effect free**: recap never writes to an agent's directories and never starts an
+  agent. It uses the network only for `--smart`, which is opt-in.
 - **Local**: it reads only the current user's own files and prints only short summaries.
+  Nothing leaves the machine unless you pass `--smart`, and then only the facts listed
+  above.
   Transcripts contain source code and sometimes secrets; the fixtures in this repo are
   scrubbed before being committed (`tools/scrub-*-fixture.py`), and the screenshot is taken
   against made-up data.

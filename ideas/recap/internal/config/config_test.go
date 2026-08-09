@@ -23,6 +23,7 @@ since = "12h"
 roots = ["/home/user/git", "/home/user/work"]
 ignore = ["/home/user/git/scratch"]
 icons = false
+smart_model = "claude-haiku-4-5-20251001"
 
 [icon]
 running = "▶"
@@ -39,6 +40,9 @@ waiting = "?"
 	}
 	if got, want := strings.Join(cfg.Ignore, ","), "/home/user/git/scratch"; got != want {
 		t.Errorf("Ignore = %q, want %q", got, want)
+	}
+	if got, want := cfg.SmartModel, "claude-haiku-4-5-20251001"; got != want {
+		t.Errorf("SmartModel = %q, want %q", got, want)
 	}
 	if cfg.Icons == nil || *cfg.Icons {
 		t.Errorf("Icons = %v, want false", cfg.Icons)

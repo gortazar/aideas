@@ -29,6 +29,8 @@ type Config struct {
 	// Icon overrides the glyph for individual statuses, keyed by status word
 	// (running, waiting, idle, interrupted, finished, unclear).
 	Icon map[string]string
+	// SmartModel is the model --smart asks to rewrite the sentences.
+	SmartModel string
 }
 
 // DefaultPath is where recap looks for the file.
@@ -127,6 +129,12 @@ func assign(cfg *Config, key, value string) error {
 			return fmt.Errorf("ignore: %v", err)
 		}
 		cfg.Ignore = expandAll(list)
+	case "smart_model":
+		s, err := parseString(value)
+		if err != nil {
+			return fmt.Errorf("smart_model: %v", err)
+		}
+		cfg.SmartModel = s
 	case "icons":
 		b, err := strconv.ParseBool(value)
 		if err != nil {

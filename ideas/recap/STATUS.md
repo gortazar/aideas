@@ -57,12 +57,15 @@ wanted Rust and it will be swapped while the code is still small.
 - [x] M6d — README: install, usage, every flag, the icon vocabulary with the rule behind
       each, the config file, the versioned JSON schema with its guarantees, and a
       screenshot generated from a made-up store by tools/screenshot.sh
-- [ ] M7 — `--smart`: the same sentence written by a model, for when the heuristic one
-      reads too blunt (answered open question in PLAN.md)
+- [x] M7 — `--smart`: one Messages API call rewrites every project's sentence, sending
+      only a declared list of short facts (pinned by a test); any failure falls back to the
+      plain sentences with a word on stderr. Exercised against an httptest server — there
+      was no ANTHROPIC_API_KEY on this machine to try the live path
 
 Difficulty estimate: medium — unchanged. The formats turned out to be readable and both
 carry more structure than feared (opencode in particular has `title`, `agent`, `model` and
 a todo list as columns), so the risk is concentrated in the status rules and liveness.
 
-Next: M7 — `--smart`: the recap sentence written by a model, for when the heuristic one
-reads too blunt.
+Next: nothing outstanding in PLAN.md. Remaining polish if the idea is picked up again:
+try --smart against the real API once a key is available, and record a fixture for a
+Claude Code TodoWrite progress marker (no session on this machine has ever used one).

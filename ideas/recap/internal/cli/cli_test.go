@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -311,6 +314,67 @@ func TestAGrownTranscriptIsNotServedFromTheCache(t *testing.T) {
 	_, stdout, _ := run(t, env, "-v")
 	if !strings.Contains(stdout, "1m ago") {
 		t.Errorf("stale cache entry was used; output:\n%s", stdout)
+	}
+}
+
+func TestSmartReplacesTheSentences(t *testing.T) {
+	var sent []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sent, _ = io.ReadAll(r.Body)
+		w.Header().Set("content-type", "application/json")
+		io.WriteString(w, `{"content":[{"type":"text","text":"[\"Ran the suite and stopped for the night.\"]"}]}`)
+	}))
+	defer srv.Close()
+
+	env := testEnv(t)
+	env.SmartEndpoint = srv.URL
+	env.APIKey = "test-key"
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Hour)
+
+	_, stdout, stderr := run(t, env, "-smart")
+	if !strings.Contains(stdout, "Ran the suite and stopped for the night.") {
+		t.Errorf("the model's sentence was not used:\n%s\n%s", stdout, stderr)
+	}
+	if !strings.Contains(string(sent), "alpha") {
+		t.Errorf("the project facts were not sent: %s", sent)
+	}
+	if strings.Contains(string(sent), env.ClaudeProjects) {
+		t.Errorf("a path into the store was sent: %s", sent)
+	}
+}
+
+// A model that cannot be reached must not cost you the report.
+func TestSmartFallsBackToThePlainSentences(t *testing.T) {
+	env := testEnv(t)
+	env.SmartEndpoint = "http://127.0.0.1:1/never-listening"
+	env.APIKey = "test-key"
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Hour)
+
+	code, stdout, stderr := run(t, env, "-smart")
+	if code != 0 {
+		t.Errorf("exit %d, want 0: the report is still worth printing", code)
+	}
+	if !strings.Contains(stdout, "Asked to") {
+		t.Errorf("the plain sentence was not printed:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "--smart") {
+		t.Errorf("stderr = %q, want it to explain that --smart failed", stderr)
+	}
+}
+
+func TestSmartWithoutAKeySaysSo(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Hour)
+
+	code, stdout, stderr := run(t, env, "-smart")
+	if code != 0 {
+		t.Errorf("exit %d, want 0", code)
+	}
+	if !strings.Contains(stderr, "ANTHROPIC_API_KEY") {
+		t.Errorf("stderr = %q, want it to name the variable to set", stderr)
+	}
+	if !strings.Contains(stdout, "alpha") {
+		t.Errorf("the report was withheld:\n%s", stdout)
 	}
 }
 
