@@ -17,6 +17,8 @@ type Filters struct {
 	// Roots, when set, keep only sessions whose working directory is inside one of them.
 	// This is what stops throwaway sessions from /tmp filling the report.
 	Roots []string
+	// Ignore hides sessions under these directories even when they are inside a root.
+	Ignore []string
 	// Project keeps only the project with this name.
 	Project string
 	// RunningOnly keeps only projects with something running right now.
@@ -35,6 +37,9 @@ func FilterSessions(sessions []*session.Session, f Filters, now time.Time) []*se
 			continue
 		}
 		if len(f.Roots) > 0 && s.Dir != "" && !underAnyRoot(s.Dir, f.Roots) {
+			continue
+		}
+		if s.Dir != "" && underAnyRoot(s.Dir, f.Ignore) {
 			continue
 		}
 		kept = append(kept, s)

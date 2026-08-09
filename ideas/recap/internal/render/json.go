@@ -81,14 +81,14 @@ func JSON(w io.Writer, projects []report.Project, opts Options, liveness string)
 			Name:         p.Name,
 			Dir:          p.Dir,
 			Status:       p.Status().Word(),
-			Icon:         p.Status().Icon(),
+			Icon:         opts.icon(p.Status()),
 			Recap:        p.Lead.Sentence,
 			Agents:       agentStrings(p.Agents),
 			LastActivity: p.LastActivity,
 			Sessions:     make([]jsonSession, 0, len(p.Sessions)),
 		}
 		for _, e := range p.Sessions {
-			jp.Sessions = append(jp.Sessions, jsonSessionOf(e))
+			jp.Sessions = append(jp.Sessions, jsonSessionOf(e, opts))
 		}
 		doc.Projects = append(doc.Projects, jp)
 	}
@@ -98,13 +98,13 @@ func JSON(w io.Writer, projects []report.Project, opts Options, liveness string)
 	return enc.Encode(doc)
 }
 
-func jsonSessionOf(e report.Entry) jsonSession {
+func jsonSessionOf(e report.Entry, opts Options) jsonSession {
 	s := e.Session
 	return jsonSession{
 		ID:           s.ID,
 		Agent:        string(s.Agent),
 		Status:       e.Status.Word(),
-		Icon:         e.Status.Icon(),
+		Icon:         opts.icon(e.Status),
 		Recap:        e.Sentence,
 		Title:        s.Title,
 		Dir:          s.Dir,

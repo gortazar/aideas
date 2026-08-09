@@ -47,7 +47,9 @@ wanted Rust and it will be swapped while the code is still small.
 - [x] M6a — `--json`: a versioned document (schema version 1) with a project entry per
       line of the text report and a session entry under each, plus a `liveness` field so a
       consumer knows whether an unclear status means 'no process table'
-- [ ] M6b — config file at ~/.config/recap/config.toml, flags taking precedence
+- [x] M6b — config file at ~/.config/recap/config.toml: `since`, `roots`, `ignore`,
+      `icons` and an `[icon]` table of per-status glyphs, with flags taking precedence and
+      a mistake in the file reported with its line number
 - [ ] M6c — caching parsed summaries on size + mtime
 - [ ] M6d — README with the icon vocabulary, the JSON schema and a screenshot
 - [ ] M7 — `--smart`: the same sentence written by a model, for when the heuristic one
@@ -57,5 +59,5 @@ Difficulty estimate: medium — unchanged. The formats turned out to be readable
 carry more structure than feared (opencode in particular has `title`, `agent`, `model` and
 a todo list as columns), so the risk is concentrated in the status rules and liveness.
 
-Next: M6b — the config file: default window, project roots, ignored paths and icon
-choice, with command-line flags taking precedence.
+Next: M6c — cache parsed summaries on file size + mtime under ~/.cache/recap, to keep the
+sub-300ms target as transcripts grow.

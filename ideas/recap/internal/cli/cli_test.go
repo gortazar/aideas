@@ -206,6 +206,74 @@ func TestJSONOutputIsAValidDocument(t *testing.T) {
 	}
 }
 
+func configFile(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestConfigFileSuppliesDefaults(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", 40*time.Hour)
+	transcript(t, env.ClaudeProjects, "/home/user/git/scratch", "s2", time.Hour)
+	env.ConfigPath = configFile(t, `
+since = "3d"
+roots = ["/home/user/git"]
+ignore = ["/home/user/git/scratch"]
+icons = false
+`)
+
+	_, stdout, stderr := run(t, env)
+	if !strings.Contains(stdout, "alpha") {
+		t.Errorf("since = 3d from the config file did not take effect:\n%s\n%s", stdout, stderr)
+	}
+	if strings.Contains(stdout, "scratch") {
+		t.Errorf("an ignored directory was reported:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "unclear ") {
+		t.Errorf("icons = false from the config file did not take effect:\n%s", stdout)
+	}
+}
+
+// The answered question in PLAN.md: flags take precedence over the config file.
+func TestFlagsBeatTheConfigFile(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", 40*time.Hour)
+	env.ConfigPath = configFile(t, "since = \"3d\"\n")
+
+	_, stdout, _ := run(t, env, "-since", "1h")
+	if strings.Contains(stdout, "alpha") {
+		t.Errorf("--since 1h did not override the config file's 3d:\n%s", stdout)
+	}
+}
+
+func TestConfigFileCanReplaceAnIcon(t *testing.T) {
+	env := testEnv(t)
+	transcript(t, env.ClaudeProjects, "/home/user/git/alpha", "s1", time.Hour)
+	env.ConfigPath = configFile(t, "[icon]\nunclear = \"??\"\n")
+
+	_, stdout, _ := run(t, env)
+	if !strings.HasPrefix(stdout, "?? alpha") {
+		t.Errorf("the configured icon was not used:\n%s", stdout)
+	}
+}
+
+func TestABrokenConfigFileStopsRecapWithAnExplanation(t *testing.T) {
+	env := testEnv(t)
+	env.ConfigPath = configFile(t, "sicne = \"3d\"\n")
+
+	code, _, stderr := run(t, env)
+	if code == 0 {
+		t.Error("exit 0 for a config file recap could not understand")
+	}
+	if !strings.Contains(stderr, "unknown setting") {
+		t.Errorf("stderr = %q, want it to name the mistake", stderr)
+	}
+}
+
 func TestBadFlagValuesFailWithAMessage(t *testing.T) {
 	env := testEnv(t)
 	for _, args := range [][]string{
