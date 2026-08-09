@@ -1,10 +1,12 @@
 status: in_progress
 started_at: 2026-08-09
-last_session_id:
-last_run: 2026-08-09
+last_session_id: fa22503c-6cd0-436e-b54f-1a557e15f321
+last_run: 2026-08-09T18:00:54+02:00
+last_cycle_cost_usd: 9.662947499999998
 
 ## Log
-<!-- Newest entries on top. The orchestrator prepends here after each cycle. -->
+- 2026-08-09T18:00:54+02:00 — in_progress ($9.662947499999998)
+
 
 ### 2026-08-09
 M0 format spike done against the real stores on this machine (Claude Code JSONL,
