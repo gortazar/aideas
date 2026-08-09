@@ -27,15 +27,18 @@ wanted Rust and it will be swapped while the code is still small.
       against six scrubbed fixtures covering the tail shapes seen in the real store
 - [x] M2b — status rules: transcript tail + liveness + clock -> one of
       running / waiting / idle / interrupted / finished / unclear, table-tested
-- [ ] M2c — recap sentence assembly
+- [x] M2c — recap sentence assembly: `Asked to "X" — interrupted mid-Bash.`, pure
+      logic over the session fields, table-tested
 - [ ] M3 — liveness detection behind a seam
 - [ ] M4 — rendering: icons, one line per project, `--no-icons`, `--legend`, sorting, filters
 - [ ] M5 — opencode reader
 - [ ] M6 — `--json`, `-v`, caching, config file, README screenshot
+- [ ] M7 — `--smart`: the same sentence written by a model, for when the heuristic one
+      reads too blunt (answered open question in PLAN.md)
 
 Difficulty estimate: medium — unchanged. The formats turned out to be readable and both
 carry more structure than feared (opencode in particular has `title`, `agent`, `model` and
 a todo list as columns), so the risk is concentrated in the status rules and liveness.
 
-Next: M2c — recap sentence assembly, the "was doing X, now Y" line, as pure logic over
-the session fields.
+Next: M3 — liveness detection: find the agent processes and correlate them with sessions,
+behind a seam with a fake in tests.
