@@ -46,6 +46,8 @@
             gotools # goimports
             sqlite # for poking at opencode.db by hand
             jq
+            python3 # tools/scrub-*-fixture.py and tools/demo-store.py
+            charm-freeze # tools/screenshot.sh renders the README screenshot
           ];
           shellHook = ''
             echo "recap dev shell — go test ./... | go build ./cmd/recap"
