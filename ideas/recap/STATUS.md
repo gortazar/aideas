@@ -1,4 +1,4 @@
-status: in_progress
+status: done
 started_at: 2026-08-09
 last_session_id: fa22503c-6cd0-436e-b54f-1a557e15f321
 last_run: 2026-08-09T18:54:00+02:00
@@ -9,6 +9,19 @@ last_cycle_cost_usd: 9.104486499999998
 - 2026-08-09T18:00:54+02:00 — in_progress ($9.662947499999998)
 
 
+
+### 2026-08-09 — done
+Every feature in `PLAN.md` is built, tested and committed, and `nix flake check` is green:
+both readers, the status rules, the sentence (heuristic and `--smart`), liveness, the text
+and `--json` renderers, all the filters, the config file, the cache, the README and the
+screenshot. Verified end to end against this machine's real stores — 25 projects, 156 ms
+cold, 11 ms warm.
+
+Two things "done" does *not* cover, both because this machine could not produce them:
+- `--smart` has never made a live API call; there is no `ANTHROPIC_API_KEY` here, so it is
+  tested against an httptest stand-in for the Messages API.
+- No Claude Code session on this machine has ever used `TodoWrite`, so there is no recorded
+  fixture for the "3 of 7 done" marker on that side. opencode's `todo` table is covered.
 
 ### 2026-08-09
 M0 format spike done against the real stores on this machine (Claude Code JSONL,
@@ -54,13 +67,18 @@ wanted Rust and it will be swapped while the code is still small.
       a mistake in the file reported with its line number
 - [x] M6c — cache parsed sessions on file size + mtime under ~/.cache/recap, with
       `--no-cache` to bypass it: 156ms cold, 11ms warm on this machine's 25 projects
-- [ ] M6d — README with the icon vocabulary, the JSON schema and a screenshot
-- [ ] M7 — `--smart`: the same sentence written by a model, for when the heuristic one
-      reads too blunt (answered open question in PLAN.md)
+- [x] M6d — README: install, usage, every flag, the icon vocabulary with the rule behind
+      each, the config file, the versioned JSON schema with its guarantees, and a
+      screenshot generated from a made-up store by tools/screenshot.sh
+- [x] M7 — `--smart`: one Messages API call rewrites every project's sentence, sending
+      only a declared list of short facts (pinned by a test); any failure falls back to the
+      plain sentences with a word on stderr. Exercised against an httptest server — there
+      was no ANTHROPIC_API_KEY on this machine to try the live path
 
 Difficulty estimate: medium — unchanged. The formats turned out to be readable and both
 carry more structure than feared (opencode in particular has `title`, `agent`, `model` and
 a todo list as columns), so the risk is concentrated in the status rules and liveness.
 
-Next: M6d — the README: install, usage, the icon vocabulary, the JSON schema, the config
-file, and a screenshot of real output.
+Next: nothing — the plan is delivered. If the idea is reopened: try `--smart` against the
+real API once a key is available, record a `TodoWrite` fixture if a session ever produces
+one, and add a third agent (which should be a new reader and nothing else).

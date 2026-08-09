@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 	"github.com/gortazar/recap/internal/render"
 	"github.com/gortazar/recap/internal/report"
 	"github.com/gortazar/recap/internal/session"
+	"github.com/gortazar/recap/internal/smart"
 )
 
 const usage = `recap — what were my coding agents doing?
@@ -40,6 +42,10 @@ type Env struct {
 	ConfigPath string
 	// CachePath is where parsed sessions are remembered between runs.
 	CachePath string
+	// SmartEndpoint is the Messages API --smart calls. Empty means the real one.
+	SmartEndpoint string
+	// APIKey authenticates --smart. Empty means --smart cannot run.
+	APIKey string
 	// ProcRoot is the process table, /proc by default.
 	ProcRoot string
 	// Roots limits which projects are reported. Empty means the user's home directory.
@@ -59,6 +65,7 @@ func DefaultEnv() Env {
 		OpencodeStore:  opencode.DefaultStore(),
 		ConfigPath:     config.DefaultPath(),
 		CachePath:      cache.DefaultPath(),
+		APIKey:         os.Getenv("ANTHROPIC_API_KEY"),
 		ProcRoot:       proc.DefaultRoot,
 		Roots:          roots,
 		Now:            time.Now,
@@ -74,10 +81,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 func RunWith(args []string, stdout, stderr io.Writer, env Env) int {
 	fs := flag.NewFlagSet("recap", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	fs.Usage = func() {
-		fmt.Fprint(stderr, usage)
-		fs.PrintDefaults()
-	}
+	// Silent: the flag package calls this both for -h and after a bad flag, and it has
+	// already written the error message itself. Help is answered on stdout below, where a
+	// user piping `recap --help` into a pager expects it.
+	fs.Usage = func() {}
 
 	var (
 		since    = fs.String("since", "24h", "hide sessions untouched for longer than this (e.g. 90m, 2d)")
@@ -91,6 +98,7 @@ func RunWith(args []string, stdout, stderr io.Writer, env Env) int {
 		asJSON   = fs.Bool("json", false, "print the report as JSON (a versioned public interface)")
 		confPath = fs.String("config", "", "read this config file instead of ~/.config/recap/config.toml")
 		noCache  = fs.Bool("no-cache", false, "re-read every transcript instead of using ~/.cache/recap")
+		useSmart = fs.Bool("smart", false, "have a model write the sentences; sends a short summary of each project to the Anthropic API (needs ANTHROPIC_API_KEY)")
 		verbose  = fs.Bool("v", false, "add a line per session under each project")
 		verbose2 = fs.Bool("verbose", false, "add a line per session under each project")
 	)
@@ -102,6 +110,7 @@ func RunWith(args []string, stdout, stderr io.Writer, env Env) int {
 			fs.PrintDefaults()
 			return 0
 		}
+		fmt.Fprintf(stderr, "recap: try --help\n")
 		return 2
 	}
 
@@ -202,6 +211,14 @@ func RunWith(args []string, stdout, stderr io.Writer, env Env) int {
 	projects := report.Build(report.FilterSessions(sessions, filters, opts.Now), live, opts.Now)
 	projects = report.FilterProjects(projects, filters)
 
+	if *useSmart {
+		// A model being unreachable is no reason to withhold the report, so a failure is
+		// explained on stderr and the heuristic sentences stand.
+		if err := rewrite(projects, cfg.SmartModel, env, opts.Now); err != nil {
+			fmt.Fprintln(stderr, "recap: --smart:", err, "— keeping the plain sentences")
+		}
+	}
+
 	if *asJSON {
 		// Always a document, even with nothing to report: a consumer should not have to
 		// tell "no sessions" apart from "recap failed" by parsing stderr.
@@ -221,6 +238,75 @@ func RunWith(args []string, stdout, stderr io.Writer, env Env) int {
 		return 1
 	}
 	return 0
+}
+
+// rewrite replaces each project's sentence with one written by a model. Only the project's
+// own line changes and only in memory: nothing is written back to any store.
+func rewrite(projects []report.Project, model string, env Env, now time.Time) error {
+	if len(projects) == 0 {
+		return nil
+	}
+	client := smart.New(env.APIKey, model)
+	if env.SmartEndpoint != "" {
+		client.Endpoint = env.SmartEndpoint
+	}
+
+	facts := make([]smart.Facts, 0, len(projects))
+	for _, p := range projects {
+		facts = append(facts, factsOf(p, now))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), smart.Timeout)
+	defer cancel()
+	sentences, err := client.Sentences(ctx, facts)
+	if err != nil {
+		return err
+	}
+	for i := range projects {
+		projects[i].Lead.Sentence = sentences[i]
+		// Keep the session entry the project line came from in step, so --json does not
+		// contradict itself.
+		for j := range projects[i].Sessions {
+			if projects[i].Sessions[j].Session == projects[i].Lead.Session {
+				projects[i].Sessions[j].Sentence = sentences[i]
+			}
+		}
+	}
+	return nil
+}
+
+// factsOf is the entire set of things --smart sends about a project. Requests are truncated:
+// the model needs the gist, not the paragraph.
+func factsOf(p report.Project, now time.Time) smart.Facts {
+	s := p.Lead.Session
+	f := smart.Facts{
+		Project:     p.Name,
+		Status:      p.Status().Word(),
+		Request:     clip(s.LastRequest, 300),
+		AgentSaid:   clip(s.LastText, 300),
+		LastTool:    s.LastTool,
+		PendingTool: s.PendingTool,
+		Age:         render.Age(now.Sub(s.LastActivity)),
+		Heuristic:   p.Lead.Sentence,
+	}
+	if f.Request == "" {
+		f.Request = clip(s.Title, 300)
+	}
+	if len(p.Agents) > 0 {
+		f.Agent = string(p.Agents[0])
+	}
+	if s.TodoTotal > 0 {
+		f.Progress = fmt.Sprintf("%d of %d done", s.TodoDone, s.TodoTotal)
+	}
+	return f
+}
+
+func clip(s string, n int) string {
+	r := []rune(strings.TrimSpace(s))
+	if len(r) <= n {
+		return string(r)
+	}
+	return string(r[:n]) + "…"
 }
 
 // iconOverrides turns the config file's status words into statuses. A word recap does not
