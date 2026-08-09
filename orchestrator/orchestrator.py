@@ -510,6 +510,21 @@ class Orchestrator:
             # did less than it wanted to, which otherwise looks like a quiet cycle.
             log(f"WARNING: {denials} tool call(s) denied — widen --allowed-tools if this repeats.")
 
+    def push_if_ahead(self, context: str = "") -> None:
+        """Push whatever is committed but unsent.
+
+        Called from `finally`, because several paths return before the build phase — most
+        commonly 'no idea is currently buildable' — and each of those still leaves the
+        planning pass's commits behind. Pushing only at the end of a full cycle stranded
+        them until the *next* cycle's start-of-run retry, which on a disposable clone can
+        mean losing them entirely.
+        """
+        ahead = git("rev-list", "--count", "@{u}..HEAD", cwd=self.repo).stdout.strip()
+        if not (ahead.isdigit() and int(ahead) > 0):
+            return
+        if git("push", "--quiet", cwd=self.repo).returncode != 0:
+            log(f"push failed ({ahead} commit(s) pending{context}) — will retry next cycle")
+
     def claude_budget_args(self, key: str) -> list[str]:
         value = self.config.get(key, "")
         return [] if is_unlimited(value) else ["--max-budget-usd", value]
@@ -869,11 +884,9 @@ class Orchestrator:
 
             for agent in self.agents:
                 self.finalize(agent)
-
-            if git("push", "--quiet", cwd=self.repo).returncode != 0:
-                log("push failed — will retry next cycle")
             return 0
         finally:
+            self.push_if_ahead()
             self.lock.release()
 
 
