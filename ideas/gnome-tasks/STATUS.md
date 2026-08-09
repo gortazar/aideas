@@ -1,4 +1,5 @@
 status: done
+version: 0.1
 started_at: 2026-08-05T13:26:54+02:00
 last_session_id: 58e4e9b2-48c5-4ddf-bb7a-4bce8e161845
 last_run: 2026-08-09T13:03:02+02:00

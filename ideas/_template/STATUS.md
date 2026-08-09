@@ -1,4 +1,5 @@
 status: not_started
+version: 0.1
 started_at:
 last_session_id:
 last_run:

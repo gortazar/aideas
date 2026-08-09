@@ -187,6 +187,14 @@ class ReadmeQueue:
     def pending_for(self, slug: str) -> list[Entry]:
         return [e for e in self.entries() if e.slug == slug]
 
+    def finished_for(self, slug: str) -> list[Entry]:
+        """Entries already retired for this slug — i.e. how many times it has shipped."""
+        text = self.path.read_text()
+        match = re.search(r"^##\s+Finished\s*$(.*?)(?=^##\s|\Z)", text, re.M | re.S)
+        if not match:
+            return []
+        return [e for e in parse_entries(match.group(1)) if e.slug == slug]
+
     @staticmethod
     def _renumber(entries: list[Entry], start: int = 1) -> str:
         out: list[str] = []
@@ -402,6 +410,27 @@ def parse_timestamp(value: str | None) -> float | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=datetime.now().astimezone().tzinfo)
     return parsed.timestamp()
+
+
+INITIAL_VERSION = "0.1"
+UPDATE_KIND_RE = re.compile(r"\b(major|minor)\b", re.I)
+
+
+def bump_version(current: str, kind: str) -> str:
+    """minor: 0.1 -> 0.2, 1.4 -> 1.5.  major: 0.1 -> 1.0, 1.4 -> 2.0."""
+    try:
+        major, minor = (int(part) for part in (current or INITIAL_VERSION).split(".", 1))
+    except ValueError:
+        major, minor = 0, 1
+    if kind == "major":
+        return f"{major + 1}.0"
+    return f"{major}.{minor + 1}"
+
+
+def entry_update_kind(entry_text: str) -> str | None:
+    """Whether a README entry declares itself a minor or major update."""
+    match = UPDATE_KIND_RE.search(entry_text)
+    return match.group(1).lower() if match else None
 
 
 def recover_session_id(agent_cwd: Path) -> str | None:
@@ -793,7 +822,20 @@ class Orchestrator:
 
         # CLAUDE.md is regenerated every cycle, never hand-edited, so edits to AGENTS.md
         # and newly answered questions in PLAN.md propagate on the very next cycle.
-        parts = [self.agents_md.read_text(), ""]
+        current, target, kind = self.version_plan(slug)
+        this_cycle = ["## This cycle", "", f"Idea version: {current}"]
+        if target != current:
+            this_cycle.append(
+                f"This entry is a **{kind}** update: when the work is complete, set "
+                f"`version: {target}` in STATUS.md, in the same commit as `status: done`."
+            )
+        else:
+            this_cycle.append(
+                "This is the idea's first piece of work, which delivers "
+                f"{INITIAL_VERSION} — leave the version alone."
+            )
+
+        parts = [self.agents_md.read_text(), "", "\n".join(this_cycle), ""]
         parts.append((agent.idea_dir / "PLAN.md").read_text())
         parts.append("\n## Current status")
         status_file = agent.idea_dir / "STATUS.md"
@@ -862,10 +904,12 @@ class Orchestrator:
 
     # -- finalize -------------------------------------------------------------------------
 
-    def rewrite_status(self, slug: str, new_status: str, session_id: str, cost: float) -> None:
+    def rewrite_status(self, slug: str, new_status: str, session_id: str, cost: float,
+                       version: str | None = None) -> None:
         status_file = self.repo / "ideas" / slug / "STATUS.md"
         existing = status_file.read_text().splitlines() if status_file.is_file() else []
 
+        version = version or status_value(status_file, "version") or INITIAL_VERSION
         previous_started = status_value(status_file, "started_at")
         started = previous_started or datetime.now().astimezone().isoformat(timespec="seconds")
         now = datetime.now().astimezone().isoformat(timespec="seconds")
@@ -898,6 +942,7 @@ class Orchestrator:
 
         out = [
             f"status: {new_status}",
+            f"version: {version}",
             f"started_at: {started}",
             f"last_session_id: {session_id}",
             f"last_run: {now}",
@@ -911,7 +956,45 @@ class Orchestrator:
         ]
         status_file.write_text("\n".join(out).rstrip() + "\n")
 
-    def advance_queue(self, slug: str) -> None:
+    def version_plan(self, slug: str) -> tuple[str, str, str | None]:
+        """(current version, version this entry should deliver, the declared update kind).
+
+        The first piece of work on an idea delivers 0.1 and bumps nothing; every later
+        entry declares itself minor or major and bumps on completion. "Later" means the
+        slug already has a retired entry in `## Finished`, which is the only record of
+        having shipped before.
+        """
+        status_file = self.repo / "ideas" / slug / "STATUS.md"
+        current = status_value(status_file, "version") or INITIAL_VERSION
+        queue = ReadmeQueue(self.repo / "README.md")
+        if not queue.finished_for(slug):
+            return current, current, None
+
+        pending = queue.pending_for(slug)
+        kind = entry_update_kind(pending[0].text) if pending else None
+        if kind is None:
+            log(f"{slug}: this entry doesn't say whether it is a minor or major update; "
+                "assuming minor.")
+            kind = "minor"
+        return current, bump_version(current, kind), kind
+
+    def settle_version(self, slug: str) -> str:
+        """Make the recorded version match what this entry was supposed to deliver.
+
+        The agent is asked to set it — that is the rule in AGENTS.md and it keeps the
+        version part of the work rather than something done to it. But an unbumped version
+        silently loses the record of what shipped, so a mismatch is corrected here and
+        said out loud rather than left to chance.
+        """
+        status_file = self.repo / "ideas" / slug / "STATUS.md"
+        _, target, _ = self.version_plan(slug)
+        actual = status_value(status_file, "version") or INITIAL_VERSION
+        if actual != target:
+            log(f"{slug}: version is {actual} but this entry should deliver {target}; "
+                "correcting.")
+        return target
+
+    def advance_queue(self, slug: str, version: str | None = None) -> None:
         """An entry is finished: retire it, and start the next one for the same folder.
 
         The completed entry moves to `## Finished`, which is both the record you asked for
@@ -924,6 +1007,8 @@ class Orchestrator:
         """
         queue = ReadmeQueue(self.repo / "README.md")
         today = datetime.now().strftime("%Y-%m-%d")
+        if version:
+            today = f"{today}, v{version}"
         if not queue.move_to_finished(slug, today):
             log(f"{slug}: done, but no '## Ideas' entry to retire — leaving README alone.")
             return
@@ -999,9 +1084,12 @@ class Orchestrator:
             new_status = "in_progress"
 
         cost = float(result.get("total_cost_usd", 0) or 0)
-        self.rewrite_status(slug, new_status, session_id, cost)
+        # Settle the version before the queue advances: once the entry is retired the slug
+        # has one more finished entry, and version_plan would compute the *next* bump.
+        version = self.settle_version(slug) if new_status == "done" else None
+        self.rewrite_status(slug, new_status, session_id, cost, version)
         if new_status == "done":
-            self.advance_queue(slug)
+            self.advance_queue(slug, version)
 
         git("add", "-A", cwd=self.repo)
         note = "blocked on new question" if new_status == "blocked" else "progress"

@@ -71,6 +71,27 @@ still correct — just close the loop quickly:
 - A failing assertion is a fine thing to be caught mid-way through. A tree that can't
   even load its test suite is not.
 
+## Versioning
+
+Every idea carries a version, held as `version:` in the header of its `STATUS.md`.
+
+- **An idea starts at `0.1`.** Its first piece of work delivers `0.1` — do not bump during
+  it.
+- **Later entries in `README.md` say whether they are a `minor` or a `major` update**, and
+  you bump the version when that work is complete:
+  - `minor` — `0.1` → `0.2`, `1.4` → `1.5`
+  - `major` — `0.1` → `1.0`, `1.4` → `2.0`
+  Both components are integers, not decimal places: a minor bump from `0.9` gives `0.10`,
+  not `1.0`. Only a `major` entry moves the first number.
+- The generated `## This cycle` block at the top of your `CLAUDE.md` states the current
+  version and, when a bump is due, the exact version to set. Set it in the same commit
+  that finishes the work, alongside `status: done`.
+- Never lower a version, and never bump twice for one entry. If the entry does not say
+  which kind of update it is, treat it as `minor` and note the assumption in `STATUS.md`.
+
+The version is what `## Finished` records against each completed entry, so it is the one
+durable answer to "what did this idea actually ship, and when".
+
 ## Required per-idea deliverables
 - `flake.nix` providing a reproducible dev/build/test/release environment.
 - `README.md` with concrete instructions: how to enter the environment (`nix develop`),

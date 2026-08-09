@@ -29,6 +29,12 @@ code it wrote.
 This works whether the idea is still in progress or already finished — adding an entry for
 a finished idea simply starts it again on the new work.
 
+**Say whether it is a `minor` or a `major` update.** Every idea carries a version, held in
+its `STATUS.md` and starting at `0.1`, which its first piece of work delivers. Each later
+entry bumps it — `minor` moves `0.1` → `0.2`, `major` moves `0.1` → `1.0` — and the
+version is recorded against the entry in `## Finished`. Write the word anywhere in the
+entry; if you leave it out the entry is treated as `minor`.
+
 ### `## Finished`
 
 When an entry is complete the orchestrator moves it out of `## Ideas` into `## Finished`
