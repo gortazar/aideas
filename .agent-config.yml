@@ -43,8 +43,12 @@ max_daily_cost_usd: 150.00
 # a tidy stopping point.
 max_cycle_cost_usd: 50.00
 
-# Same valve for the cheaper planning pass, which only reads and writes PLAN.md.
-max_plan_cost_usd: 0.40
+# Same valve for the planning pass. It used to only read and write PLAN.md, and 0.40 was
+# generous for that; now it researches with WebFetch and WebSearch, and several idea
+# descriptions explicitly ask for a study of prior art before any code. The old cap was
+# already being exceeded — a plan capped at 0.40 finished at 0.4757, truncated mid-run —
+# and would have cut the new research short.
+max_plan_cost_usd: 3.00
 
 # Only allowed to run within this local-time window each day. Supports overnight ranges.
 # Set to "unlimited" to run at any hour.
