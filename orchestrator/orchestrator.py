@@ -445,15 +445,27 @@ class Orchestrator:
 
     # -- README ---------------------------------------------------------------------
 
+    def ideas_section(self) -> str:
+        """Just the '## Ideas' section — the actual work queue.
+
+        Scanning the whole file made any path mentioned in prose look like an idea: the
+        format documentation's own `ideas/recap` example became a phantom entry the
+        planner then tried to draft a plan for. It would equally resurrect everything
+        moved to a '## Finished' section. Falls back to the whole file when there is no
+        such heading, which is what a README written before sections existed looks like.
+        """
+        text = (self.repo / "README.md").read_text()
+        match = re.search(r"^##\s+Ideas\s*$(.*?)(?=^##\s|\Z)", text, re.M | re.S)
+        return match.group(1) if match else text
+
     def idea_slugs(self) -> list[str]:
         """Slugs in README order, de-duplicated.
 
         The shell version ended in `uniq`, which only drops *adjacent* repeats; this drops
         all of them, which is what was always meant.
         """
-        text = (self.repo / "README.md").read_text()
         seen: list[str] = []
-        for slug in SLUG_RE.findall(text):
+        for slug in SLUG_RE.findall(self.ideas_section()):
             if slug not in seen:
                 seen.append(slug)
         return seen
@@ -463,7 +475,7 @@ class Orchestrator:
         # Bounded so `recap` doesn't match the `ideas/recap-gs` entry, and slash-optional
         # so it finds the link however it was written.
         link = re.compile(rf"ideas/{re.escape(slug)}(?![a-z0-9-])")
-        lines = (self.repo / "README.md").read_text().splitlines()
+        lines = self.ideas_section().splitlines()
         collected: list[str] = []
         for line in lines:
             if not collected and not link.search(line):
