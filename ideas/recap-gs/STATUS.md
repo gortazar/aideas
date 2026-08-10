@@ -53,8 +53,13 @@ Started against a finished `recap`: its `--json` is schema version 1, documented
       produces something to read — asking, no sessions, hidden by your own filters, recap
       unavailable, an old report dated and kept rather than an emptied menu — and a stale
       report never drives the panel icon, so a hang cannot raise a false alarm. 101 tests.
-- [ ] M4b — the widgets: indicator, menu rows, refresh on a timer and on menu open, no
-      refresh while the screen is locked
+- [x] M4b — the refresh schedule: one GLib timeout source, refreshing at once and then on
+      the interval, skipping (but not abandoning) ticks while suppressed, restarting the
+      interval when woken by an opened menu, and leaving nothing behind when stopped. The
+      timer functions are injected, so a rule about time is checked without waiting.
+      112 tests.
+- [ ] M4c — the widgets: indicator, menu rows, refresh on menu open, lock and idle
+      suppression wired to the real shell
 - [ ] M5 — preferences window wired to the GSettings keys
 - [ ] M6a — click-through: resume the session in a terminal, in its own directory
 - [ ] M6b — leak test: enable/disable repeatedly with nothing left behind
@@ -64,5 +69,5 @@ Difficulty estimate: medium, as planned. recap being finished removes the risk t
 called biggest; what is left is the compositor-side work (no blocking, nothing leaked) and
 proving it in a real shell.
 
-Next: M4b — the widgets: the panel button and the menu built from the model, refreshed on
-a timer and when the menu opens, and never while the screen is locked.
+Next: M4c — the widgets: the panel button and the menu built from the model, wired to the
+source, the schedule, and the shell's lock and idle state.
