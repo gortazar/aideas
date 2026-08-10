@@ -148,7 +148,7 @@ Units, each one commit, tests first:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] Should recap's releases live in this monorepo as `recap-v<version>` tags and GitHub releases on
+- [x] Should recap's releases live in this monorepo as `recap-v<version>` tags and GitHub releases on
       `gortazar/aideas` — the whole plan above assumes so, since it is the only thing an agent can do
       unaided — or does recap get its own `gortazar/recap` repo, which the Go module path already
       implies and which would make `go install`, the install URL and "latest release" all simpler? A
@@ -156,3 +156,17 @@ Units, each one commit, tests first:
       the agent can do, and it changes every URL in the workflow, the installer and the README, so it
       is worth one line now rather than a rewrite later. Ticking this line as-is confirms the
       monorepo.
+      **ANSWER: its own repo.** `https://github.com/gortazar/recap` already exists — public and
+      empty, created for this. Use it; the Go module path already says `github.com/gortazar/recap`,
+      and the monorepo option would have left that a lie.
+      **No cross-repo token is needed, and none will be added.** That requirement only applies when
+      a workflow in one repo acts on another: a workflow in `gortazar/aideas` cannot release into
+      `gortazar/recap`. Put the release workflow *in `gortazar/recap`*, where the automatic
+      `GITHUB_TOKEN` can tag, release and upload its own artefacts. Choosing the separate repo
+      removes the token requirement rather than creating it.
+      Pushing is not a problem either: you run as a user whose SSH key already has push access to
+      `gortazar/recap`, so `git push` works without any secret.
+      For getting the code across, follow what `pwgen` does: the source of truth becomes
+      `gortazar/recap`, and `ideas/recap/` keeps it as a submodule at `ideas/recap/upstream` next to
+      this idea's `PLAN.md`, `STATUS.md` and flake wrapper. Seeding it with a fresh initial commit is
+      fine — the development history stays here in `aideas` and does not need replaying.
