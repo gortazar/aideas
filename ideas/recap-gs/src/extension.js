@@ -18,10 +18,13 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
+import GLib from 'gi://GLib';
+
 import { RecapSource } from './lib/source.js';
 import { Scheduler } from './lib/scheduler.js';
 import { buildMenu } from './lib/menu.js';
 import { NEUTRAL_ICON } from './lib/contract.js';
+import { buildResumeLaunch } from './lib/resume.js';
 
 /**
  * A vertical box, spelled the way this shell spells it. St.BoxLayout gained `orientation`
@@ -178,7 +181,15 @@ class RecapIndicator extends PanelMenu.Button {
     }
 
     _rowItem(row) {
-        const item = new PopupMenu.PopupBaseMenuItem({ style_class: 'recap-row' });
+        const item = new PopupMenu.PopupBaseMenuItem({
+            style_class: 'recap-row',
+            // A row with nothing to resume is still worth reading; it just does not pretend
+            // to be a button.
+            reactive: row.resume !== null,
+            can_focus: row.resume !== null,
+        });
+        if (row.resume !== null)
+            item.connect('activate', () => this._resume(row));
 
         item.add_child(new St.Icon({
             gicon: this._statusIcon(row.iconName),
@@ -212,6 +223,34 @@ class RecapIndicator extends PanelMenu.Button {
         item.add_child(text);
         item.accessible_name = `${row.name}: ${row.statusLabel}. ${row.recap}`;
         return item;
+    }
+
+    /**
+     * Open a terminal in the session's own directory and resume the agent there. The
+     * directory is the point: an agent resumed somewhere else reads a different project.
+     */
+    _resume(row) {
+        const launch = buildResumeLaunch(row.resume, {
+            terminal: this._settings.get_string('terminal'),
+            isAvailable: name => GLib.find_program_in_path(name) !== null,
+        });
+
+        if (launch.argv === null) {
+            // This one is worth a notification: somebody just clicked, so somebody is
+            // waiting to see what happened.
+            Main.notifyError('Could not resume that session', launch.problem);
+            return;
+        }
+
+        try {
+            const launcher = new Gio.SubprocessLauncher({ flags: Gio.SubprocessFlags.NONE });
+            // Belt and braces with the terminal's own --working-directory: the terminals
+            // that have no such flag inherit this instead.
+            launcher.set_cwd(launch.cwd);
+            launcher.spawnv(launch.argv);
+        } catch (e) {
+            Main.notifyError('Could not resume that session', e.message);
+        }
     }
 
     _noteItem(note) {

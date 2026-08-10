@@ -70,7 +70,11 @@ Started against a finished `recap`: its `--json` is schema version 1, documented
       so a test can hold it against the GSettings schema — a key with no row is a setting
       nobody can change, and a row with no key is a control that does nothing. Project
       roots are edited as a colon-separated list, the way PATH is written. 129 tests.
-- [ ] M6a — click-through: resume the session in a terminal, in its own directory
+- [x] M6a — click-through: activating a row opens a terminal in the session's own
+      directory and resumes the agent there (`claude --resume <id>`, `opencode --session
+      <id>`), preferring the desktop's own terminal and falling back through eleven known
+      ones. An agent it cannot resume, or a machine with no terminal, says so in a
+      notification rather than doing nothing. 146 tests.
 - [ ] M6b — leak test: enable/disable repeatedly with nothing left behind
 - [ ] M6c — README, screenshots
 
@@ -78,5 +82,5 @@ Difficulty estimate: medium, as planned. recap being finished removes the risk t
 called biggest; what is left is the compositor-side work (no blocking, nothing leaked) and
 proving it in a real shell.
 
-Next: M6a — click-through: activating a row resumes that session, in a terminal, in the
-directory it was running in.
+Next: M6b — the leak test: enable and disable the extension repeatedly in a real headless
+shell and prove nothing is left behind.
