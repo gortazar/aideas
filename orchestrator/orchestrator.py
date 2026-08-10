@@ -46,6 +46,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+# The orchestrator's own version, bumped by hand — unrelated to the per-idea versions it
+# manages. 1.0 is the Python rewrite with parallel agents, graceful stop, a renewing lock,
+# repeat entries and versioning.
+ORCHESTRATOR_VERSION = "1.0"
+
 UNLIMITED = {"unlimited", "none", "off"}
 
 # Planning reads and researches; it must not build, so it gets no Bash and no Edit.
@@ -368,6 +373,21 @@ def git(*args: str, cwd: Path, check: bool = False) -> subprocess.CompletedProce
 
 
 # ------------------------------------------------------------------- idea state I/O
+
+
+def count_open_questions(plan: Path) -> int:
+    if not plan.is_file():
+        return 0
+    total, in_section = 0, False
+    for line in plan.read_text().splitlines():
+        if line.startswith("## Open Questions"):
+            in_section = True
+            continue
+        if line.startswith("## "):
+            in_section = False
+        if in_section and re.match(r"^\s*-\s*\[\s\]", line):
+            total += 1
+    return total
 
 
 def has_unanswered_questions(plan: Path) -> bool:
@@ -1017,14 +1037,19 @@ class Orchestrator:
         remaining = queue.pending_for(slug)
         if not remaining:
             return
+        self.reopen_for_next_entry(slug)
+        log(f"{slug}: {len(remaining)} further entr{'y' if len(remaining) == 1 else 'ies'} "
+            "queued; reopened for the next one.")
 
+    def reopen_for_next_entry(self, slug: str) -> None:
+        """Archive the finished plan and put the idea back in the queue."""
         idea_dir = self.repo / "ideas" / slug
         plan = idea_dir / "PLAN.md"
         if plan.is_file():
             archive_dir = idea_dir / "plans"
             archive_dir.mkdir(exist_ok=True)
             number = len(list(archive_dir.glob("*.md"))) + 1
-            archived = archive_dir / f"{number:02d}-{today}.md"
+            archived = archive_dir / f"{number:02d}-{datetime.now():%Y-%m-%d}.md"
             plan.rename(archived)
             log(f"{slug}: archived its plan to {archived.relative_to(self.repo)}.")
 
@@ -1033,8 +1058,28 @@ class Orchestrator:
             text = status_file.read_text()
             status_file.write_text(
                 re.sub(r"^status:.*$", "status: not_started", text, count=1, flags=re.M))
-        log(f"{slug}: {len(remaining)} further entr{'y' if len(remaining) == 1 else 'ies'} "
-            "queued; reopened for the next one.")
+
+    def reopen_ideas_with_new_work(self) -> None:
+        """Put a finished idea back to work when you queue a new entry for it.
+
+        advance_queue only reopens an idea at the moment an agent *finishes* an entry.
+        An idea that was already done when you added the entry would otherwise be skipped
+        forever, because pick_ideas drops any slug whose status is done — the entry would
+        sit in the queue looking buildable and never be built.
+
+        Safe to do unconditionally: a completed entry is retired to `## Finished` as it
+        finishes, so anything still under `## Ideas` for a done idea is work not yet done.
+        """
+        queue = ReadmeQueue(self.repo / "README.md")
+        for slug in self.idea_slugs():
+            status_file = self.repo / "ideas" / slug / "STATUS.md"
+            state = (status_value(status_file, "status") or "").lower()
+            if state not in ("done", "complete", "completed"):
+                continue
+            if not queue.pending_for(slug):
+                continue
+            log(f"{slug}: finished, but a new entry is queued for it; reopening.")
+            self.reopen_for_next_entry(slug)
 
     def finalize(self, agent: Agent) -> None:
         slug = agent.slug
@@ -1132,6 +1177,7 @@ class Orchestrator:
                     "exiting.")
                 return 0
 
+            self.reopen_ideas_with_new_work()
             self.planning_pass(slugs)
 
             # Commit scaffolding before worktrees branch off HEAD, or agents start from a
@@ -1170,9 +1216,158 @@ class Orchestrator:
             self.lock.release()
 
 
+def heartbeat_report(url: str) -> list[str]:
+    """Is the heartbeat receiver up, and is it supervised or something someone started?
+
+    The distinction matters: a user process dies with its terminal or the next reboot,
+    and every cycle refuses to run while the receiver is unreachable — so "someone
+    started it by hand" is a warning about tomorrow, not just trivia.
+    """
+    lines = []
+    reachable, detail = False, ""
+    try:
+        with urllib.request.urlopen(f"{url}/status", timeout=3) as response:
+            state = json.loads(response.read())
+        reachable = True
+        stale = float(state.get("stale_seconds", 0))
+        if stale > 10**9:  # last_ts is 0 — nothing has ever reported in
+            detail = "no heartbeat recorded yet; the laptop counts as idle"
+        else:
+            busy = "BUSY — cycles will not start" if stale < 600 else "idle"
+            detail = f"last beat {stale / 60:.0f}m ago ({state.get('last_event')}) — {busy}"
+    except Exception as exc:  # noqa: BLE001
+        detail = f"unreachable ({exc.__class__.__name__}) — cycles will refuse to start"
+
+    supervisor = None
+    for scope, args in (("systemd", ["systemctl", "is-active", "idea-heartbeat.service"]),
+                        ("systemd --user",
+                         ["systemctl", "--user", "is-active", "idea-heartbeat.service"])):
+        try:
+            probe = subprocess.run(args, capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if probe.stdout.strip() == "active":
+            supervisor = scope
+            break
+
+    # Match the interpreter actually running the script, not every process whose command
+    # line happens to mention it — the shell that launched it does too, which would report
+    # one server as two.
+    pids = []
+    for proc in Path("/proc").glob("[0-9]*"):
+        try:
+            argv = (proc / "cmdline").read_bytes().decode(errors="replace").split("\0")
+        except OSError:
+            continue
+        argv = [a for a in argv if a]
+        if len(argv) >= 2 and "python" in Path(argv[0]).name and any(
+                Path(a).name == "heartbeat_server.py" for a in argv[1:]):
+            pids.append(proc.name)
+
+    if supervisor:
+        how = f"managed by {supervisor} (idea-heartbeat.service)"
+    elif pids:
+        how = f"a user process, pid {', '.join(pids)} — not supervised, dies on reboot"
+    elif reachable:
+        how = "reachable, but no local process found — is it on another host?"
+    else:
+        how = "not running"
+
+    lines.append(f"  Heartbeat     {'up' if reachable else 'DOWN'} at {url}")
+    lines.append(f"                {how}")
+    lines.append(f"                {detail}")
+    return lines
+
+
+def cmd_status(repo: Path, heartbeat_url: str) -> int:
+    orchestrator = Orchestrator(repo, heartbeat_url)
+    queue = ReadmeQueue(repo / "README.md")
+    entries = queue.entries()
+
+    print(f"Orchestrator  v{ORCHESTRATOR_VERSION}   repo {repo}")
+    for line in heartbeat_report(heartbeat_url):
+        print(line)
+
+    cap = orchestrator.config.get("max_daily_cost_usd", "")
+    spent = orchestrator.spend_today()
+    budget = f"${spent:.2f} spent today" + ("" if is_unlimited(cap) else f" of ${cap}")
+    print(f"  Budget        {budget}   "
+          f"{orchestrator.config.integer('parallel_agents', 2)} agents, "
+          f"{orchestrator.config.get('max_cycle_minutes', '45')}m cycles, "
+          f"hours {orchestrator.config.get('allowed_hours', '')}")
+    if orchestrator.stop_file.exists():
+        print(f"  PAUSED        {orchestrator.stop_file} exists — remove it to resume")
+
+    print()
+    if not entries:
+        print("No entries under '## Ideas'.")
+        return 0
+
+    print(f"Ideas ({len(entries)} entries, {len({e.slug for e in entries})} folders)")
+    print(f"  {'#':>2}  {'idea':<14} {'ver':<5} {'state':<22} note")
+
+    seen: set[str] = set()
+    buildable: list[str] = []
+    for number, entry in enumerate(entries, 1):
+        slug = entry.slug
+        idea_dir = repo / "ideas" / slug
+        version = status_value(idea_dir / "STATUS.md", "version") or INITIAL_VERSION
+        state, note = "", ""
+
+        if slug in seen:
+            # Only the head of a folder's queue is ever worked on.
+            first = next(i for i, e in enumerate(entries, 1) if e.slug == slug)
+            state, note = "queued", f"behind #{first}"
+        else:
+            seen.add(slug)
+            status_file = idea_dir / "STATUS.md"
+            raw = (status_value(status_file, "status") or "not_started").lower()
+            questions = count_open_questions(idea_dir / "PLAN.md")
+            if not (idea_dir / "PLAN.md").is_file():
+                state, note = "needs planning", "no PLAN.md yet"
+            elif questions:
+                state = "blocked"
+                note = f"{questions} unanswered question{'s' if questions > 1 else ''}"
+            elif raw == "blocked":
+                state, note = "blocked", "STATUS.md says blocked"
+            elif raw in ("done", "complete", "completed"):
+                state, note = "buildable", "finished before — reopens for this entry"
+                buildable.append(slug)
+            else:
+                state = "buildable"
+                buildable.append(slug)
+                _, target, kind = orchestrator.version_plan(slug)
+                if kind:
+                    note = f"{kind} update -> v{target}"
+                else:
+                    note = f"in progress ({raw})" if raw == "in_progress" else "not started"
+
+        marker = "*" if slug in buildable[:orchestrator.config.integer("parallel_agents", 2)] else " "
+        print(f" {marker}{number:>2}  {slug:<14} {version:<5} {state:<22} {note}")
+
+    print()
+    slots = orchestrator.config.integer("parallel_agents", 2)
+    if buildable:
+        print(f"Next cycle would build: {', '.join(buildable[:slots])}   (* above)")
+    else:
+        print("Next cycle would build: nothing — every idea is blocked or needs planning.")
+    return 0
+
+
 def main() -> int:
     repo = os.environ.get("IDEAS_REPO_PATH")
     heartbeat = os.environ.get("ORCHESTRATOR_HEARTBEAT_SELF_URL")
+
+    if len(sys.argv) > 1 and sys.argv[1] == "status":
+        # Read-only, so it defaults to the clone this script lives in and the usual local
+        # port — no environment to set up before you can ask what is going on.
+        here = Path(__file__).resolve().parent.parent
+        return cmd_status(Path(repo).resolve() if repo else here,
+                          heartbeat or "http://127.0.0.1:8787")
+    if len(sys.argv) > 1 and sys.argv[1] not in ("run",):
+        print(f"usage: {Path(sys.argv[0]).name} [run|status]", file=sys.stderr)
+        return 2
+
     if not repo:
         print("IDEAS_REPO_PATH must be set to the local clone of your ideas repo",
               file=sys.stderr)

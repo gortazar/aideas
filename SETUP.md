@@ -192,6 +192,27 @@ Leftover `agent/*` branches mean a merge conflicted or a cycle was killed mid-fl
 next cycle rebuilds its own worktrees from scratch, so they are safe to inspect and delete
 once you've salvaged anything you want.
 
+## Seeing what it will do
+
+```bash
+python3 orchestrator/orchestrator.py status
+```
+
+Read-only, and needs no environment set up — it defaults to the clone it lives in and
+`http://127.0.0.1:8787`. It reports, in order:
+
+- **the heartbeat**, whether it is up, and whether it is `systemd`-managed or a user
+  process someone started by hand. That distinction matters: an unsupervised receiver dies
+  with its terminal or at the next reboot, and every cycle refuses to start while it is
+  unreachable — so the orchestrator would go quiet without any obvious cause.
+- **the orchestrator's own version**, and the budget and cycle settings in force.
+- **every entry under `## Ideas`** — in queue order, with each idea's version, whether it
+  is buildable, blocked (and on how many questions), or queued behind an earlier entry for
+  the same folder. A `*` marks what the next cycle would pick, and the last line says so
+  outright.
+
+Entries under `## Finished` are deliberately not shown; they are a record, not work.
+
 ## Stopping gracefully
 
 A cycle never has to be killed. Three things ask it to wind down, and all take the same
