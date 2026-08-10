@@ -18,6 +18,7 @@ import './source.test.js';
 import './menu.test.js';
 import './scheduler.test.js';
 import './hygiene.test.js';
+import './preferences.test.js';
 
 import { run } from './harness.js';
 

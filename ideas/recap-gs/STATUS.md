@@ -66,7 +66,10 @@ Started against a finished `recap`: its `--json` is schema version 1, documented
       works). Plus static hygiene guards: nothing under lib/ imports the shell, nothing
       synchronous, no eval, no prototype patching, every connected signal disconnected in
       _onDestroy, and a stylesheet that only styles our own classes. 120 tests.
-- [ ] M5 — preferences window wired to the GSettings keys
+- [x] M5 — preferences: an Adwaita window built from a description in `lib/preferences.js`,
+      so a test can hold it against the GSettings schema — a key with no row is a setting
+      nobody can change, and a row with no key is a control that does nothing. Project
+      roots are edited as a colon-separated list, the way PATH is written. 129 tests.
 - [ ] M6a — click-through: resume the session in a terminal, in its own directory
 - [ ] M6b — leak test: enable/disable repeatedly with nothing left behind
 - [ ] M6c — README, screenshots
@@ -75,5 +78,5 @@ Difficulty estimate: medium, as planned. recap being finished removes the risk t
 called biggest; what is left is the compositor-side work (no blocking, nothing leaked) and
 proving it in a real shell.
 
-Next: M5 — the preferences window, wired to the GSettings keys the indicator already
-reads.
+Next: M6a — click-through: activating a row resumes that session, in a terminal, in the
+directory it was running in.
