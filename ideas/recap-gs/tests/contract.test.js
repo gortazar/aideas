@@ -1,5 +1,8 @@
+import GLib from 'gi://GLib';
+import GdkPixbuf from 'gi://GdkPixbuf';
+
 import { suite, test, assert, assertEqual, assertDeepEqual } from './harness.js';
-import { listFiles } from './util.js';
+import { listFiles, rootDir } from './util.js';
 import {
     SUPPORTED_SCHEMA_VERSION, STATUS_WORDS, UNCLEAR, statusInfo, iconNameFor, moreUrgent,
 } from '../src/lib/contract.js';
@@ -52,6 +55,20 @@ suite('contract', () => {
         assertEqual(moreUrgent('idle', 'finished'), 'idle');
         assertEqual(moreUrgent(null, 'finished'), 'finished');
         assertEqual(moreUrgent(null, null), null);
+    });
+
+    test('every shipped icon is an image the shell can actually load', () => {
+        // Learned the hard way: an SVG whose <svg> element is pushed past the first few
+        // lines by a comment fails format detection outright, and the panel shows a blank
+        // where the icon should be — with nothing in the log that names the file.
+        for (const name of listFiles('src', 'icons')) {
+            const path = GLib.build_filenamev([rootDir(), 'src', 'icons', name]);
+            try {
+                GdkPixbuf.Pixbuf.new_from_file_at_size(path, 16, 16);
+            } catch (e) {
+                throw new Error(`icons/${name} will not load: ${e.message}`);
+            }
+        }
     });
 
     test('ships an SVG for every status icon it names', () => {
