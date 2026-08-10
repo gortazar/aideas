@@ -2,8 +2,14 @@ status: in_progress
 version: 0.1
 started_at: 2026-08-09
 last_session_id: fa22503c-6cd0-436e-b54f-1a557e15f321
-last_run: 2026-08-10T00:38:35+02:00
-last_cycle_cost_usd: 7.578085
+last_run: 2026-08-10T15:19:10+02:00
+last_cycle_cost_usd: 0.0
+
+## Log
+- 2026-08-10T15:19:10+02:00 — in_progress ($0.0)
+- 2026-08-10T00:38:35+02:00 — done ($7.578085)
+- 2026-08-09T18:54:00+02:00 — in_progress ($9.104486499999998)
+- 2026-08-09T18:00:54+02:00 — in_progress ($9.662947499999998)
 
 ## Units — 0.2 (install it without a Go toolchain)
 - [x] U1 — repo split: recap's source is now its own repository, gortazar/recap, seeded
@@ -27,10 +33,6 @@ this stays in the monorepo, so it namespaces tags `recap-v<version>` and filters
 tags are plain `v<version>` and `/releases/latest` means what it says. Everything else in
 the plan stands.
 
-## Log
-- 2026-08-10T00:38:35+02:00 — done ($7.578085)
-- 2026-08-09T18:54:00+02:00 — in_progress ($9.104486499999998)
-- 2026-08-09T18:00:54+02:00 — in_progress ($9.662947499999998)
 
 
 
