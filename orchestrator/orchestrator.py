@@ -1328,6 +1328,7 @@ def cmd_status(repo: Path, heartbeat_url: str) -> int:
     print(f"Ideas ({len(entries)} entries, {len({e.slug for e in entries})} folders)")
     print(f"  {'#':>2}  {'idea':<14} {'ver':<5} {'state':<22} note")
 
+    slots = orchestrator.config.integer("parallel_agents", 2)
     seen: set[str] = set()
     buildable: list[str] = []
     for number, entry in enumerate(entries, 1):
@@ -1335,6 +1336,9 @@ def cmd_status(repo: Path, heartbeat_url: str) -> int:
         idea_dir = repo / "ideas" / slug
         version = status_value(idea_dir / "STATUS.md", "version") or INITIAL_VERSION
         state, note = "", ""
+        # Only the entry that will actually run is marked. Keying the marker off the slug
+        # decorated its queued entries too, which read as "four things will be built".
+        marker = " "
 
         if slug in seen:
             # Only the head of a folder's queue is ever worked on.
@@ -1363,12 +1367,12 @@ def cmd_status(repo: Path, heartbeat_url: str) -> int:
                     note = f"{kind} update -> v{target}"
                 else:
                     note = f"in progress ({raw})" if raw == "in_progress" else "not started"
+            if state == "buildable" and len(buildable) <= slots:
+                marker = "*"
 
-        marker = "*" if slug in buildable[:orchestrator.config.integer("parallel_agents", 2)] else " "
         print(f" {marker}{number:>2}  {slug:<14} {version:<5} {state:<22} {note}")
 
     print()
-    slots = orchestrator.config.integer("parallel_agents", 2)
     if buildable:
         print(f"Next cycle would build: {', '.join(buildable[:slots])}   (* above)")
     else:
