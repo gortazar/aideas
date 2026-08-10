@@ -1,3 +1,6 @@
 [submodule "ideas/pwgen/upstream"]
 	path = ideas/pwgen/upstream
 	url = https://github.com/gortazar/gnome-shell-pwgen.git
+[submodule "ideas/recap/upstream"]
+	path = ideas/recap/upstream
+	url = https://github.com/gortazar/recap.git

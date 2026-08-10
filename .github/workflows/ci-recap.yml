@@ -19,10 +19,19 @@ jobs:
       run:
         working-directory: ideas/recap
     steps:
+      # recap itself lives in gortazar/recap, checked out here as the upstream/
+      # submodule. Its own CI runs the suite on every push there; this job checks the
+      # commit this idea currently points at.
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: cachix/install-nix-action@v27
         with:
           extra_nix_config: "experimental-features = nix-command flakes"
+      # Cheap, and it fails for a reason no other step would catch: the submodule and
+      # the flake input pointing at different commits.
+      - run: ./scripts/check-pin.sh
+      # Builds recap and runs its Go test suite against the pinned commit.
       # --print-build-logs so a failing `go test` shows its output in the job log
       # instead of just "builder failed with exit code 1".
       - run: nix flake check --print-build-logs
