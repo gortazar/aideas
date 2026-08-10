@@ -25,7 +25,11 @@ Started against a finished `recap`: its `--json` is schema version 1, documented
       liveness unavailable), tested for the guarantees version 1 makes, and
       `docs/recap-json-contract.md` naming the version and both spellings of the
       vocabulary. 20 tests.
-- [ ] M2a — decode and version-check a recap document
+- [x] M2a — decoding: `recap --json` output becomes a document or a named problem, never a
+      throw — no output, unreadable output, JSON that is not a recap report, and a schema
+      version we were not written against are four different answers. The envelope is
+      checked hard; a nonsense project entry travels on, because one bad row is not a
+      reason to show nothing. 31 tests.
 - [ ] M2b — row model: projects, sessions, filters, ordering
 - [ ] M2c — panel summary: counts and the worst-state-wins icon
 - [ ] M2d — error classification: missing binary, garbage, timeout, empty
@@ -40,5 +44,5 @@ Difficulty estimate: medium, as planned. recap being finished removes the risk t
 called biggest; what is left is the compositor-side work (no blocking, nothing leaked) and
 proving it in a real shell.
 
-Next: M2a — decode a recap document: valid JSON at a version we support becomes data, and
-anything else becomes a named reason rather than a throw.
+Next: M2b — the row model: one row per project in recap's order, with the session a click
+would resume, and the two "hide these" preferences applied.
