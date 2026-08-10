@@ -38,7 +38,11 @@ Started against a finished `recap`: its `--json` is schema version 1, documented
       visible without opening anything; the count beside the icon is how many are in that
       state; the tooltip spells the fleet out most-urgent-first; and a problem is always a
       neutral icon, never an alarm. 60 tests.
-- [ ] M2d — error classification: missing binary, garbage, timeout, empty
+- [x] M2d — the command line and what to make of the answer: recap's own flags built from
+      the settings (never `--smart`), and one run classified into a document or a named
+      problem — missing binary, failed to start, non-zero exit with recap's own first line
+      of stderr, timeout, no output, unreadable output. Both halves pure, so the paths that
+      never happen on a working machine are the ones under test. 76 tests.
 - [ ] M3 — live subprocess seam: async, timeout, cancellation, stale data
 - [ ] M4 — UI: indicator, menu rows, refresh on open, lock/idle suppression
 - [ ] M5 — preferences window wired to the GSettings keys
@@ -50,5 +54,6 @@ Difficulty estimate: medium, as planned. recap being finished removes the risk t
 called biggest; what is left is the compositor-side work (no blocking, nothing leaked) and
 proving it in a real shell.
 
-Next: M2d — error classification: turning a subprocess outcome (no such binary, non-zero
-exit, cancelled at the timeout) into one of the named problems.
+Next: M3 — the live subprocess seam: Gio.Subprocess with communicate_utf8_async, a
+timeout that cancels, and a refusal to overlap refreshes, with the fake seam kept for
+tests.
