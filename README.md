@@ -68,6 +68,9 @@ makes position a safe identity: the active list only ever holds work still to do
 
 5. [recap](ideas/recap/) - Add below each claude session a one paragraph report of what was done the last 24 hours. It must be indented for clarity. Minor change.
 
+6. [recap-gs](ideas/recap-gs/) - Change appearance when a session asked something or finishes its task. Make a plan for this, as detecting this would preferably not require a monitor
+   running and inspecting internal details, but rather detect notifications or the like. Minor. 
+
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)

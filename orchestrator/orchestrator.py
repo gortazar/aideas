@@ -692,6 +692,29 @@ class Orchestrator:
             # did less than it wanted to, which otherwise looks like a quiet cycle.
             log(f"WARNING: {denials} tool call(s) denied — widen --allowed-tools if this repeats.")
 
+    def pull(self) -> None:
+        """Fast-forward if possible; merge if the remote has moved on.
+
+        `--ff-only` on its own wedges the clone whenever someone pushes while a cycle is
+        running — a normal thing to do, since editing README.md is how you steer this. The
+        pull fails, the push then fails as non-fast-forward, and every later cycle repeats
+        that forever with the work sitting unpublished and the logs looking healthy.
+
+        A merge absorbs the ordinary case, which is disjoint edits: your README entry
+        against an agent's idea folder. Only a genuine conflict needs a person, and that
+        says so loudly rather than failing quietly.
+        """
+        if git("pull", "--quiet", "--ff-only", cwd=self.repo).returncode == 0:
+            return
+        log("Fast-forward pull failed — the remote has moved on. Trying a merge.")
+        if git("pull", "--no-rebase", "--no-edit", "--quiet", cwd=self.repo).returncode == 0:
+            log("Merged the remote changes.")
+            return
+        git("merge", "--abort", cwd=self.repo)
+        log("WARNING: the remote and this clone have conflicting edits and cannot be "
+            "merged automatically. Continuing on the local tree — but nothing will push "
+            "until someone resolves it by hand.")
+
     def push_if_ahead(self, context: str = "") -> None:
         """Push whatever is committed but unsent.
 
@@ -1157,8 +1180,7 @@ class Orchestrator:
             return 0
 
         try:
-            if git("pull", "--quiet", "--ff-only", cwd=self.repo).returncode != 0:
-                log("pull failed — continuing with the local tree")
+            self.pull()
 
             # Push anything a previous cycle committed but failed to send. Its own retry
             # only happens after the next cycle's agents finish, so a transient network
