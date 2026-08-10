@@ -136,8 +136,9 @@
             unzip -l "$zip"
             # The zip is what users actually get, and lib/ is the easy thing to leave out:
             # the extension does not load without it.
-            for entry in metadata.json extension.js prefs.js LICENSE \
-                schemas/gschemas.compiled; do
+            for entry in metadata.json extension.js prefs.js LICENSE stylesheet.css \
+                lib/contract.js lib/menu.js lib/source.js \
+                icons/recap-waiting-symbolic.svg schemas/gschemas.compiled; do
               unzip -l "$zip" | grep -q " $entry\$" \
                 || { echo "packed zip is missing $entry" >&2; exit 1; }
             done

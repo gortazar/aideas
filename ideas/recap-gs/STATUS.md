@@ -58,8 +58,14 @@ Started against a finished `recap`: its `--json` is schema version 1, documented
       interval when woken by an opened menu, and leaving nothing behind when stopped. The
       timer functions are injected, so a rule about time is checked without waiting.
       112 tests.
-- [ ] M4c — the widgets: indicator, menu rows, refresh on menu open, lock and idle
-      suppression wired to the real shell
+- [x] M4c — the widgets: a panel button whose icon and count come from the summary, a menu
+      of rows (status icon, project, agent, age, recap's sentence wrapped rather than
+      elided — the shell has no tooltips) and notes, refreshed on the schedule, on menu
+      open, on a settings change and when the user comes back to the machine; suppressed
+      while locked or idle (idle monitor loaded dynamically, so a shell without one still
+      works). Plus static hygiene guards: nothing under lib/ imports the shell, nothing
+      synchronous, no eval, no prototype patching, every connected signal disconnected in
+      _onDestroy, and a stylesheet that only styles our own classes. 120 tests.
 - [ ] M5 — preferences window wired to the GSettings keys
 - [ ] M6a — click-through: resume the session in a terminal, in its own directory
 - [ ] M6b — leak test: enable/disable repeatedly with nothing left behind
@@ -69,5 +75,5 @@ Difficulty estimate: medium, as planned. recap being finished removes the risk t
 called biggest; what is left is the compositor-side work (no blocking, nothing leaked) and
 proving it in a real shell.
 
-Next: M4c — the widgets: the panel button and the menu built from the model, wired to the
-source, the schedule, and the shell's lock and idle state.
+Next: M5 — the preferences window, wired to the GSettings keys the indicator already
+reads.
