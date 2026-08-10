@@ -25,13 +25,21 @@
       # people working in the recap repository directly.
       recapFor = pkgs: pkgs.buildGoModule {
         pname = "recap";
-        version = "0.1.0";
+        version = "0.1";
         src = recap-src;
         # modernc.org/sqlite and its dependencies, for reading opencode's store. Update
         # this hash whenever upstream's go.sum changes: `nix build` prints the one it
         # wanted.
         vendorHash = "sha256-5WaCZ29wuU/aP05IBHTM0WhELYrYoerGlIS3QxoXL5o=";
-        ldflags = [ "-s" "-w" ];
+        # Same stamping as upstream's own flake, so `nix run` from here and `nix run` from
+        # the recap repository report the same thing.
+        ldflags = [
+          "-s"
+          "-w"
+          "-X github.com/gortazar/recap/internal/cli.Version=0.1"
+          "-X github.com/gortazar/recap/internal/cli.Commit=${recap-src.rev}"
+          "-X github.com/gortazar/recap/internal/cli.BuildDate=nix"
+        ];
         meta = {
           description = "One-line recap of what every local coding agent session was doing";
           mainProgram = "recap";

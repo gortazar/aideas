@@ -11,7 +11,8 @@ last_cycle_cost_usd: 7.578085
       keeps PLAN/STATUS, a wrapper flake that builds and tests the pinned commit, and
       scripts/check-pin.sh so the submodule gitlink and the flake input cannot drift.
       ci-recap.yml checks out submodules and runs both.
-- [ ] U2 — `recap --version`, stamped by the flake and the release build
+- [x] U2 — `recap --version`: `recap 0.1 (commit 9c19569, built nix)`, dev/unknown when
+      nobody stamped it; both flakes stamp it through -ldflags -X
 - [ ] U3 — tools/release-build.sh: four static tarballs plus SHA256SUMS, with a test
 - [ ] U4 — install.sh with file:// seams, and tools/install_test.sh
 - [ ] U5 — release workflow in gortazar/recap: version guard, build, gh release create,
