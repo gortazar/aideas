@@ -66,6 +66,8 @@ makes position a safe identity: the active list only ever holds work still to do
 4. [recap](ideas/recap/) - Add specific installation instructions. Add an action to build and publish the binary. And add a script to install it via curl. Add documentation on
    how to install via curl to the readme. Minor change.
 
+5. [recap](ideas/recap/) - Add below each claude session a one paragraph report of what was done the last 24 hours. It must be indented for clarity. Minor change.
+
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
