@@ -1,20 +1,19 @@
 status: in_progress
 version: 0.1
 started_at: 2026-08-10
-last_session_id:
-last_run:
+last_session_id: d24e6611-e9d4-4925-90e2-8fa4db5094ca
+last_run: 2026-08-10T14:13:00+02:00
+last_cycle_cost_usd: 13.098638499999996
 
 ## Log
-<!-- Newest entries on top. The orchestrator prepends here after each cycle. -->
+- 2026-08-10T14:13:00+02:00 — in_progress ($13.098638499999996)
+
 
 ### 2026-08-10
 Started against a finished `recap`: its `--json` is schema version 1, documented in
 `ideas/recap/README.md`, and this extension is written against exactly that.
 
 ## Units
-<!-- The honest progress report: one line per unit of work, ticked only once it is
-     committed with its tests passing. Refresh this at every unit, not at session end.
-     Keep "next" to the single unit being started now. -->
 - [x] M1 — skeleton: flake (dev shell, `nix build`, `nix flake check` running lint, the
       headless suite, schema compile and pack validation), `metadata.json` for GNOME 46-50,
       a GSettings schema, an extension that enables and disables cleanly, the shipped
