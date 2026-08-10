@@ -34,7 +34,10 @@ Started against a finished `recap`: its `--json` is schema version 1, documented
       agent, recap's own sentence and an age in words; the session a click would resume
       (the one in the state the row reports, most recent first, never one without a
       directory to resume it in); and the hide-finished / hide-idle preferences. 51 tests.
-- [ ] M2c — panel summary: counts and the worst-state-wins icon
+- [x] M2c — the panel summary: the worst state wins, so one project waiting for you is
+      visible without opening anything; the count beside the icon is how many are in that
+      state; the tooltip spells the fleet out most-urgent-first; and a problem is always a
+      neutral icon, never an alarm. 60 tests.
 - [ ] M2d — error classification: missing binary, garbage, timeout, empty
 - [ ] M3 — live subprocess seam: async, timeout, cancellation, stale data
 - [ ] M4 — UI: indicator, menu rows, refresh on open, lock/idle suppression
@@ -47,5 +50,5 @@ Difficulty estimate: medium, as planned. recap being finished removes the risk t
 called biggest; what is left is the compositor-side work (no blocking, nothing leaked) and
 proving it in a real shell.
 
-Next: M2c — the panel summary: what the single indicator says when several sessions
-disagree, and the count beside it.
+Next: M2d — error classification: turning a subprocess outcome (no such binary, non-zero
+exit, cancelled at the timeout) into one of the named problems.

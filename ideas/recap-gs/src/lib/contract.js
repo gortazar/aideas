@@ -96,3 +96,10 @@ export function moreUrgent(a, b) {
         return a;
     return statusInfo(a).urgency >= statusInfo(b).urgency ? a : b;
 }
+
+/**
+ * The icon for "nothing to report": no sessions, or no report to show because something
+ * went wrong. Deliberately not one of the status icons — a failing refresh must not look
+ * like a session that needs you.
+ */
+export const NEUTRAL_ICON = 'recap-symbolic';
