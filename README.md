@@ -59,7 +59,9 @@ makes position a safe identity: the active list only ever holds work still to do
 2. [Restore workspaces](ideas/restore-wss) - Support for restoring browsers and the tabs that were open inside them (may require a browser extension). First, an in-depth research
    must be done to find similar extensions that could be used as-is, and this report is to be written in the idea folder as "browser-extensions-research.md".
 
-3. [Recap.gs](ideas/recap-gs) - A gnome shell plugin for recap (can't be started until recap has a clear API). It shows a list of AI tasks, and their statuses. 
+3. [Recap.gs](ideas/recap-gs) - A gnome shell plugin for recap (can't be started until recap has a clear API). It shows a list of AI tasks, and their statuses. When a task is clicked, 
+   its session is restored (by running claude -r on claude or the equivalent command on opencode). Important: it must be restored from the same folder it was running when the process 
+   stopped or was killed.
 
 4. [recap](ideas/recap/) - Add specific installation instructions. Add an action to build and publish the binary. And add a script to install it via curl. Add documentation on
    how to install via curl to the readme. Minor change.
