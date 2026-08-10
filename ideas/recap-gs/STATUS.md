@@ -20,7 +20,11 @@ Started against a finished `recap`: its `--json` is schema version 1, documented
       a GSettings schema, an extension that enables and disables cleanly, the shipped
       symbolic icons, and `src/lib/contract.js` — the schema version, recap's six status
       words, their icons and their urgency order. 11 tests.
-- [ ] M0 — `recap --json` fixtures + `docs/recap-json-contract.md`
+- [x] M0 — the contract: four fixtures recorded from the real recap binary against recap's
+      own demo store by `scripts/record-fixtures.sh` (every status, empty, finished,
+      liveness unavailable), tested for the guarantees version 1 makes, and
+      `docs/recap-json-contract.md` naming the version and both spellings of the
+      vocabulary. 20 tests.
 - [ ] M2a — decode and version-check a recap document
 - [ ] M2b — row model: projects, sessions, filters, ordering
 - [ ] M2c — panel summary: counts and the worst-state-wins icon
@@ -36,5 +40,5 @@ Difficulty estimate: medium, as planned. recap being finished removes the risk t
 called biggest; what is left is the compositor-side work (no blocking, nothing leaked) and
 proving it in a real shell.
 
-Next: M0 — record `recap --json` fixtures covering every status, an empty result and a
-malformed session, and write the contract document naming schema version 1.
+Next: M2a — decode a recap document: valid JSON at a version we support becomes data, and
+anything else becomes a named reason rather than a throw.
