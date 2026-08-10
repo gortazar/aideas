@@ -16,9 +16,26 @@
         "type": "github"
       }
     },
+    "recap-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1786365562,
+        "narHash": "sha256-ZKKwZQFYl26V3ujSNFTklay2o4PyRzGWb5AAvEdrXWk=",
+        "owner": "gortazar",
+        "repo": "recap",
+        "rev": "9c195692035143c639d5590a2340e62a373e56a5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "gortazar",
+        "repo": "recap",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "recap-src": "recap-src"
       }
     }
   },

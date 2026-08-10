@@ -1,9 +1,31 @@
-status: not_started
+status: in_progress
 version: 0.1
 started_at: 2026-08-09
 last_session_id: fa22503c-6cd0-436e-b54f-1a557e15f321
 last_run: 2026-08-10T00:38:35+02:00
 last_cycle_cost_usd: 7.578085
+
+## Units — 0.2 (install it without a Go toolchain)
+- [x] U1 — repo split: recap's source is now its own repository, gortazar/recap, seeded
+      with a fresh initial commit and tracked here as the `upstream/` submodule. The idea
+      keeps PLAN/STATUS, a wrapper flake that builds and tests the pinned commit, and
+      scripts/check-pin.sh so the submodule gitlink and the flake input cannot drift.
+      ci-recap.yml checks out submodules and runs both.
+- [x] U2 — `recap --version`: `recap 0.1 (commit 9c19569, built nix)`, dev/unknown when
+      nobody stamped it; both flakes stamp it through -ldflags -X
+- [ ] U3 — tools/release-build.sh: four static tarballs plus SHA256SUMS, with a test
+- [ ] U4 — install.sh with file:// seams, and tools/install_test.sh
+- [ ] U5 — release workflow in gortazar/recap: version guard, build, gh release create,
+      workflow_dispatch dry run
+- [ ] U6 — post-publish install smoke job on ubuntu + macos
+- [ ] U7 — README: install, uninstall, platform table, how a release is cut
+- [ ] U8 — version 0.2, status done
+
+Deviation from PLAN.md, forced by its own answered question: the plan's Context assumes
+this stays in the monorepo, so it namespaces tags `recap-v<version>` and filters every
+"latest release" lookup on that prefix. The answer chose a separate repo instead, where
+tags are plain `v<version>` and `/releases/latest` means what it says. Everything else in
+the plan stands.
 
 ## Log
 - 2026-08-10T00:38:35+02:00 — done ($7.578085)
