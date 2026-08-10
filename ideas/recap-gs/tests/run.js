@@ -14,6 +14,7 @@ import './document.test.js';
 import './rows.test.js';
 import './summary.test.js';
 import './recap.test.js';
+import './source.test.js';
 
 import { run } from './harness.js';
 

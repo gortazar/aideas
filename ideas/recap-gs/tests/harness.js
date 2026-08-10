@@ -1,6 +1,8 @@
 // A test harness small enough to read in one sitting. No dependencies beyond GLib, so the
 // whole suite runs under plain `gjs -m tests/run.js` with no display and no compositor.
 
+import GLib from 'gi://GLib';
+
 const suites = [];
 let current = null;
 
@@ -48,6 +50,50 @@ export function assertThrows(fn, message = 'expected a throw') {
     throw new Error(message);
 }
 
+// Deadline for one asynchronous test. Long enough for a real subprocess on a loaded
+// machine, short enough that a hung test is a failure rather than a hung CI job.
+const ASYNC_TIMEOUT_SECONDS = 30;
+
+/**
+ * If a test returned a promise, run a main loop until it settles and rethrow whatever it
+ * rejected with. Everything asynchronous in this extension is driven by the same GLib main
+ * loop the shell runs, so this is the loop the code under test expects.
+ */
+function settle(result) {
+    if (result === null || typeof result?.then !== 'function')
+        return;
+
+    const loop = new GLib.MainLoop(null, false);
+    let error = null;
+    let done = false;
+
+    let guardFired = false;
+    const guard = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, ASYNC_TIMEOUT_SECONDS, () => {
+        guardFired = true;
+        error = new Error(`timed out after ${ASYNC_TIMEOUT_SECONDS}s waiting for the test`);
+        done = true;
+        loop.quit();
+        return GLib.SOURCE_REMOVE;
+    });
+
+    result.then(() => {
+        done = true;
+        loop.quit();
+    }, e => {
+        error = e instanceof Error ? e : new Error(`rejected with ${JSON.stringify(e)}`);
+        done = true;
+        loop.quit();
+    });
+
+    if (!done)
+        loop.run();
+    if (!guardFired)
+        GLib.Source.remove(guard);
+
+    if (error !== null)
+        throw error;
+}
+
 /** Run every declared suite. Returns the process exit code. */
 export function run() {
     let passed = 0;
@@ -57,7 +103,7 @@ export function run() {
         print(`\n${s.name}`);
         for (const t of s.tests) {
             try {
-                t.fn();
+                settle(t.fn());
                 passed++;
                 print(`  ok   ${t.name}`);
             } catch (e) {

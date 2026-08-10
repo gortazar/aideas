@@ -43,7 +43,12 @@ Started against a finished `recap`: its `--json` is schema version 1, documented
       problem — missing binary, failed to start, non-zero exit with recap's own first line
       of stderr, timeout, no output, unreadable output. Both halves pure, so the paths that
       never happen on a working machine are the ones under test. 76 tests.
-- [ ] M3 — live subprocess seam: async, timeout, cancellation, stale data
+- [x] M3 — the subprocess seam: `Gio.Subprocess` + `communicate_utf8_async`, a timeout
+      that cancels the run *and kills the child*, no two refreshes overlapping, the last
+      good report kept and marked stale when a refresh fails, and `destroy()` cancelling
+      what is in flight with no timer left behind. Tested twice over: against a fake seam
+      with fake timers, and against real processes (`/bin/sh`, a binary that is not there,
+      one that fails, one that hangs). 90 tests.
 - [ ] M4 — UI: indicator, menu rows, refresh on open, lock/idle suppression
 - [ ] M5 — preferences window wired to the GSettings keys
 - [ ] M6a — click-through: resume the session in a terminal, in its own directory
@@ -54,6 +59,5 @@ Difficulty estimate: medium, as planned. recap being finished removes the risk t
 called biggest; what is left is the compositor-side work (no blocking, nothing leaked) and
 proving it in a real shell.
 
-Next: M3 — the live subprocess seam: Gio.Subprocess with communicate_utf8_async, a
-timeout that cancels, and a refusal to overlap refreshes, with the fake seam kept for
-tests.
+Next: M4 — the UI: the panel indicator and the menu rows, refreshing on a timer and when
+the menu opens, and never while the screen is locked.
