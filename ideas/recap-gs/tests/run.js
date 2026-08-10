@@ -11,6 +11,7 @@ import './metadata.test.js';
 import './contract.test.js';
 import './fixtures.test.js';
 import './document.test.js';
+import './rows.test.js';
 
 import { run } from './harness.js';
 

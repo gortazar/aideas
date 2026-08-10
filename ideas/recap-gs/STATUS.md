@@ -30,7 +30,10 @@ Started against a finished `recap`: its `--json` is schema version 1, documented
       version we were not written against are four different answers. The envelope is
       checked hard; a nonsense project entry travels on, because one bad row is not a
       reason to show nothing. 31 tests.
-- [ ] M2b — row model: projects, sessions, filters, ordering
+- [x] M2b — the row model: one row per project in recap's order, carrying its status icon,
+      agent, recap's own sentence and an age in words; the session a click would resume
+      (the one in the state the row reports, most recent first, never one without a
+      directory to resume it in); and the hide-finished / hide-idle preferences. 51 tests.
 - [ ] M2c — panel summary: counts and the worst-state-wins icon
 - [ ] M2d — error classification: missing binary, garbage, timeout, empty
 - [ ] M3 — live subprocess seam: async, timeout, cancellation, stale data
@@ -44,5 +47,5 @@ Difficulty estimate: medium, as planned. recap being finished removes the risk t
 called biggest; what is left is the compositor-side work (no blocking, nothing leaked) and
 proving it in a real shell.
 
-Next: M2b — the row model: one row per project in recap's order, with the session a click
-would resume, and the two "hide these" preferences applied.
+Next: M2c — the panel summary: what the single indicator says when several sessions
+disagree, and the count beside it.
