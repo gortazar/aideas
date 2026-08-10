@@ -1,150 +1,158 @@
-# Plan: recap — what were my agents doing?
+# Plan: recap — install it without a Go toolchain
 
-Difficulty estimate: medium — the mechanics (read session logs, check which processes are alive, print
-a line per project) are straightforward, but the two supported agents store their transcripts in
-undocumented, version-drifting formats, and turning a transcript into one honest sentence needs care.
+Difficulty estimate: easy — no new domain logic, just cross-compilation, one release workflow and a
+shell script; the only fiddly parts are that this is a monorepo (so tags and "latest release" have to
+be namespaced) and that a curl-installer has to be testable without a real release.
 
 ## Context
 
-A user runs several coding agents at once, across several repos, in terminals scattered over
-workspaces — and then closes the laptop. On return there is no single place that answers "what were
-they doing, and is anything still going?". `recap` is that place: one command, a few lines of output,
-no interaction.
+recap 0.1 ships as source. The only documented ways to get a binary are `nix build` and
+`go build ./cmd/recap`, both of which assume a toolchain and a checkout. This entry closes that gap:
+build the binary in CI, attach it to a GitHub release, and offer a one-line `curl … | sh` install for
+people who have neither Nix nor Go.
 
-Two facts shape the design:
+Three facts about *this* repo shape the work:
 
-1. **Both supported agents already persist everything to disk.** Claude Code writes one JSONL
-   transcript per session under `~/.claude/projects/<escaped-cwd>/<session-id>.jsonl`, one JSON object
-   per line (user turns, assistant turns, tool calls and results), each carrying a timestamp, the
-   session id and the project path. opencode keeps its own session/message store under its data
-   directory (`~/.local/share/opencode/`), with session metadata separate from message parts. So
-   recap needs no daemon, no hooks and no cooperation from the agents: it is a *reader*. Reading is
-   also the only safe option — a tool that writes into an agent's state directory can corrupt a live
-   session.
-2. **"Status" and "what it was doing" come from different places.** Whether a session is *running* is
-   a live-process question (is there a process whose cwd is this project and whose command is the
-   agent?), not something the transcript can answer — a transcript looks identical whether the agent
-   is thinking or was killed by a suspend. Whether it is *waiting for you* is inferred from the shape
-   of the transcript tail (last event is an assistant message or a permission prompt, nothing since).
-   Recap combines the two: process table for liveness, transcript for narrative.
+1. **`gortazar/aideas` is a public monorepo of many ideas, each independently versioned.** A release
+   therefore cannot use a bare `v0.2` tag or the plain `/releases/latest` endpoint — both are
+   repo-wide, and the next idea to publish would silently become "the latest recap". Tags are
+   namespaced `recap-v<version>` and every lookup filters on that prefix.
+2. **The Go module path is `github.com/gortazar/recap`, which is not where the code lives.** So
+   `go install github.com/gortazar/recap@latest` cannot work and must not be advertised. Renaming the
+   module is out of scope for a minor entry. Local `go build` and the flake remain the from-source
+   routes.
+3. **The agent building this cannot push, so it cannot cut a release.** Per `AGENTS.md` the
+   orchestrator merges and pushes; tags are the user's to push. The workflow is therefore written to
+   be verifiable *without* a release (a `workflow_dispatch` dry run that builds and uploads artifacts
+   but publishes nothing), and the README says plainly which step a human performs.
 
-Assumptions, stated rather than asked: recap runs on the same machine as the agents (no remote
-sessions in v1); it reads only the local user's own files; and "recently" defaults to a time window
-(sessions untouched for longer are hidden unless asked for).
+Assumptions, stated rather than asked: the binary is published as static per-platform tarballs plus a
+`SHA256SUMS` file, with no signing (no key exists here); supported platforms are linux and darwin on
+amd64 and arm64 — Windows is out, recap reads `/proc` and unix paths; the installer defaults to
+`~/.local/bin` so it never needs `sudo`.
 
 ## Features
 
-- **One line per project, sorted by recency** — the output format from the idea text:
-  `<icon> <project> (<agent>) -> <one-sentence recap>`, where the project name is the basename of the
-  session's working directory and the agent is `Claude Code` or `opencode`. Multiple sessions in the
-  same project collapse into one line by default, with the busiest state winning.
-- **Status icons with a defined meaning** — a small fixed vocabulary, each with a rule behind it, so
-  the icon is a fact and not a vibe:
-  - 🟢 *running* — a live agent process is attached to that session/cwd and the transcript grew
-    recently.
-  - 🟡 *awaiting input* — process alive (or session resumable) and the last transcript event is an
-    assistant turn, a question, or a pending permission/tool-approval prompt.
-  - ⚪ *idle / not running* — no live process; last activity was an ordinary stopping point.
-  - 🔴 *interrupted* — no live process and the transcript ends mid-work (last event is a tool call
-    with no result, or an abort/interrupt marker), i.e. the laptop-suspension case.
-  - ✅ *finished* — no live process and the session ended after completing what it was asked.
-  A `--legend` flag prints the vocabulary; a `--no-icons` flag substitutes words for terminals and
-  pipes that mangle emoji.
-- **Claude Code reader** — discovers projects under `~/.claude/projects/`, maps the escaped directory
-  name back to a real path, and parses each session's JSONL incrementally *from the tail* (a long
-  session's transcript is large; recap must not read megabytes to print one line). Extracts: first
-  user request, last user request, last assistant text, outstanding tool calls, interrupt markers,
-  timestamps, session id, cwd, and the git branch/worktree when recorded.
-- **opencode reader** — the same extraction against opencode's own storage layout, behind the same
-  internal interface, so a third agent is a new reader and nothing else.
-- **Version-drift tolerance** — both formats are undocumented and change between releases. Readers
-  treat every field as optional, skip records they do not recognise instead of aborting, and never
-  let one unparseable session hide the others. A malformed session degrades to a line saying so.
-- **Recap sentence generation** — the "was doing X, now Y" sentence, built from the transcript
-  without calling out to a model, so `recap` stays instant and offline: the *was* clause comes from
-  the most recent user request (trimmed to one clause), the *now* clause from the status rule that
-  fired, plus counts where they are informative ("3 of 7 units done" style, when the agent left such
-  a marker). Sentence assembly is pure logic and is where most of the test suite lives.
-- **Optional richer detail on demand** — `recap -v` adds per-session lines under each project: session
-  id, age, model, last tool used, and the file it last touched; `--json` emits the same data
-  machine-readably, which is also what the future `recap-gs` Gnome extension (idea 6) consumes, so
-  the JSON shape is treated as a public interface and versioned.
-- **Filtering and scope** — `--since <duration>` (default: last 24h of activity), `--all` to ignore
-  the window, `--agent claude|opencode`, `--project <name>` for a single project, and `--running` to
-  show only live work.
-- **Fast and side-effect free** — a hard performance target (sub-300 ms on a machine with dozens of
-  sessions) met by tail-reading and by caching parsed summaries keyed on file size + mtime under
-  `~/.cache/recap/`. Recap never writes to an agent's directories, never spawns an agent, and works
-  with no network.
-- **Reproducible environment + green CI** — `flake.nix` for dev/test/build, a test suite that runs
-  against committed transcript fixtures (recorded from real sessions, scrubbed of file contents and
-  secrets) so parsing is verified without needing live agents, and
-  `.github/workflows/ci-recap.yml` running it path-filtered.
-- **README with real output** — installation, usage, the icon vocabulary, the `--json` schema, and a
-  screenshot of actual output in a terminal.
+- **`recap --version`** — prints the version, the commit and the build date, with `dev` as the value
+  in an unstamped local build. Not decoration: it is how "did the installer install what it claimed?"
+  is answered, and the release smoke test asserts on it. Stamped via `-ldflags -X` from both the
+  release script and `flake.nix`.
+- **Cross-platform release build** (`tools/release-build.sh`) — one script, run inside `nix develop`
+  so CI and a laptop use the same Go, that produces for each of linux/darwin × amd64/arm64:
+  `recap_<version>_<os>_<arch>.tar.gz` containing the `recap` binary and `README.md`, plus a single
+  `SHA256SUMS` covering all of them. `CGO_ENABLED=0` throughout — the opencode reader's SQLite driver
+  is pure Go, which is what makes cross-compiling to four targets a loop rather than a toolchain
+  problem. Built with `-trimpath -ldflags "-s -w"` and fixed tar metadata so two runs of the same
+  commit produce identical archives.
+- **Release workflow** (`.github/workflows/release-recap.yml`) — triggered by pushing a
+  `recap-v*` tag, plus `workflow_dispatch` for a dry run. It:
+  - **refuses to publish an inconsistent version**: the tag's version must equal `version:` in
+    `STATUS.md` and the `version` in `flake.nix`, or the job fails before building. A release whose
+    binary reports a different number than its tag is worse than no release.
+  - builds via `tools/release-build.sh`, then creates the GitHub release with `gh release create`
+    (no third-party actions), attaching every tarball and `SHA256SUMS`, with generated notes.
+  - on `workflow_dispatch`, stops after the build and uploads the artifacts to the run instead —
+    so the whole path can be exercised on a branch without publishing anything.
+  - declares `permissions: contents: write` and nothing else.
+- **Install script** (`ideas/recap/install.sh`) — POSIX `sh`, `set -eu`, no bashisms, safe to pipe:
+  - detects OS and arch from `uname`, mapping `x86_64`→`amd64` and `aarch64`/`arm64`→`arm64`, and on
+    anything else exits with a message naming the Nix and from-source alternatives rather than
+    installing a binary that cannot run.
+  - resolves the newest `recap-v*` release through the GitHub API, filtered by prefix; `RECAP_VERSION`
+    pins an exact version and is also the documented escape hatch from the API's unauthenticated rate
+    limit.
+  - checks for `curl` and `tar` up front, downloads the tarball and `SHA256SUMS` into a `mktemp -d`
+    cleaned up by a `trap`, and **verifies the checksum before extracting** (`sha256sum`, falling back
+    to `shasum -a 256`). A mismatch aborts with nothing installed.
+  - installs with `install -m 755` into `$RECAP_INSTALL_DIR` (default `$HOME/.local/bin`, created if
+    absent), then prints the resolved version and path, and warns with the exact `export PATH=…` line
+    if that directory is not on `PATH`. Re-running upgrades in place.
+  - takes `RECAP_BASE_URL` and `RECAP_API_URL` overrides. These exist for the tests: pointed at
+    `file://` URLs they let the whole script run against a fake release with no network, which is the
+    only way a curl-installer gets a test suite at all.
+- **Tests for the shipping path, not just the code** — a `tools/install_test.sh` that builds a fake
+  release in a temp directory and drives `install.sh` against it over `file://`, asserting: happy path
+  installs a runnable binary whose `--version` matches; a corrupted `SHA256SUMS` aborts and leaves the
+  target directory untouched; an unsupported arch fails with the alternatives message; a custom
+  `RECAP_INSTALL_DIR` is honoured; the `PATH` warning fires only when it should. Plus a
+  `release-build.sh` test asserting four tarballs, a `SHA256SUMS` that verifies, and a `recap` binary
+  inside each archive.
+- **CI wiring** — `nix flake check` gains a lint check running `shellcheck` and `sh -n` over
+  `install.sh` and the release scripts, and runs `tools/install_test.sh` (which needs no network, only
+  `curl`, `tar` and coreutils). The heavier four-target cross-build test runs as a step in
+  `ci-recap.yml` under `nix develop`, not inside the flake sandbox, because a `buildGoModule` check
+  has no module cache for four `GOOS`/`GOARCH` pairs.
+- **Post-publish smoke test** — after a real release, a matrix job on `ubuntu-latest` and
+  `macos-latest` runs the published one-liner against the release just created and asserts
+  `recap --version` prints that version. This is also the only coverage the darwin/arm64 artifact
+  gets, since it is cross-compiled and never runs here otherwise.
+- **README: specific installation instructions** — the current three-line `## Install` section is
+  replaced by one that says exactly what to run:
+  - the `curl -fsSL …/install.sh | sh` one-liner, with the read-it-first variant
+    (`curl -fsSL … -o install.sh`, read, `sh install.sh`) given equal billing, because piping a
+    script from the internet into a shell deserves that courtesy;
+  - a table of `RECAP_VERSION` and `RECAP_INSTALL_DIR`, what the script verifies, and — honestly —
+    what the checksum does *not* protect against, since the checksums are served from the same repo as
+    the binary: it detects a corrupted download, not a compromised release;
+  - Nix: `nix profile install 'github:gortazar/aideas?dir=ideas/recap'` and the equivalent `nix run`,
+    with the `?dir=` subdirectory syntax spelled out because this is a monorepo;
+  - from source: clone and `go build ./cmd/recap`, plus a note that `go install` by module path does
+    not work here and why;
+  - a supported-platform table, `recap --version` as the verification step, and uninstall (`rm` the
+    binary, and where the cache and config live).
+- **README: how a release is cut** — under Development: bump `version:` in `STATUS.md` and
+  `flake.nix`, commit, `git tag recap-v0.2 && git push origin recap-v0.2`, what the workflow then
+  does, how to dry-run it first, and the two settings that can make it fail (repo Actions token
+  restricted to read-only; the tag not matching the recorded version).
 
 ## Approach
 
-1. **M0 — Format spike.** Probe both agents' on-disk state on this machine and write
-   `docs/session-formats.md`: directory layout, record types, which fields are reliable, how
-   interrupts and permission prompts appear, and what a finished session looks like versus an
-   abandoned one. Capture fixtures at the same time. This is the step that can invalidate the status
-   rules, so it comes first.
-2. **M1 — Skeleton.** Flake, test runner, CI green, `recap` binary that prints nothing but exits 0.
-3. **M2 — Claude Code reader + status rules,** against fixtures only.
-4. **M3 — Liveness detection** — process discovery and its correlation with sessions.
-5. **M4 — Rendering** — icons, one line per project, `--no-icons`, sorting, filters.
-6. **M5 — opencode reader** behind the same interface.
-7. **M6 — `--json`, `-v`, caching, README, screenshot.**
+Units, each one commit, tests first:
 
-Per the repo's tests-first rule: parsing, status classification and sentence assembly are pure
-functions over fixtures and are unit-tested; process discovery is behind a seam with a fake in tests;
-rendering is snapshot-tested.
+1. **U1 — `--version`.** Flag and output shape, tested in `internal/cli` against an injected version
+   variable; `-ldflags -X` wired into `flake.nix` so `nix build` stamps it too.
+2. **U2 — `tools/release-build.sh`** plus its test and the shellcheck/`sh -n` check in `flake.nix`.
+   Produces `dist/` locally; verified by running it for one fake version.
+3. **U3 — `install.sh`** with the `file://` seams, and `tools/install_test.sh` covering the cases
+   listed above. Written against a fake release built by U2's script, so U2 comes first.
+4. **U4 — `release-recap.yml`**: version-consistency guard, build, `gh release create`, plus the
+   `workflow_dispatch` dry-run path. Guard logic extracted into a small script so it can be tested
+   without a workflow run.
+5. **U5 — post-publish install smoke job** on ubuntu + macos.
+6. **U6 — README** install, uninstall, platform table and release-cutting sections; `ci-recap.yml`
+   updated with the cross-build step.
+7. **U7 — version bump to `0.2`** in `STATUS.md` (and `flake.nix`), `status: done`, with `STATUS.md`
+   recording that the release workflow's publishing half is unverified until a human pushes the first
+   tag.
 
 ## Risks / things to verify early
 
-- **Correlating a process with a session.** Claude Code's process command line may not carry the
-  session id, so the link may have to be made through the process cwd plus which transcript file is
-  currently being appended to. If that proves unreliable, the running/idle distinction degrades to
-  "was active in the last N minutes" and the README says so.
-- **Detecting "awaiting input" versus "thinking".** Both look like a transcript that has stopped
-  growing. Distinguishing them may need the process state (sleeping on stdin) as a tiebreaker.
-- **"Finished" is a judgement.** Without a model there is no reliable "the task was completed"
-  signal; the honest fallback is to reserve ✅ for sessions with an explicit completion marker and
-  otherwise report ⚪ idle rather than claim success.
-- **Format churn.** Fixtures pin behaviour for the versions recorded; a later agent release can
-  silently change field names. Mitigation is the skip-unknown-records rule plus a fixture per
-  observed format version.
-- **Privacy.** Transcripts contain source code, paths and sometimes secrets. Recap prints only short
-  summaries, fixtures are scrubbed before committing, and nothing is ever sent off the machine.
+- **No release exists yet, and the agent cannot create one.** Everything up to `gh release create` is
+  verifiable in-cycle (dry run, artifacts, installer against a fake release); the published path is
+  not. Do not claim it is. `STATUS.md` must say so, the way 0.1 said `--smart` had never made a live
+  API call.
+- **`/releases/latest` is repo-wide.** Verify the prefix-filtered API query returns the right release
+  when other ideas eventually publish; the installer must fail with a clear message, not install a
+  `pwgen` tarball, if no `recap-v*` release exists at all.
+- **Unauthenticated GitHub API rate limit (60/hour/IP).** A rate-limited response must produce a
+  message pointing at `RECAP_VERSION`, not an unhelpful parse error on an error body.
+- **The repo has no `LICENSE`.** The tarball therefore ships the binary and `README.md` only.
+  Publishing binaries from an unlicensed repo is worth a note to the user; adding a license is the
+  user's call, not this entry's.
+- **`vendorHash` in `flake.nix`.** Nothing here should change `go.sum`, but if it does, the hash must
+  be updated in the same commit or `nix flake check` breaks for everyone.
+- **Darwin is cross-compiled blind.** Until the macos smoke job runs against a real release, the
+  darwin artifacts are "built" and not "known to work".
 
 ## Open Questions
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [x] What language and runtime should recap be written in? The repo has no default, and the choice
-      is constrained by idea 6 (`recap-gs`, a Gnome Shell extension) needing to consume recap — a
-      compiled binary invoked for its `--json` output works from GJS, but a shared library or a GJS
-      implementation would too. Preference? -> English.
-- [x] Should the recap sentence ever be generated by an LLM? Pure-logic assembly is instant, offline
-      and free, but produces a blunter sentence than the examples in the idea text ("was interrupted
-      mid-task by laptop suspension and is now resuming work" reads like a model wrote it). Is a
-      heuristic sentence acceptable, or is an optional `--smart` mode that calls a model wanted? 
-      It can be generated by an LLM, so add --smart. If heuristics work really bad, we will use always
-      LLMs for this and remove the --smart option.
-- [x] Is the example line "Was running the orchestrator against ideas 6 and 8. Idea 7 stopped and
-      requested further info." meant to be *recursive* — recap understanding that a session is itself
-      orchestrating sub-agents and reporting on their individual states — or is that just a verbose
-      example of one session's summary? The recursive reading is a substantially bigger feature. 
-      It's just an example, though very verbose. For the moment we do not want sub-agents recursion.
-- [x] Which opencode installation is the reference? opencode's storage layout has changed across
-      releases, and the plan assumes the version installed on this machine — is that right, or must a
-      specific version be supported? It must support the release installed on this machine, and later ones.
-- [x] Should recap show sessions from *all* projects on the machine, or only those under a configured
-      set of roots (e.g. `~/git`)? Machine-wide is simpler but will surface throwaway sessions from
-      `/tmp` and scratch directories. It must show projects from a configured root, or from the user's
-      home folder if none is specified.
-- [x] Is a config file wanted (default time window, project roots, icon set, ignored paths), and if
-      so should it live at `~/.config/recap/config.toml`? Or are command-line flags enough for v1? A
-      config file is wanted, but keep command-line flags as well. The later take precedence over the former.
-      Also, do not use idle when status is unknown, use a question mark or something like that instead.
+- [ ] Should recap's releases live in this monorepo as `recap-v<version>` tags and GitHub releases on
+      `gortazar/aideas` — the whole plan above assumes so, since it is the only thing an agent can do
+      unaided — or does recap get its own `gortazar/recap` repo, which the Go module path already
+      implies and which would make `go install`, the install URL and "latest release" all simpler? A
+      separate repo needs a repo created and a cross-repo token added as a secret, neither of which
+      the agent can do, and it changes every URL in the workflow, the installer and the README, so it
+      is worth one line now rather than a rewrite later. Ticking this line as-is confirms the
+      monorepo.
