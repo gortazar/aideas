@@ -88,6 +88,9 @@ cat > "$work/bin/recap" <<EOF
 exec cat "$work/report.json"
 EOF
 chmod +x "$work/bin/recap"
+# On PATH rather than named in the settings: a bare "recap" is the default the extension
+# ships with, so this exercises the lookup a real install depends on.
+export PATH="$work/bin:$PATH"
 
 result="$work/result.json"
 export RECAP_DRIVER_RESULT="$result"
@@ -99,9 +102,7 @@ settings() {
   dbus-run-session -- sh -c "$*"
 }
 settings "gsettings set org.gnome.shell disable-user-extensions false
-          gsettings set org.gnome.shell enabled-extensions \"['$DRIVER']\"
-          GSETTINGS_SCHEMA_DIR='$extensions/$UUID/schemas' \
-            gsettings set org.gnome.shell.extensions.recap recap-path '$work/bin/recap'
+          gsettings set org.gnome.shell enabled-extensions \"['$DRIVER', '$UUID']\"
           GSETTINGS_SCHEMA_DIR='$extensions/$UUID/schemas' \
             gsettings set org.gnome.shell.extensions.recap refresh-interval 5"
 
@@ -109,7 +110,7 @@ log="$work/shell.log"
 echo "booting a headless shell (log: $log)"
 set +e
 timeout 180 dbus-run-session -- \
-  gnome-shell --headless --virtual-monitor 1280x800 --wayland --no-x11 \
+  gnome-shell --headless --virtual-monitor 1280x1024 --wayland --no-x11 \
   >"$log" 2>&1
 shell_status=$?
 set -e
@@ -139,7 +140,7 @@ failures = [f for f in results["failures"] if not f.startswith("screenshot ")]
 
 # A screenshot that did not happen is only a failure when one was asked for.
 if shots:
-    for name in ("panel.png", "menu.png"):
+    for name in ("panel.png", "menu.png", "preferences.png"):
         if not os.path.exists(os.path.join(shots, name)):
             failures.append(f"no screenshot was written to {shots}/{name}")
 
