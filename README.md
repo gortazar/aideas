@@ -64,12 +64,9 @@ makes position a safe identity: the active list only ever holds work still to do
 2. [Restore workspaces](ideas/restore-wss) - Support for restoring browsers and the tabs that were open inside them (may require a browser extension). First, an in-depth research
    must be done to find similar extensions that could be used as-is, and this report is to be written in the idea folder as "browser-extensions-research.md".
 
-3. [recap](ideas/recap/) - Add specific installation instructions. Add an action to build and publish the binary. And add a script to install it via curl. Add documentation on
-   how to install via curl to the readme. Minor change.
+3. [recap](ideas/recap/) - Add below each claude session a one paragraph report of what was done the last 24 hours. It must be indented for clarity. Minor change.
 
-4. [recap](ideas/recap/) - Add below each claude session a one paragraph report of what was done the last 24 hours. It must be indented for clarity. Minor change.
-
-5. [recap-gs](ideas/recap-gs/) - Change appearance when a session asked something or finishes its task. Make a plan for this, as detecting this would preferably not require a monitor
+4. [recap-gs](ideas/recap-gs/) - Change appearance when a session asked something or finishes its task. Make a plan for this, as detecting this would preferably not require a monitor
    running and inspecting internal details, but rather detect notifications or the like. Minor. 
 
 ## Finished
@@ -108,3 +105,6 @@ makes position a safe identity: the active list only ever holds work still to do
 4. [Recap.gs](ideas/recap-gs) - A gnome shell plugin for recap (can't be started until recap has a clear API). It shows a list of AI tasks, and their statuses. When a task is clicked, (finished 2026-08-13, v0.1)
    its session is restored (by running claude -r on claude or the equivalent command on opencode). Important: it must be restored from the same folder it was running when the process 
    stopped or was killed.
+
+5. [recap](ideas/recap/) - Add specific installation instructions. Add an action to build and publish the binary. And add a script to install it via curl. Add documentation on (finished 2026-08-13, v0.3)
+   how to install via curl to the readme. Minor change.
