@@ -67,6 +67,16 @@ makes position a safe identity: the active list only ever holds work still to do
 3. [recap-gs](ideas/recap-gs/) - Change appearance when a session asked something or finishes its task. Make a plan for this, as detecting this would preferably not require a monitor
    running and inspecting internal details, but rather detect notifications or the like. Minor. 
 
+4. [aideas](ideas/aideas/) - Build a gnome shell extension that shows a button when aideas is running, and when clicked it shows which ideas are running, which are ready (could be run), which blocked
+   with questions. The gnome shell extension will call /state on the orchestrator to read the live status. This project must be done within this repo. Do not create an external repo for this.
+   The gnome shell extension must install along with the orchestrator.
+
+5. [vacas](ideas/vacas/) - A Firefox extension that is activated on demand by user, and tracks user's requests for Rentalia's holidays rental site. It will store locally which 
+   places were asked for availability, on which dates, and if the same place appears again in a new search with the same dates, it alerts the user that it was already contacted.
+   The extension will store as well the text that was sent. In order to build vacas, the Rentalia web must be researched in search of placeholders to use for detecting the contact form of
+   each place contacted, extract the dates, the text and detect when the send button of the contact form has been pushed, to store the info. If the button is not pressed, we
+   can't assume the place has been contacted and no info is stored for that place.
+
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)

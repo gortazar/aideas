@@ -273,6 +273,7 @@ class RepoLock:
         self.renew_seconds = renew_seconds
         self.token = f"{os.uname().nodename}-{os.getpid()}-{time.time_ns()}"
         self.acquired_at = 0
+        self.agents: list[str] = []
         self._lost = threading.Event()
         self._stop_renewing = threading.Event()
         self._renewer: threading.Thread | None = None
@@ -290,6 +291,11 @@ class RepoLock:
             "renewed_at": int(time.time()),
             "ttl_minutes": self.ttl_minutes,
             "pid": os.getpid(),
+            # Which ideas this cycle is building. It rides along with the renewal because
+            # that is what already proves the cycle is alive — keeping the two in one file
+            # means a reader can never see a live lock with a stale agent list, or agents
+            # listed for a cycle that died.
+            "agents": list(self.agents),
         }
         tmp = self.meta.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(payload))
@@ -347,6 +353,14 @@ class RepoLock:
         shutil.rmtree(self.dir, ignore_errors=True)
         self.dir.mkdir(parents=True, exist_ok=True)
         return True
+
+    def set_agents(self, slugs: list[str]) -> None:
+        """Publish which ideas this cycle is building, for anything watching the lock."""
+        self.agents = list(slugs)
+        try:
+            self._write_meta()
+        except OSError:
+            pass
 
     @property
     def lost(self) -> bool:
@@ -1226,6 +1240,7 @@ class Orchestrator:
                 log("No idea is currently buildable (all blocked or planned only); exiting.")
                 return 0
             log(f"Building {len(chosen)} of {parallel} slot(s) in parallel: {' '.join(chosen)}")
+            self.lock.set_agents(chosen)
 
             git("worktree", "prune", cwd=self.repo)
             self.agents = [self.start_agent(slug) for slug in chosen]
@@ -1307,6 +1322,68 @@ def heartbeat_report(url: str) -> list[str]:
     lines.append(f"                {how}")
     lines.append(f"                {detail}")
     return lines
+
+
+def queue_rows(repo: Path, running: tuple[str, ...] = ()) -> list[dict]:
+    """One row per `## Ideas` entry, in queue order — the single source of truth for
+    "what is the state of each idea", shared by the status command and the /state endpoint
+    so the two can never drift apart.
+
+    `running` is the slugs an active cycle currently holds; those are reported as running
+    whatever their files say, because a file only tells you where the last cycle got to.
+    """
+    orchestrator = Orchestrator.__new__(Orchestrator)
+    orchestrator.repo = repo
+    queue = ReadmeQueue(repo / "README.md")
+    slots = Config(load_config(repo / ".agent-config.yml")).integer("parallel_agents", 2)
+
+    rows: list[dict] = []
+    seen: set[str] = set()
+    buildable = 0
+    for number, entry in enumerate(queue.entries(), 1):
+        slug = entry.slug
+        idea_dir = repo / "ideas" / slug
+        status_file = idea_dir / "STATUS.md"
+        row = {
+            "position": number,
+            "slug": slug,
+            "version": status_value(status_file, "version") or INITIAL_VERSION,
+            "state": "",
+            "note": "",
+            "will_run_next": False,
+        }
+        if slug in running:
+            row["state"] = "running"
+            row["note"] = "an agent is working on it now"
+        elif slug in seen:
+            first = next(i for i, e in enumerate(queue.entries(), 1) if e.slug == slug)
+            row["state"], row["note"] = "queued", f"behind #{first}"
+        else:
+            raw = (status_value(status_file, "status") or "not_started").lower()
+            questions = count_open_questions(idea_dir / "PLAN.md")
+            if not (idea_dir / "PLAN.md").is_file():
+                row["state"], row["note"] = "to be planned", "no PLAN.md yet"
+            elif questions:
+                row["state"] = "blocked"
+                row["note"] = f"{questions} unanswered question{'s' if questions > 1 else ''}"
+                row["open_questions"] = questions
+            elif raw == "blocked":
+                row["state"], row["note"] = "blocked", "STATUS.md says blocked"
+            elif raw in ("done", "complete", "completed"):
+                row["state"], row["note"] = "ready", "finished before — reopens for this entry"
+            else:
+                row["state"] = "ready"
+                _, target, kind = orchestrator.version_plan(slug)
+                row["note"] = (f"{kind} update -> v{target}" if kind else
+                               ("in progress" if raw == "in_progress" else "not started"))
+                row["target_version"] = target
+            if row["state"] == "ready" and not running and buildable < slots:
+                row["will_run_next"] = True
+                buildable += 1
+        if slug not in running:
+            seen.add(slug)
+        rows.append(row)
+    return rows
 
 
 def cmd_status(repo: Path, heartbeat_url: str) -> int:
