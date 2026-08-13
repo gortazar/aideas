@@ -4,3 +4,6 @@
 [submodule "ideas/recap/upstream"]
 	path = ideas/recap/upstream
 	url = https://github.com/gortazar/recap.git
+[submodule "ideas/recap-gs/upstream"]
+	path = ideas/recap-gs/upstream
+	url = https://github.com/gortazar/recap-gs.git
