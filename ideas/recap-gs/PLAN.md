@@ -171,22 +171,24 @@ Units, each one commit, tests first:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **What changes appearance?** The plan assumes the extension's own surfaces: the panel button and
+- [x] **What changes appearance?** The plan assumes the extension's own surfaces: the panel button and
       the flagged row in its menu. The wider readings are (b) also mark the *terminal window* of the
       asking session — the Shell can set a window's attention flag, so it would show in the overview and
       in the dash, but only for windows we can identify, which means a title or PID match we do not have
       today; or (c) something desktop-wide (a screen edge glow, the accent colour). Ticking this line
       as-is chooses the panel and its menu.
-- [ ] **Should an event also raise a desktop notification?** 0.1 answered "not for v1" and this entry
+- [x] **Should an event also raise a desktop notification?** 0.1 answered "not for v1" and this entry
       asks for an appearance change, so the plan says no. But "a session asked something" is the case
       where a notification is genuinely wanted — you are in another window, which is exactly why you
       did not see the panel. Ticking this line as-is keeps notifications out of 0.2; the alternative is
-      an off-by-default preference for `asking` events only.
-- [ ] **May the installer write to `~/.claude/settings.json` and the opencode config?** The plan says
+      an off-by-default preference for `asking` events only. If a session asks something, it must
+      be reflected somehow in the appearance of the panel button.
+- [x] **May the installer write to `~/.claude/settings.json` and the opencode config?** The plan says
       yes, with a backup and an idempotent merge, because a copy-paste-only path means most people never
       turn the feature on. The conservative answer is that the preferences page shows the snippet and
-      the user edits their own configuration. Ticking this line as-is chooses the installer.
-- [ ] **Should a flagged project jump to the top of the menu?** Attention is easier to find at the top,
+      the user edits their own configuration. Ticking this line as-is chooses the installer. Yes, but informing
+      the user and asking for confirmation (Y/n) with a default yes.
+- [x] **Should a flagged project jump to the top of the menu?** Attention is easier to find at the top,
       but 0.1's rule is that recap owns the order and the extension only renders it, and a list that
       reorders itself while you read it is hard to click. Ticking this line as-is keeps recap's order
-      and relies on the row marker.
+      and relies on the row marker. Yes, put flagged projects at the top.
