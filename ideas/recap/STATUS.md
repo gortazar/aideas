@@ -9,10 +9,17 @@ last_cycle_cost_usd: 14.869310999999998
 - [x] U0 — restore the submodule pin: a merge had left the `upstream/` gitlink at a
       pre-release commit while `flake.lock` pointed at the released one. check-pin.sh
       catches exactly this, and now passes again.
-- [ ] U1 — `session.Activity` and `session.Report`: the paragraph, table-tested
-- [ ] U2 — Claude reader fills Activity within the current 512 KiB tail
-- [ ] U3 — windowed backwards read, 4 MiB cap, Truncated flag, perf test
-- [ ] U4 — rendering: indented, wrapped, `--report`/`--no-report` (default: shown)
+- [x] U1 — `session.Activity` and `session.Report`: the paragraph, table-tested, with a
+      test that it never claims a result the transcript cannot show
+- [x] U2 — Claude reader fills Activity: tool counts, files by frequency, turns, errors,
+      requests, first/last seen; capped at 10 files and the last 5 requests
+- [x] U3 — windowed backwards read with a **1 MiB** cap (4 MiB measured at 0.93s for
+      `--all`; 1 MiB costs nothing on the default window), Truncated flag, and a generated
+      8 MiB transcript asserting the cap bites and the status is window-independent.
+      290ms cold / 11ms warm on this machine, against 156ms before this entry
+- [x] U4 — rendering: indented under the line it belongs to, wrapped to the terminal (80
+      when not a terminal), blank line after, `--report`/`--no-report` and the `report`
+      config key. Paragraphs are on by default, per the answered question
 - [ ] U5 — opencode reader fills Activity
 - [ ] U6 — `--json` carries report + activity, schema version unchanged
 - [ ] U7 — `--smart` rewrites the paragraphs too
