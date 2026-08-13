@@ -157,7 +157,7 @@ Units, each one commit, tests first:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] Should the paragraph show by default, or only when asked for? The idea says "below each claude
+- [x] Should the paragraph show by default, or only when asked for? The idea says "below each claude
       session", and per-session lines only exist under `-v` today — so the narrow reading is "`recap -v`
       grows a paragraph under each session line, plain `recap` is untouched". The broad reading is that
       plain `recap` should print the paragraph too, which would change the default output from ~25 lines
@@ -168,3 +168,4 @@ Units, each one commit, tests first:
       **(b)** paragraphs always, `--no-report` to suppress;
       **(c)** paragraphs by default for sessions active *within* the window and `-v` for the rest.
       Ticking this line as-is chooses **(a)**.
+      Option **(b)** is what should be implemented.
