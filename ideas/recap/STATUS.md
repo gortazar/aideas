@@ -1,9 +1,23 @@
-status: not_started
+status: in_progress
 version: 0.2
 started_at: 2026-08-09
 last_session_id: fa22503c-6cd0-436e-b54f-1a557e15f321
 last_run: 2026-08-13T20:00:38+02:00
 last_cycle_cost_usd: 14.869310999999998
+
+## Units — 0.3 (a paragraph of what each session did)
+- [x] U0 — restore the submodule pin: a merge had left the `upstream/` gitlink at a
+      pre-release commit while `flake.lock` pointed at the released one. check-pin.sh
+      catches exactly this, and now passes again.
+- [ ] U1 — `session.Activity` and `session.Report`: the paragraph, table-tested
+- [ ] U2 — Claude reader fills Activity within the current 512 KiB tail
+- [ ] U3 — windowed backwards read, 4 MiB cap, Truncated flag, perf test
+- [ ] U4 — rendering: indented, wrapped, `--report`/`--no-report` (default: shown)
+- [ ] U5 — opencode reader fills Activity
+- [ ] U6 — `--json` carries report + activity, schema version unchanged
+- [ ] U7 — `--smart` rewrites the paragraphs too
+- [ ] U8 — cache version 2, with a stale-entry test
+- [ ] U9 — README, screenshot, version 0.3, release v0.3
 
 ## Log
 - 2026-08-13T20:00:38+02:00 — done ($14.869310999999998)
