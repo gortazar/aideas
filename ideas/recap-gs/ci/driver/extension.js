@@ -20,6 +20,13 @@ import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 const TARGET = 'recap@recap-gs.patxi';
 const CYCLES = 5;
 
+// Module scope, because the shell can enable an extension more than once in a session and
+// this driver is a script that must run exactly once: keeping the record and the "already
+// started" flag out of the instance means a second enable() cannot quietly begin a second
+// run, nor throw away the first one's findings.
+const results = { checks: [], failures: [] };
+let started = false;
+
 // ExtensionState, as the shell numbers it.
 const STATE_ACTIVE = 1;
 const STATE_DISABLED = 2;
@@ -95,10 +102,14 @@ class SourceLedger {
 
 export default class DriverExtension extends Extension {
     enable() {
-        this._results = { checks: [], failures: [] };
+        this._results = results;
         this._ledger = new SourceLedger(TARGET);
         this._shots = GLib.getenv('RECAP_DRIVER_SHOTS');
         this._manager = Main.extensionManager;
+
+        if (started)
+            return;
+        started = true;
 
         // Everything below is a single asynchronous script; the shell's main loop keeps
         // running throughout, which is the point.
@@ -121,11 +132,11 @@ export default class DriverExtension extends Extension {
         Main.overview.hide();
         await sleep(500);
 
-        // 1. It loads. Waited for rather than slept through: the shell is still starting
-        // up around us, and how long any of this takes depends on the machine.
-        await this._waitFor(() => this._manager.lookup(TARGET) !== undefined, 15000);
-        this._manager.enableExtension(TARGET);
-        await this._waitFor(() => indicatorOf() !== null, 15000);
+        // 1. It loads. The shell enables it out of enabled-extensions, the way a real
+        // session does — asking for it by hand while the shell is still working through its
+        // own startup is a race, and one this test lost about one run in three. Waited for
+        // rather than slept through: how long startup takes depends on the machine.
+        await this._waitFor(() => indicatorOf() !== null, 25000);
 
         const state = this._manager.lookup(TARGET)?.state;
         this._check('loads', state === STATE_ACTIVE,
@@ -308,8 +319,11 @@ function rowCount(indicator) {
 function prefsWindow() {
     for (const actor of global.get_window_actors()) {
         const window = actor.meta_window;
+        // Both spellings: this window arrives from Wayland with no GTK application id set,
+        // and only its wm_class says who it belongs to.
         const id = window.get_gtk_application_id() ?? '';
-        if (id.includes('org.gnome.Shell.Extensions'))
+        const wmClass = window.get_wm_class() ?? '';
+        if (id.includes('org.gnome.Shell.Extensions') || wmClass.includes('org.gnome.Shell.Extensions'))
             return window;
     }
     return null;
