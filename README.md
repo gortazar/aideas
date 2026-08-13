@@ -15,6 +15,11 @@ leave a blank line between the link and its description.
 
 The link *text* is ignored; the folder in the URL is what identifies the idea.
 
+Each idea is developed in **its own GitHub repository**, included here as a submodule at
+`ideas/<slug>/upstream`; this repo holds the queue, the plans and the status. Every
+completed entry ships a release with built artefacts from that repository, and every idea
+provides a way to install it without compiling anything. See [AGENTS.md](AGENTS.md).
+
 Reorder entries to reprioritise: position in this list *is* the priority.
 
 ### Adding work to an idea that already exists
