@@ -1,5 +1,5 @@
-status: in_progress
-version: 0.2
+status: done
+version: 0.3
 started_at: 2026-08-09
 last_session_id: fa22503c-6cd0-436e-b54f-1a557e15f321
 last_run: 2026-08-13T20:00:38+02:00
@@ -20,11 +20,39 @@ last_cycle_cost_usd: 14.869310999999998
 - [x] U4 — rendering: indented under the line it belongs to, wrapped to the terminal (80
       when not a terminal), blank line after, `--report`/`--no-report` and the `report`
       config key. Paragraphs are on by default, per the answered question
-- [ ] U5 — opencode reader fills Activity
-- [ ] U6 — `--json` carries report + activity, schema version unchanged
-- [ ] U7 — `--smart` rewrites the paragraphs too
-- [ ] U8 — cache version 2, with a stale-entry test
-- [ ] U9 — README, screenshot, version 0.3, release v0.3
+- [x] U5 — opencode reader fills Activity from its parts, with the part cap raised from
+      40 to 400 so a window has something to count
+- [x] U6 — `--json` carries `report` and an `activity` object, schema version deliberately
+      still 1, with a test walking every field a version-1 consumer reads
+- [x] U7 — `--smart` rewrites sentence and paragraph in one call; the reply is now an
+      array of {sentence, report} objects and the parser is strict about it
+- [x] U8 — cache version 2, with a test using a literal 0.2-shaped entry; verified against
+      a real 64-entry version-1 cache on this machine
+- [x] U9 — README, regenerated screenshot, version 0.3, released as v0.3 and verified from
+      a clean directory
+
+**v0.3 is published**: https://github.com/gortazar/recap/releases/tag/v0.3. The release
+workflow ran green including the smoke job on ubuntu and macOS, and the published one-liner
+was then run here from a clean directory: it installed 0.3 and printed paragraphs against
+the real store.
+
+What the paragraph looks like in practice, from this machine:
+
+    🟡 aideas (Claude Code) -> Asked to "Done, run another cycle" — answered, waiting for you.
+        Over 4h: 5 requests, ending "Done, run another cycle". 37 tool calls —
+        mostly Bash (22), Edit (11), Monitor (3) — touching AGENTS.md,
+        orchestrator.py and 1 other file. 1 turn ended in an error. Waiting since
+        20:56.
+
+Two decisions worth recording:
+
+- **The cap is 1 MiB, not the 4 MiB the plan named.** Measured across 25 projects, 4 MiB cost
+  nothing on the default 24h window — most sessions are covered long before any cap — but
+  made `--all` take 0.93s where 1 MiB takes 0.31s. The plan explicitly allowed bringing it
+  down if it had to come down.
+- **Speed: 290ms cold, 11ms warm**, against 156ms cold before this entry. Reading a day
+  instead of a tail is what the difference buys; parsing each record's blocks once rather
+  than twice clawed back about 20ms of it. `--all` is 310ms.
 
 ## Log
 - 2026-08-13T20:00:38+02:00 — done ($14.869310999999998)
@@ -163,7 +191,10 @@ wanted Rust and it will be swapped while the code is still small.
       plain sentences with a word on stderr. Exercised against an httptest server — there
       was no ANTHROPIC_API_KEY on this machine to try the live path
 
-Difficulty estimate: medium — unchanged. The formats turned out to be readable and both
+Difficulty estimate: medium — as planned. The rendering half really was small; the reading
+half was where the work and the measuring went.
+
+Difficulty estimate (0.1, kept for the record): medium — unchanged. The formats turned out to be readable and both
 carry more structure than feared (opencode in particular has `title`, `agent`, `model` and
 a todo list as columns), so the risk is concentrated in the status rules and liveness.
 
