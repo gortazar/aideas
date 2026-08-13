@@ -1,11 +1,12 @@
-status: not_started
-version: 0.1
+status: done
+version: 0.2
 started_at: 2026-08-10
 last_session_id: d24e6611-e9d4-4925-90e2-8fa4db5094ca
 last_run: 2026-08-13T20:00:38+02:00
 last_cycle_cost_usd: 20.4351435
 
 ## Log
+
 - 2026-08-13T20:00:38+02:00 — done ($20.4351435)
 - 2026-08-11T18:50:50+02:00 — in_progress ($6.586843)
 - 2026-08-11T15:05:29+02:00 — in_progress ($2.97405)
@@ -13,9 +14,99 @@ last_cycle_cost_usd: 20.4351435
 - 2026-08-10T14:13:00+02:00 — in_progress ($13.098638499999996)
 
 
-### 2026-08-13 — done
+### 2026-08-14 — done (0.2: notice the moment a session asks or finishes)
 
-Every feature in `PLAN.md` is built, tested, green, released and installable without
+The panel now changes at the moment something happens, instead of up to 30 seconds later,
+and stays changed until you acknowledge it.
+
+- **Released**: [v0.2](https://github.com/gortazar/recap-gs/releases/tag/v0.2) from
+  [e6c96e1](https://github.com/gortazar/recap-gs/commit/e6c96e1), which is also what the
+  `upstream/` submodule and the flake input are pinned to. Upstream CI green on `main`; 237
+  headless tests, up from 147.
+- **Install-verified** from a clean directory against the published asset, with
+  `XDG_DATA_HOME` redirected so it could not touch this machine's session: 32 files, the
+  shim and both hook installers among them, and the installed `install-hooks.sh --print`
+  runs.
+- **Proven in a real headless shell**: a separate process runs `recap-gs-notify` with a
+  Claude Code hook payload, the panel takes the asking style, the flagged project leads the
+  menu carrying the agent's words, the marks survive being read and clear when the menu
+  closes, the pulse ends at full opacity, and five enable/disable rounds leave no timer and
+  no bus name owned. The screenshots are frames from that run.
+
+## Units (0.2)
+- [x] U1 — the attention model: events in, flagged projects out. Longest-prefix matching on
+      whole path components (so `aideas-old` never lands on `aideas`), fleet attention for an
+      event that matches nothing, coalescing and a per-minute ceiling that suppress the
+      *pulse* but not the *flag*, asking beating finished both ways, and clearing only on
+      looking, clicking, or recap saying the session stopped waiting. 175 tests.
+- [x] U2 — decoding: each agent's own hook JSON becomes an event or a named reason to ignore
+      it — never a throw, capped before it is parsed, message stripped of control characters
+      and clipped, `cwd` required and absolute. 189 tests.
+- [x] U3 — the bus surface: `Event(kind, payload)` on `org.gnome.Shell.Extensions.RecapGs`,
+      owned in `enable()` and released in `disable()`, tested against a real bus because no
+      stand-in can vouch for a name being owned or given back. 198 tests.
+- [x] U4 — the shim and the installer: `recap-gs-notify` (always exits 0, bounded, silent
+      when nothing is listening) and `install-hooks.sh` (shows the change, asks, backs up,
+      merges, idempotent, never touches a hook you wrote). 213 tests.
+- [x] U5 — the appearance: style classes from the theme's accent colour, a bounded three-flash
+      pulse, flagged rows at the top of the menu with a dot and the agent's message, and
+      attention outranking both the polled summary and a stale report. 222 tests.
+- [x] U6 — the refresh trigger: an accepted event nudges the existing single-flight refresher,
+      and a locked or idle machine raises the flag while spawning nothing. 225 tests.
+- [x] U7 — the two secondary sources, each behind a preference and each raising fleet
+      attention only, since neither a notification nor a bell can name a project. 235 tests.
+- [x] U8 — the Detection page: the three switches, the exact install command built from the
+      extension's own installed path with a copy button, and a read-out that asks the bus the
+      same question a hook would. 237 tests.
+- [x] U9 — the real shell: the smoke test drives the whole path from a separate process and
+      checks the bus name is given back; the acknowledgement bug it found is fixed.
+- [x] U10 — `docs/event-interface.md`, the README's Notifications section, `v0.2` released
+      and install-verified.
+
+## What the real shell found, again
+
+**Acknowledgement was taken when the menu opened**, which cleared the marks in the same
+instant you went looking for them: a lit panel, opened, showing nothing marked and no
+message. It is taken when the menu closes now. Only a compositor could have shown that —
+every unit test of the rule passed both ways round.
+
+Two smaller ones: the smoke test and `install-local.sh` installed `src/` alone while the
+packed zip puts `bin/` and `hooks/` beside it, so the shim the extension tells you to run was
+not there; and `ci/crop.js` cropped already-cropped screenshots into slivers on a second run.
+
+## What "done" does not cover
+
+**No real Claude Code session has ever run the hook on this machine.** Everything up to that
+point is exercised for real — the installer writes a `settings.json` whose shape is asserted
+field by field, and the smoke test runs the actual shim, as a separate process, with a real
+Claude Code hook payload on stdin, into the real bus interface of a real extension in a real
+shell. What is not exercised is Claude Code itself deciding to run that command, because
+doing it honestly would mean either editing the live session's own `~/.claude/settings.json`
+— which the installer is careful to ask a human about, and this is not the human — or
+spending the user's credentials on a throwaway agent session. The plan asked for it; it is
+the one line of it I did not do, and this says so rather than implying otherwise.
+
+**opencode's `session.idle` was not observed either**, for the same reason: the plugin is
+written against the documented API and its payload is exact (we write it), but no opencode
+session has emitted one here.
+
+## Deviations from PLAN.md (0.2)
+
+- **The menu clears on close, not on open.** The plan said opening the menu clears the flags
+  on the rows it shows. Taken literally that removes the marks before they can be read, so
+  the visit still clears them — when it ends.
+- **The message tray source is best-effort.** The plan called its API the biggest risk and
+  said to ship the D-Bus source alone rather than one that works on a single version. It is
+  shipped, off by default, feature-detected and wrapped: if the signals are not there it
+  stays off and says so once in the log. Only GNOME 46 could be tried here.
+- **The panel keeps the same two status icons** for asking and finished rather than gaining
+  new ones — the exclamation mark and the tick already mean exactly those two things. What is
+  new is the colour, the pulse and the count.
+
+
+### 2026-08-13 — done (0.1: the panel indicator)
+
+Every feature in the 0.1 `PLAN.md` is built, tested, green, released and installable without
 building anything.
 
 - **The extension** is [`gortazar/recap-gs`](https://github.com/gortazar/recap-gs), pinned
@@ -41,7 +132,7 @@ building anything.
   commit (checked, not assumed — what changed afterwards was the flake, the lint config,
   the README and the packaging).
 
-## Units
+## Units (0.1)
 - [x] M1 — skeleton: flake (dev shell, `nix build`, `nix flake check` running lint, the
       headless suite, schema compile and pack validation), `metadata.json` for GNOME 46-50,
       a GSettings schema, an extension that enables and disables cleanly, the shipped
@@ -116,7 +207,7 @@ building anything.
       `upstream/` submodule and a `flake.nix` here that runs upstream's checks at the
       pinned commit, `scripts/check-pin.sh`, and `v0.1` released and install-verified.
 
-## What the real shell found
+## What the real shell found (0.1)
 
 Two defects that no amount of headless testing would have shown, both fixed:
 
@@ -130,7 +221,7 @@ Two defects that no amount of headless testing would have shown, both fixed:
    any menu item, and the menu says "Asking recap…" immediately, so it passed while the
    report never arrived. It counts project rows now.
 
-## Deviations from PLAN.md
+## Deviations from PLAN.md (0.1)
 
 - **The code is not "built inside" this folder**, which is what the open question about
   where it should live was answered with. The repo-wide rule changed under it: every idea
@@ -170,3 +261,18 @@ Next: nothing — the plan is delivered at 0.1. If the idea is reopened: notific
 transition to *waiting* would be the first thing to weigh, a session-level submenu for
 projects with several sessions the second, and running the smoke test in a Fedora container
 in CI the third.
+
+---
+
+Difficulty estimate at 0.2: medium, as planned, and for the reason the plan gave. The
+appearance was an afternoon; the surface underneath it — a public bus interface, a shim
+running inside somebody's agent on every turn, and an installer editing their configuration
+— is where the care went. What took the longest was neither: it was the build sandbox,
+which has no python3, no bash, no session bus and no /usr/bin, and therefore disagreed with
+this laptop three separate times about tests that passed here.
+
+Next at 0.2: nothing outstanding. If the idea is reopened, in order: run the hook from a
+real Claude Code session (the one line of the plan not done, above); a desktop notification
+for `asking` only, off by default, which is the case the answered question left half-open;
+and a way to see *which session* within a project asked, which needs recap to say more than
+it does today.

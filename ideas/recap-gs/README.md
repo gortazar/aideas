@@ -4,6 +4,10 @@ A panel indicator that shows what your coding agents are doing: how many are run
 whether any has stopped to ask you something. Click a row and that session resumes, in a
 terminal, in the directory it was running in.
 
+Since 0.2 it also changes the moment something happens, rather than at the next refresh:
+your agents' own hooks tell it, and the project that asked you something moves to the top of
+the menu with the agent's words attached.
+
 It reads its report from [`recap`](https://github.com/gortazar/recap) — the sibling idea —
 and decides nothing about a session's state for itself.
 
@@ -11,8 +15,8 @@ and decides nothing about a session's state for itself.
 curl -fsSL https://raw.githubusercontent.com/gortazar/recap-gs/main/install.sh | sh
 ```
 
-![the panel indicator](upstream/screenshots/panel.png)
-![the menu](upstream/screenshots/menu.png)
+![the panel with a project asking for you](upstream/screenshots/panel-flagged.png)
+![the menu with a flagged project](upstream/screenshots/menu-flagged.png)
 
 ## Where the code is
 
