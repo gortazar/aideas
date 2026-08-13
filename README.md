@@ -106,5 +106,5 @@ makes position a safe identity: the active list only ever holds work still to do
    its session is restored (by running claude -r on claude or the equivalent command on opencode). Important: it must be restored from the same folder it was running when the process 
    stopped or was killed.
 
-5. [recap](ideas/recap/) - Add specific installation instructions. Add an action to build and publish the binary. And add a script to install it via curl. Add documentation on (finished 2026-08-13, v0.3)
+5. [recap](ideas/recap/) - Add specific installation instructions. Add an action to build and publish the binary. And add a script to install it via curl. Add documentation on (finished 2026-08-13, v0.2)
    how to install via curl to the readme. Minor change.

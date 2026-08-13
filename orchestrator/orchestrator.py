@@ -481,6 +481,10 @@ class Agent:
     out_file: Path
     process: subprocess.Popen | None = None
     result: dict = field(default_factory=dict)
+    # The version this entry is meant to deliver, fixed when the agent starts. It cannot be
+    # recomputed at the end: by then the agent has bumped STATUS.md as instructed, and
+    # bumping again from that would punish it for following the rule.
+    target_version: str = INITIAL_VERSION
 
     @property
     def idea_dir(self) -> Path:
@@ -862,10 +866,11 @@ class Orchestrator:
             worktree=worktree,
             out_file=self.state_dir / "logs" / f"{slug}-{int(time.time())}.json",
         )
+        current, target, kind = self.version_plan(slug)
+        agent.target_version = target
 
         # CLAUDE.md is regenerated every cycle, never hand-edited, so edits to AGENTS.md
         # and newly answered questions in PLAN.md propagate on the very next cycle.
-        current, target, kind = self.version_plan(slug)
         this_cycle = ["## This cycle", "", f"Idea version: {current}"]
         if target != current:
             this_cycle.append(
@@ -1021,20 +1026,23 @@ class Orchestrator:
             kind = "minor"
         return current, bump_version(current, kind), kind
 
-    def settle_version(self, slug: str) -> str:
+    def settle_version(self, agent: Agent) -> str:
         """Make the recorded version match what this entry was supposed to deliver.
 
-        The agent is asked to set it — that is the rule in AGENTS.md and it keeps the
-        version part of the work rather than something done to it. But an unbumped version
-        silently loses the record of what shipped, so a mismatch is corrected here and
-        said out loud rather than left to chance.
+        The agent is asked to set it — that is the rule in AGENTS.md, and it keeps the
+        version part of the work rather than something done to it. An unbumped version
+        loses the record of what shipped, so a mismatch is corrected and said out loud.
+
+        The target comes from when the agent *started*, never from recomputing now: the
+        agent has bumped STATUS.md by this point, and bumping again from that value turned
+        a correctly delivered 0.2 into 0.3 — punishing the agent for obeying the rule.
         """
-        status_file = self.repo / "ideas" / slug / "STATUS.md"
-        _, target, _ = self.version_plan(slug)
+        status_file = self.repo / "ideas" / agent.slug / "STATUS.md"
+        target = agent.target_version or INITIAL_VERSION
         actual = status_value(status_file, "version") or INITIAL_VERSION
         if actual != target:
-            log(f"{slug}: version is {actual} but this entry should deliver {target}; "
-                "correcting.")
+            log(f"{agent.slug}: version is {actual} but this entry should deliver "
+                f"{target}; correcting.")
         return target
 
     def advance_queue(self, slug: str, version: str | None = None) -> None:
@@ -1154,7 +1162,7 @@ class Orchestrator:
         cost = float(result.get("total_cost_usd", 0) or 0)
         # Settle the version before the queue advances: once the entry is retired the slug
         # has one more finished entry, and version_plan would compute the *next* bump.
-        version = self.settle_version(slug) if new_status == "done" else None
+        version = self.settle_version(agent) if new_status == "done" else None
         self.rewrite_status(slug, new_status, session_id, cost, version)
         if new_status == "done":
             self.advance_queue(slug, version)

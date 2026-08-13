@@ -1,5 +1,5 @@
 status: not_started
-version: 0.3
+version: 0.2
 started_at: 2026-08-09
 last_session_id: fa22503c-6cd0-436e-b54f-1a557e15f321
 last_run: 2026-08-13T20:00:38+02:00
