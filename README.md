@@ -68,8 +68,8 @@ makes position a safe identity: the active list only ever holds work still to do
    running and inspecting internal details, but rather detect notifications or the like. Minor. 
 
 4. [aideas](ideas/aideas/) - Build a gnome shell extension that shows a button when aideas is running, and when clicked it shows which ideas are running, which are ready (could be run), which blocked
-   with questions. The gnome shell extension will call /state on the orchestrator to read the live status. This project must be done within this repo. Do not create an external repo for this.
-   The gnome shell extension must install along with the orchestrator.
+   with questions. The gnome shell extension will call `http://<box-vpn-ip>:8787/state` on the orchestrator to read the live status. 
+   This project must be done within this repo. Do not create an external repo for this. The gnome shell extension must install along with the orchestrator.
 
 5. [vacas](ideas/vacas/) - A Firefox extension that is activated on demand by user, and tracks user's requests for Rentalia's holidays rental site. It will store locally which 
    places were asked for availability, on which dates, and if the same place appears again in a new search with the same dates, it alerts the user that it was already contacted.
