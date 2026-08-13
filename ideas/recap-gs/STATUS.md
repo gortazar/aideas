@@ -130,6 +130,12 @@ Two defects that no amount of headless testing would have shown, both fixed:
 
 ## Deviations from PLAN.md
 
+- **The code is not "built inside" this folder**, which is what the open question about
+  where it should live was answered with. The repo-wide rule changed under it: every idea
+  now develops in its own GitHub repository, included here as a submodule, so that a
+  release workflow can publish assets with nothing but its own `GITHUB_TOKEN`. The later,
+  broader rule wins; the extension lives at `gortazar/recap-gs` and this folder is the
+  wrapper the rule describes.
 - **Tooltips.** The plan wanted each row's recap elided with the full sentence in a tooltip.
   GNOME Shell has no tooltip API for menu items, so the sentence wraps instead and the
   stylesheet caps the menu width. The full text is also the row's accessible name.
