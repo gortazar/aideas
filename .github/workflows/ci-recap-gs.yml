@@ -19,8 +19,18 @@ jobs:
       run:
         working-directory: ideas/recap-gs
     steps:
+      # The extension itself lives in gortazar/recap-gs, checked out here as the upstream/
+      # submodule. Its own CI gates changes there; this job checks the commit this idea
+      # currently points at.
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: cachix/install-nix-action@v27
         with:
           extra_nix_config: "experimental-features = nix-command flakes"
-      - run: nix flake check
+      # Cheap, and it fails for a reason no other step would catch: the submodule and the
+      # flake input pointing at different commits.
+      - run: ./scripts/check-pin.sh
+      # Runs upstream's own checks — ESLint, the headless gjs suite, a --strict schema
+      # compile and the upload zip — against the pinned commit.
+      - run: nix flake check --print-build-logs

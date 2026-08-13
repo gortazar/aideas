@@ -1,6 +1,3 @@
 # nix build output symlinks
 result
 result-*
-
-# throwaway HOME for the nested-shell harness
-.nested/
