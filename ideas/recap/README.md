@@ -11,6 +11,16 @@ cannot disturb a session in progress.
 
 ![recap output](upstream/screenshots/recap.svg)
 
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/gortazar/recap/main/install.sh | sh
+```
+
+No Go, no Nix, no build. Full instructions — checksum verification, the environment
+variables, supported platforms, uninstall — are in
+[recap's own README](https://github.com/gortazar/recap#install).
+
 ## Where the code is
 
 In its own repository, [`gortazar/recap`](https://github.com/gortazar/recap), checked out

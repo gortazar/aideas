@@ -1,5 +1,5 @@
-status: in_progress
-version: 0.1
+status: done
+version: 0.2
 started_at: 2026-08-09
 last_session_id: fa22503c-6cd0-436e-b54f-1a557e15f321
 last_run: 2026-08-11T18:50:50+02:00
@@ -21,21 +21,55 @@ last_cycle_cost_usd: 11.018076
       keeps PLAN/STATUS, a wrapper flake that builds and tests the pinned commit, and
       scripts/check-pin.sh so the submodule gitlink and the flake input cannot drift.
       ci-recap.yml checks out submodules and runs both.
-- [x] U2 — `recap --version`: `recap 0.1 (commit 9c19569, built nix)`, dev/unknown when
-      nobody stamped it; both flakes stamp it through -ldflags -X
-- [ ] U3 — tools/release-build.sh: four static tarballs plus SHA256SUMS, with a test
-- [ ] U4 — install.sh with file:// seams, and tools/install_test.sh
-- [ ] U5 — release workflow in gortazar/recap: version guard, build, gh release create,
-      workflow_dispatch dry run
-- [ ] U6 — post-publish install smoke job on ubuntu + macos
-- [ ] U7 — README: install, uninstall, platform table, how a release is cut
-- [ ] U8 — version 0.2, status done
+- [x] U2 — `recap --version`: `recap 0.2 (commit 66aac02, built 2026-08-13T17:50:06Z)`,
+      dev/unknown when nobody stamped it; both flakes and the release build stamp it
+- [x] U3 — tools/release-build.sh: four static tarballs plus SHA256SUMS, byte-identical
+      across two runs of the same commit, with a test that asserts exactly that
+- [x] U4 — install.sh with RECAP_BASE_URL/RECAP_API_URL seams, and a 23-assertion
+      tools/install_test.sh driving it against a fake release with no network
+- [x] U5 — release workflow in gortazar/recap: version guard (its own tested script),
+      build, gh release create, workflow_dispatch dry run, contents:write and nothing else
+- [x] U6 — post-publish smoke job: installs the published one-liner on ubuntu-latest and
+      macos-latest and asserts the version. Both passed on the real release
+- [x] U7 — README: the one-liner first, the read-it-first variant beside it, what the
+      checksum does and does not prove, platform table, uninstall, the release recipe
+- [x] U8 — version 0.2, released as v0.2 and verified from a clean directory
 
-Deviation from PLAN.md, forced by its own answered question: the plan's Context assumes
+**v0.2 is published**: https://github.com/gortazar/recap/releases/tag/v0.2 — four platform
+tarballs plus SHA256SUMS. The release workflow ran green, including the smoke job that
+installs the published one-liner on ubuntu and macOS, so the darwin cross-build is known to
+*run*, not merely known to build. The one-liner was then run here from a clean directory
+with a fresh HOME: it resolved the latest release, verified the checksum, installed, and the
+binary reported `recap 0.2 (commit 66aac02, built 2026-08-13T17:50:06Z)`.
+
+One repository setting had to change for any of that to work, and it is worth knowing about:
+`gortazar/recap` had its Actions token set to read-only, which would have failed
+`gh release create` with a 403. It is now **read and write** — the setting recap's README
+names as the first thing to check when a release job fails.
+
+Deviations from PLAN.md, forced by its own answered question: the plan's Context assumes
 this stays in the monorepo, so it namespaces tags `recap-v<version>` and filters every
-"latest release" lookup on that prefix. The answer chose a separate repo instead, where
-tags are plain `v<version>` and `/releases/latest` means what it says. Everything else in
-the plan stands.
+"latest release" lookup on that prefix. The answer chose a separate repo instead, where tags
+are plain `v<version>` and `/releases/latest` means what it says.
+
+Two smaller consequences of the same choice:
+
+- The version guard checks the tag against `flake.nix` only. `STATUS.md` lives in *this*
+  repository, which a workflow over there cannot see; `scripts/check-pin.sh` is what keeps
+  the two repositories honest with each other.
+- `go install github.com/gortazar/recap/cmd/recap@latest` now works, because the module path
+  and the repository finally agree. The plan listed that as impossible, which it was under
+  the monorepo.
+
+The plan also assumed the agent could not cut a release, and asked only that the path be
+verifiable without one. The answered question granted push access to `gortazar/recap`, so
+the release was cut and verified for real instead.
+
+Cost of the two lost sessions, recorded so it is not repeated: a submodule checkout is a
+detached HEAD with a stale local `main`, so `git push origin main` from inside it is a
+silent no-op that exits 0. U3–U5 were written, "pushed", and destroyed by the end-of-cycle
+sweep twice before this was spotted. Work in `upstream/` is only safe once
+`git ls-remote origin main` shows it.
 
 
 
