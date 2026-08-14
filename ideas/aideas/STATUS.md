@@ -83,13 +83,25 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
       quark, so string matching never matched and every failure read "the request failed"; and a
       single-threaded stub server makes concurrent requests look like timeouts. 166 unit + 16
       http tests green.
-- [ ] U7 — the scheduler: interval, menu-open rate, lock/idle suppression, injected clock.
+- [x] **U7 — the scheduler, and the extension wired up.** `src/lib/scheduler.js` decides when
+      to poll against an injected timer seam: one timer ever (the classic extension leak), the
+      next poll scheduled only after the previous one finishes so a slow box cannot accumulate
+      requests, 5 s while the menu is open — beating the backoff, since that is when somebody
+      is watching it retry — the backoff otherwise, an interval change re-timing what is
+      already pending, and nothing at all while suppressed, resuming with an immediate read
+      because the reading is as old as the sleep. 28 tests, every wait asserted rather than
+      lived through.
+      `src/extension/extension.js` now assembles the real thing: transport, client, scheduler,
+      indicator and `src/extension/idleWatcher.js` (Mutter's idle monitor), with `disable()`
+      undoing all of it. Screen-lock suppression needs no code — the extension declares no
+      `session-modes`, so GNOME disables it on lock, which stops the polling outright.
+      194 unit + 16 http tests green; five flake checks green.
 - [ ] U8 — preferences and the GSettings schema, including *Test connection*.
 - [ ] U9 — the real shell: smoke test, screenshots, a recorded run against the real box.
 - [ ] U10 — packaging: `install.sh`, release workflow, README, SETUP.md pointer, release
       verified from a clean directory.
 
-Next: U7 — the scheduler.
+Next: U8 — preferences.
 
 ## Notes for later units
 
