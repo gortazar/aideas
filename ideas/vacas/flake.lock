@@ -59,11 +59,11 @@
     "vacas-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1786729435,
-        "narHash": "sha256-X3G1poLxR/8XtKCOxn2MPJnRHKJqIIEDEy9ougBCJKc=",
+        "lastModified": 1786730638,
+        "narHash": "sha256-N1+64vNYlhvIdH6Fci6LggWavU34+55k1oq3h2eKPUU=",
         "owner": "gortazar",
         "repo": "vacas",
-        "rev": "dda0dd6e6d2a7944d7b9f2ca9364f6806a935262",
+        "rev": "13062a9616f539478a54a1707ddfc32f57cd6686",
         "type": "github"
       },
       "original": {
