@@ -1,12 +1,14 @@
-status: in_progress
+status: blocked
 version: 0.1
 started_at: 2026-08-14
 last_session_id: 2aab31b6-ac0c-4cab-8c08-70e5c1cbc553
-last_run: 2026-08-14T20:02:19+02:00
-last_cycle_cost_usd: 20.04429199999999
+last_run: 2026-08-14T20:06:43+02:00
+last_cycle_cost_usd: 6.912356999999998
 
 ## Log
+- 2026-08-14T20:06:43+02:00 — blocked ($6.912356999999998)
 - 2026-08-14T20:02:19+02:00 — in_progress ($20.04429199999999)
+
 
 2026-08-14 (later) — U7 to U11 done and U12 all but the release itself. The extension is
 complete and green: 100 tests plus 5 Playwright specs, `web-ext lint` clean, `nix flake
