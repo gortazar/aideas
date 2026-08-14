@@ -41,7 +41,15 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
       absurd queue is capped at 200 rows with the remainder counted. 31 tests, including a
       body that is JSON but not `/state` (a wrong port), which reports unreachable rather
       than pretending. 48 gjs tests green.
-- [ ] U3b — grouping and wording: a reading in, menu sections and a header line out.
+- [x] **U3b — grouping and wording.** `src/lib/menuModel.js` turns a reading into the whole
+      menu as data: the header line (`Cycle running for 12 min, 2 agents` / `Idle`, with the
+      age of the reading and the lock's last renewal), four sections in glance order
+      (Running, Blocked, Ready, Also in the queue) with empty ones omitted, per-row wording
+      taken from `note` as served, the `will_run_next` row marked, an empty queue said in a
+      sentence, and the failure messages — with `unavailable` and `unreachable` deliberately
+      worded apart. When an attempt fails, the last good reading is shown beneath it marked
+      stale and dated rather than the menu emptying itself. 36 tests, clock injected. 84 gjs
+      tests green.
 - [ ] U4 — visibility and the badge.
 - [ ] U5 — the panel button and menu.
 - [ ] U6 — the HTTP client: libsoup, timeout, single-flight, backoff, last-good retention.
@@ -51,7 +59,7 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
 - [ ] U10 — packaging: `install.sh`, release workflow, README, SETUP.md pointer, release
       verified from a clean directory.
 
-Next: U3b — grouping and wording.
+Next: U4 — visibility and the badge.
 
 ## Notes for later units
 
