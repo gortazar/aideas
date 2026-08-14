@@ -48,7 +48,7 @@
             glib # glib-compile-schemas, gsettings
             gtk4 # the preferences window
             libadwaita
-            gnome-shell # `gnome-extensions pack`, and the Shell typelibs
+            gnome-shell # `gnome-extensions enable/prefs`, and the Shell typelibs
             eslint
             python3 # the /state contract test, and the stub server the smoke test uses
             dbus # dbus-run-session, which ci/install-test.sh needs to isolate dconf
