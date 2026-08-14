@@ -70,8 +70,6 @@ makes position a safe identity: the active list only ever holds work still to do
    each place contacted, extract the dates, the text and detect when the send button of the contact form has been pushed, to store the info. If the button is not pressed, we
    can't assume the place has been contacted and no info is stored for that place.
 
-4. [recap](ideas/recap/) - Add an option to ask for the sessions in the last n hours or n days: --since 6h --since 7d. Minor.
-
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
@@ -120,3 +118,5 @@ makes position a safe identity: the active list only ever holds work still to do
 8. [aideas](ideas/aideas/) - Build a gnome shell extension that shows a button when aideas is running, and when clicked it shows which ideas are running, which are ready (could be run), which blocked (finished 2026-08-14, v0.1)
    with questions. The gnome shell extension will call `http://<box-vpn-ip>:8787/state` on the orchestrator to read the live status. 
    This project must be done within this repo. Do not create an external repo for this. The gnome shell extension must install along with the orchestrator.
+
+9. [recap](ideas/recap/) - Add an option to ask for the sessions in the last n hours or n days: --since 6h --since 7d. Minor. (finished 2026-08-14, v0.4)

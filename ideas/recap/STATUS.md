@@ -2,8 +2,19 @@ status: done
 version: 0.4
 started_at: 2026-08-09
 last_session_id: fa22503c-6cd0-436e-b54f-1a557e15f321
-last_run: 2026-08-13T23:28:10+02:00
-last_cycle_cost_usd: 24.105846499999995
+last_run: 2026-08-14T20:02:19+02:00
+last_cycle_cost_usd: 14.976537500000003
+
+## Log
+- 2026-08-14T20:02:19+02:00 — done ($14.976537500000003)
+- 2026-08-13T23:28:10+02:00 — done ($24.105846499999995)
+- 2026-08-13T20:00:38+02:00 — done ($14.869310999999998)
+- 2026-08-11T18:50:50+02:00 — in_progress ($11.018076)
+- 2026-08-11T15:05:29+02:00 — in_progress ($0.0)
+- 2026-08-10T15:19:10+02:00 — in_progress ($0.0)
+- 2026-08-10T00:38:35+02:00 — done ($7.578085)
+- 2026-08-09T18:54:00+02:00 — in_progress ($9.104486499999998)
+- 2026-08-09T18:00:54+02:00 — in_progress ($9.662947499999998)
 
 ## Units — 0.4 (`--since 6h`, `--since 7d`)
 - [x] U0 — restore the submodule pin, again: the gitlink was back at the 0.2-era commit
@@ -55,15 +66,6 @@ download install fine, for that release. The installer was never wrong; the test
 only for some releases. It now writes 64 zeros, which no file hashes to. Worth remembering as
 a category: a corruption helper that can quietly corrupt nothing.
 
-## Log
-- 2026-08-13T23:28:10+02:00 — done ($24.105846499999995)
-- 2026-08-13T20:00:38+02:00 — done ($14.869310999999998)
-- 2026-08-11T18:50:50+02:00 — in_progress ($11.018076)
-- 2026-08-11T15:05:29+02:00 — in_progress ($0.0)
-- 2026-08-10T15:19:10+02:00 — in_progress ($0.0)
-- 2026-08-10T00:38:35+02:00 — done ($7.578085)
-- 2026-08-09T18:54:00+02:00 — in_progress ($9.104486499999998)
-- 2026-08-09T18:00:54+02:00 — in_progress ($9.662947499999998)
 
 ## Units — 0.3 (a paragraph of what each session did)
 - [x] U0 — restore the submodule pin: a merge had left the `upstream/` gitlink at a
