@@ -118,11 +118,26 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
       requests — the stub's request counter is what proves no timer survived. Screenshots in
       `screenshots/`. `ci/nested-shell.sh` comes from `ideas/gnome-tasks`, keeping its dconf
       leak guard.
-- [ ] U9b — one recorded by-hand run against the real box on VPN.
+- [x] **U9b — run against a live orchestrator.** `tools/probe-state.js` reads `/state` with the
+      extension's own transport, client and wording modules and prints what "Test connection"
+      would say, what the panel would look like, and the whole menu — a real diagnostic, and how
+      the connection test is verified end to end without a compositor. Recorded runs:
+      * **The live orchestrator serving this repo** (`127.0.0.1:8833`): `[ok] Connected to
+        127.0.0.1:8833 — cycle running, 1 agent · 5 ideas queued · 3 ideas blocked`, and the
+        menu listed this very cycle (`Running / aideas / v0.1 · running for 14 min`), the three
+        blocked ideas with their question counts, and `restore-wss / v0.1 · behind #1`. The
+        extension was also run against it inside the nested Shell —
+        `screenshots/menu-live-orchestrator.png` is that menu, showing aideas watching itself.
+      * **The box `gx10-e7da` over Tailscale** (`100.97.242.26:8787`): `[error] Could not reach
+        100.97.242.26:8787 — connection refused`, rendered as the unreachable icon and message.
+      * A name that does not resolve: `host not found`. Both failures came back in English on a
+        laptop whose GLib speaks Spanish, which is the point of mapping error codes.
+      Also verified in the nested Shell: the **preferences window** builds and shows all five
+      controls with live values (`screenshots/preferences.png`).
 - [ ] U10 — packaging: `install.sh`, release workflow, README, SETUP.md pointer, release
       verified from a clean directory.
 
-Next: U9b — a run against the real box.
+Next: U10 — packaging, installer and release.
 
 ## Notes for later units
 
@@ -162,6 +177,19 @@ Next: U9b — a run against the real box.
      `ExtensionManager`'s bookkeeping ends up out of step with reality and the extension stays
      down with nothing logged. The smoke test drives each half-round as its own call and waits,
      which is what a screen lock and its unlock actually look like.
+- **The orchestrator box is not currently serving `/state`.** On `gx10-e7da`,
+  `idea-heartbeat.service` and `idea-agent.timer` are both `inactive` and nothing listens on
+  8787; the orchestrator that is actually running cycles is on this laptop, serving `/state` on
+  **127.0.0.1:8833** (`HEARTBEAT_PORT=8833`, `HEARTBEAT_BIND_IP=127.0.0.1`). So the port
+  default of 8787 is right per SETUP.md but will not match this deployment, and the risk
+  PLAN.md raised about `IDEAS_REPO_PATH` in the serving unit could not be checked on the box —
+  the local server has it set, and `/state` there is `available: true`. Worth a line in
+  SETUP.md rather than a change to the extension.
+- **A virtual-pointer click could not press a button in the preferences window** (a separate
+  Wayland client): motion and press/release spaced across main-loop iterations moved the
+  pointer but the window closed rather than activating anything. Dropped rather than left in as
+  dead test code — `tools/probe-state.js` verifies that code path headlessly instead, which is
+  better anyway because it is also useful to a person diagnosing a real setup.
 - The answered open questions settle: the button is visible **only while a cycle is
   running**; this work may edit `SETUP.md` and `orchestrator/`; the release is a tag on
   this repo (`aideas-shell-v0.1`) published by `.github/workflows/release-aideas.yml`; menu
