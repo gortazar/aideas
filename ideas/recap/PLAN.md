@@ -115,14 +115,14 @@ Units, each one commit, tests first:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] `--since 6h` and `--since 7d` both work in the shipped recap today. Is the intent (a) confirm
+- [x] `--since 6h` and `--since 7d` both work in the shipped recap today. Is the intent (a) confirm
       that and close the idea, doing only the documentation and tests, or (b) the hardening entry this
       plan describes — grammar, error messages, positive-window rule — as 0.4? Ticking this line as-is
       chooses **(b)**.
-- [ ] Should a bare number be accepted? `--since 6` could mean 6 hours (hours being the unit the idea
+- [x] Should a bare number be accepted? `--since 6` could mean 6 hours (hours being the unit the idea
       names first) or be an error that tells you to say `6h`. Ticking this line as-is makes it an
       **error**: a bare number is as likely to have meant days.
-- [ ] Should `--since` also accept an absolute point in time — `--since 09:00`, `--since 2026-08-10`,
+- [x] Should `--since` also accept an absolute point in time — `--since 09:00`, `--since 2026-08-10`,
       `--since yesterday`? It is a different feature behind the same flag, and `yesterday` is currently
       pinned as an *error* by `TestBadFlagValuesFailWithAMessage`. Ticking this line as-is keeps
       `--since` **relative only**.
