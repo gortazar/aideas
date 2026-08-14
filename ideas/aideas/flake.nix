@@ -30,6 +30,11 @@
             ./tests/http
             ./tests/stub-state-server.py
             ./tools
+            # The smoke test's probe extension is linted too, and worth it: the stray backtick
+            # that broke it (inside a template literal holding D-Bus XML) is a parse error
+            # eslint reports in a second, where the compositor took a four-minute run to say
+            # only that the probe never appeared on the bus.
+            ./ci
             ./eslint.config.mjs
             ./Makefile
           ];

@@ -105,11 +105,24 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
       "always show the button", and a Test button that uses the same transport, client and
       wording the panel does, so it fails in exactly the ways the panel will. 205 unit + 16 http
       tests green.
-- [ ] U9 — the real shell: smoke test, screenshots, a recorded run against the real box.
+- [x] **U9a — the compositor smoke test.** `ci/smoke-test.sh` builds the bundle, starts two
+      stub `/state` servers (a running cycle and an idle box), boots a headless GNOME Shell on a
+      private bus with the extension and `ci/probe/` installed, and runs `ci/smoke-assertions.py`
+      against it: **39 checks, all passing.** It proves in a real Shell what no headless test
+      can — the button appears with the right icon, badge and accessible name; the menu opens
+      and reads back as the four sections with the orchestrator's own wording; every row is
+      inert and Preferences is the only item that reacts; the button *leaves* when the cycle
+      stops and "always show" brings it back wearing the blocked icon; a box that goes away
+      leaves it up with the unreachable icon and the last good reading dated beneath; five
+      enable/disable rounds leave exactly one button; and a disabled extension makes no further
+      requests — the stub's request counter is what proves no timer survived. Screenshots in
+      `screenshots/`. `ci/nested-shell.sh` comes from `ideas/gnome-tasks`, keeping its dconf
+      leak guard.
+- [ ] U9b — one recorded by-hand run against the real box on VPN.
 - [ ] U10 — packaging: `install.sh`, release workflow, README, SETUP.md pointer, release
       verified from a clean directory.
 
-Next: U9 — the compositor smoke test.
+Next: U9b — a run against the real box.
 
 ## Notes for later units
 
@@ -139,6 +152,16 @@ Next: U9 — the compositor smoke test.
   localised — on this laptop a refused connection says "Conexión rehusada" — so the transport
   maps `error.matches(Gio.IOErrorEnum, ...)` and `Gio.ResolverError` to fixed English phrases.
   `error.domain` is a *numeric quark* (195 for Gio, 468 for the resolver), not a name.
+- **Three things only a real compositor said**, each now fixed and guarded:
+  1. A backtick inside a template literal holding D-Bus XML ends the string. `ci/` is now in the
+     flake's lint fileset, where eslint reports that in a second — the compositor took a
+     four-minute run to say only that the probe never reached the bus.
+  2. `St.Label` owns an internal `Clutter.Text` with the same string, so a naive actor walk
+     reports every menu label twice.
+  3. **Disabling and re-enabling an extension inside one main-loop iteration is not a round.**
+     `ExtensionManager`'s bookkeeping ends up out of step with reality and the extension stays
+     down with nothing logged. The smoke test drives each half-round as its own call and waits,
+     which is what a screen lock and its unlock actually look like.
 - The answered open questions settle: the button is visible **only while a cycle is
   running**; this work may edit `SETUP.md` and `orchestrator/`; the release is a tag on
   this repo (`aideas-shell-v0.1`) published by `.github/workflows/release-aideas.yml`; menu
