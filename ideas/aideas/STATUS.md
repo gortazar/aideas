@@ -96,12 +96,21 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
       undoing all of it. Screen-lock suppression needs no code — the extension declares no
       `session-modes`, so GNOME disables it on lock, which stops the polling outright.
       194 unit + 16 http tests green; five flake checks green.
-- [ ] U8 — preferences and the GSettings schema, including *Test connection*.
+- [x] **U8 — preferences.** `src/lib/testConnection.js` words the outcome of a test read,
+      pure and tested (11 tests): it separates the three failures that need different fixes —
+      nothing answered (wrong address, error), something answered but not `/state` (wrong port,
+      error), and the box answered saying it cannot read its queue (right address, so a
+      *warning* rather than an error) — and on success summarises the queue as proof it is the
+      right box, not just a box. `src/extension/prefs.js` is the Adw window: host (a pasted
+      heartbeat URL works, since the value is normalised where it is used), port, poll interval,
+      "always show the button", and a Test button that uses the same transport, client and
+      wording the panel does, so it fails in exactly the ways the panel will. 205 unit + 16 http
+      tests green.
 - [ ] U9 — the real shell: smoke test, screenshots, a recorded run against the real box.
 - [ ] U10 — packaging: `install.sh`, release workflow, README, SETUP.md pointer, release
       verified from a clean directory.
 
-Next: U8 — preferences.
+Next: U9 — the compositor smoke test.
 
 ## Notes for later units
 
