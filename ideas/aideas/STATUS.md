@@ -67,14 +67,29 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
       `extension.js` adds it to the panel and redraws on the `always-show` key. 118 gjs tests
       green, and the bundle check caught the one real bug in this unit — extension-side
       imports must be bundle-relative (`./lib/…`), the convention `ideas/gnome-tasks` uses.
-- [ ] U6 — the HTTP client: libsoup, timeout, single-flight, backoff, last-good retention.
+- [x] **U6 — the HTTP client.** `src/lib/address.js` turns what someone typed into a URL
+      (a pasted `http://box:8787/heartbeat` and a bare `box` both work, IPv6 gets bracketed,
+      nothing configured gives null so nothing is polled); `src/lib/backoff.js` stretches the
+      interval 30→60→120→240→300 s while unreachable and snaps back on success;
+      `src/lib/stateClient.js` owns single-flight (a second read joins the one in the air),
+      last-good retention with its timestamp, the failure count, and the HTTP-reply-to-reading
+      rules — non-200, non-JSON, empty and oversized bodies each become an unreachable reading
+      rather than a throw, and `read()` never rejects. `src/lib/soupTransport.js` is the real
+      libsoup 3 transport: async only, with its own cancellable deadline because Soup's timeout
+      does not bound a server that accepts and then thinks.
+      48 unit tests plus a new **integration suite** (`tests/http`, a fifth flake check) that
+      drives the real transport against `tests/stub-state-server.py` on loopback — hermetic in
+      the Nix sandbox. It caught both of this unit's real bugs: a GError's `domain` is a numeric
+      quark, so string matching never matched and every failure read "the request failed"; and a
+      single-threaded stub server makes concurrent requests look like timeouts. 166 unit + 16
+      http tests green.
 - [ ] U7 — the scheduler: interval, menu-open rate, lock/idle suppression, injected clock.
 - [ ] U8 — preferences and the GSettings schema, including *Test connection*.
 - [ ] U9 — the real shell: smoke test, screenshots, a recorded run against the real box.
 - [ ] U10 — packaging: `install.sh`, release workflow, README, SETUP.md pointer, release
       verified from a clean directory.
 
-Next: U6 — the HTTP client.
+Next: U7 — the scheduler.
 
 ## Notes for later units
 
@@ -100,6 +115,10 @@ Next: U6 — the HTTP client.
   icon and the count it last knew. Still "only while a cycle is running", just not forgetting
   between two readings. A box that answers `available: false` does **not** borrow from the
   past: it is talking to us, and what it says is that it cannot read its queue.
+- **Failure reasons must come from GError codes, never messages.** GLib messages are
+  localised — on this laptop a refused connection says "Conexión rehusada" — so the transport
+  maps `error.matches(Gio.IOErrorEnum, ...)` and `Gio.ResolverError` to fixed English phrases.
+  `error.domain` is a *numeric quark* (195 for Gio, 468 for the resolver), not a name.
 - The answered open questions settle: the button is visible **only while a cycle is
   running**; this work may edit `SETUP.md` and `orchestrator/`; the release is a tag on
   this repo (`aideas-shell-v0.1`) published by `.github/workflows/release-aideas.yml`; menu

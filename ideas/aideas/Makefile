@@ -9,15 +9,16 @@ REPO    := ../..
 
 GJS ?= gjs
 
-.PHONY: help check lint test test-unit test-contract build check-bundle pack install \
+.PHONY: help check lint test test-unit test-http test-contract build check-bundle pack install \
         uninstall enable disable prefs logs smoke clean
 
 help:
 	@echo "aideas — the orchestrator's state in the GNOME top bar"
 	@echo "  make check          lint + tests + bundle check (what CI runs)"
 	@echo "  make lint           eslint over src/, tests/, ci/"
-	@echo "  make test           the headless gjs suite and the /state contract test"
-	@echo "  make test-unit      the headless gjs suite only (no compositor, no display)"
+	@echo "  make test           every test: unit, http and the /state contract"
+	@echo "  make test-unit      the pure logic (no compositor, no display, no network)"
+	@echo "  make test-http      the real libsoup transport against a stub server on loopback"
 	@echo "  make test-contract  the /state contract, against fixture repositories"
 	@echo "  make build          assemble $(BUNDLE)"
 	@echo "  make check-bundle   validate the assembled bundle (metadata + imports)"
@@ -30,10 +31,13 @@ check: lint test check-bundle
 lint:
 	eslint .
 
-test: test-unit test-contract
+test: test-unit test-http test-contract
 
 test-unit:
 	$(GJS) -m tests/run.js tests/unit
+
+test-http:
+	$(GJS) -m tests/run.js tests/http
 
 # Drives orchestrator.queue_rows() and heartbeat_server.orchestrator_state() over fixture
 # repositories. Not a flake check: the flake's root is this folder, and this test imports the

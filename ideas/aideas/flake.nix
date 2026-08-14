@@ -27,6 +27,8 @@
             ./tests/harness.js
             ./tests/run.js
             ./tests/unit
+            ./tests/http
+            ./tests/stub-state-server.py
             ./tools
             ./eslint.config.mjs
             ./Makefile
@@ -85,6 +87,31 @@
           gjs -m tests/run.js tests/unit | tee $TMPDIR/log
           mkdir -p $out
           cp $TMPDIR/log $out/unit.log
+        '';
+
+        # The real libsoup transport, against a real HTTP server on loopback. libsoup needs no
+        # compositor, so the half of the client a fake transport cannot check — that requests
+        # go out, that the deadline fires, and that a refused connection is reported in a
+        # phrase that does not change with the user's language — is checked here rather than
+        # left to the smoke test. Hermetic: the Nix sandbox's network namespace has only `lo`,
+        # and the stub server lets the kernel pick its port.
+        http = pkgs.runCommand "aideas-http"
+          {
+            src = sourceFor pkgs;
+            nativeBuildInputs = [ pkgs.gjs pkgs.libsoup_3 pkgs.glib-networking pkgs.python3 ];
+          } ''
+          cd $src
+          export HOME=$TMPDIR
+          export XDG_DATA_HOME=$TMPDIR/data
+          export XDG_CONFIG_HOME=$TMPDIR/config
+          # gjs finds Soup-3.0 through the typelib search path, which nothing sets for us.
+          export GI_TYPELIB_PATH=${pkgs.libsoup_3}/lib/girepository-1.0
+          # libsoup finds its TLS and proxy backends through GIO modules; without this a
+          # session in the sandbox fails to construct.
+          export GIO_MODULE_DIR=${pkgs.glib-networking}/lib/gio/modules
+          gjs -m tests/run.js tests/http | tee $TMPDIR/log
+          mkdir -p $out
+          cp $TMPDIR/log $out/http.log
         '';
 
         # Assemble the extension the way `make install` does and validate the result. An
