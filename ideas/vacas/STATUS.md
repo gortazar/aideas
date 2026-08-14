@@ -23,12 +23,15 @@ page at all, so capture must be a capture-phase click, never a `submit` listener
 - [x] U2 — skeleton: MV3 manifest with rentalia as an *optional* host permission, event
       page, popup, `flake.nix`, upstream CI, `web-ext lint` clean, Playwright specs
       guarding the fixtures. `nix flake check` green here and upstream.
-- [ ] U3 — identity and dates, pure: reference and locale from any URL shape, date
-      normalisation to ISO, the dedup key.
-- [ ] U4 — the store over `storage.local`, with a schema version and a migration path.
-- [ ] U5 — the versioned site profile and form detection, against the fixtures.
-- [ ] U6 — two-phase capture: stage on press, commit on `div.sentMessage`, discard on a
-      visible validation error or on timeout.
+- [x] U3 — identity and dates, pure: reference and locale from any URL shape, date
+      normalisation to ISO, the dedup key, and the exact/overlap/reference-only rule.
+- [x] U4 — the store over `storage.local`, with a schema version, a migration path, quota
+      reporting and de-duplicating import.
+- [x] U5 — the versioned site profile and form detection, against the fixtures. Two
+      failure fixtures now: a restyle the fallback chains survive, and a redesign they
+      must not.
+- [x] U6 — two-phase capture: stage on press, commit on `div.sentMessage`, discard on a
+      visible validation error or on timeout. 13 behaviours under test.
 - [ ] U7 — the toolbar toggle, optional permission request, dynamic script registration.
 - [ ] U8 — passive alerts: search-card markers and the listing banner (no send interruption
       — the fourth open question chose markers only).
@@ -37,10 +40,12 @@ page at all, so capture must be a capture-phase click, never a `submit` listener
 - [ ] U11 — manual verification against the live site, recorded.
 - [ ] U12 — packaging, signed release, install path.
 
-Next: U3 — reference and locale extraction and date normalisation, as pure functions.
+Next: U7 — the toolbar toggle, the optional permission request and dynamic
+content-script registration.
 
 ## Notes
-- Upstream: https://github.com/gortazar/vacas — 2 commits, `main`, CI configured.
+- Upstream: https://github.com/gortazar/vacas — pinned at dda0dd6, 58 tests passing
+  (`npm test`) plus 5 Playwright specs against the fixtures.
 - Difficulty estimate: still **hard**, but the reason has changed. The research is done and
   the DOM turned out to be legible; what remains hard is U12, which needs AMO signing
   credentials (`AMO_JWT_ISSUER` / `AMO_JWT_SECRET`) in the upstream repository's secrets.
