@@ -149,16 +149,19 @@ function failureMessage(reading, host) {
     switch (reading.status) {
         case Status.UNCONFIGURED:
             return {
+                kind: 'failure',
                 text: 'Set the orchestrator address in preferences',
                 detail: 'aideas needs the host or IP of the box, reachable over the VPN',
             };
         case Status.UNAVAILABLE:
             return {
+                kind: 'failure',
                 text: 'The orchestrator cannot read its queue',
                 detail: reading.reason,
             };
         default:
             return {
+                kind: 'failure',
                 text: 'Orchestrator unreachable',
                 detail: detail(host, reading.reason),
             };
@@ -181,8 +184,11 @@ export function buildMenu({ reading, now, fetchedAt = null, lastGood = null, hos
                 detail: readingDetail(reading, now, fetchedAt),
             },
             sections: group(reading, now),
+            // `kind` is what tells the item list whether this message is the headline (a
+            // failure, which goes above the cycle line) or a footnote to a healthy reading.
             message: reading.rows.length === 0
                 ? {
+                    kind: 'empty',
                     text: 'The queue is empty',
                     detail: 'README.md has no entries under ## Ideas',
                 }

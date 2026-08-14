@@ -56,7 +56,17 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
       symbolic names so the extension ships no assets; a badge counting agents while running
       and blocked ideas while idle, absent rather than zero; and an accessible name carrying
       the panel's whole meaning. 21 tests. 105 gjs tests green.
-- [ ] U5 — the panel button and menu.
+- [x] **U5 — the panel button and menu.** `src/lib/menuItems.js` flattens a built menu into
+      the exact item sequence, separators and all — a failure message leads, a healthy reading
+      leads with the cycle line, empty sections are gone, and `Preferences` is the only item
+      that does anything when clicked (rows are read-only, per the answered question). 15
+      tests, so menu layout is pinned without a compositor. `src/extension/indicator.js` is
+      the `PanelMenu.Button` that walks that list creating one widget per descriptor, with a
+      badge, an accessible name and a `destroy()` that disconnects what it connected;
+      `stylesheet.css` nudges the Shell's own styling without inventing colours;
+      `extension.js` adds it to the panel and redraws on the `always-show` key. 118 gjs tests
+      green, and the bundle check caught the one real bug in this unit — extension-side
+      imports must be bundle-relative (`./lib/…`), the convention `ideas/gnome-tasks` uses.
 - [ ] U6 — the HTTP client: libsoup, timeout, single-flight, backoff, last-good retention.
 - [ ] U7 — the scheduler: interval, menu-open rate, lock/idle suppression, injected clock.
 - [ ] U8 — preferences and the GSettings schema, including *Test connection*.
@@ -64,7 +74,7 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
 - [ ] U10 — packaging: `install.sh`, release workflow, README, SETUP.md pointer, release
       verified from a clean directory.
 
-Next: U5 — the panel button and menu.
+Next: U6 — the HTTP client.
 
 ## Notes for later units
 
