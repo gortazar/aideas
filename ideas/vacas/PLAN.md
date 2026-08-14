@@ -167,7 +167,7 @@ the wrapper. Units, one commit each, tests first:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **How does vacas get signed and installed?** Release Firefox refuses unsigned extensions, so
+- [x] **How does vacas get signed and installed?** Release Firefox refuses unsigned extensions, so
       "installs without compiling" needs an AMO account and API credentials (`AMO_JWT_ISSUER` /
       `AMO_JWT_SECRET`) in the `vacas` repository's secrets — something no previous idea in this repo
       has needed. The options: (a) list it publicly on addons.mozilla.org and make that the install
@@ -177,7 +177,7 @@ the wrapper. Units, one commit each, tests first:
       installation method under AGENTS.md and would leave the entry unfinishable. The plan assumes
       (b), and needs the credentials to be created and added before U12. Ticking this line as-is
       chooses (b) — and please confirm the credentials will be provided.
-- [ ] **May the research send a real enquiry to a real owner?** Confirming "the enquiry was sent" needs
+- [x] **May the research send a real enquiry to a real owner?** Confirming "the enquiry was sent" needs
       the page state that only follows a genuine successful submit, and Rentalia has no test property.
       The options: (a) the user performs one real enquiry they intended to send anyway, with the
       extension in capture mode, and shares the resulting page as a fixture; (b) the agent sends a
@@ -185,16 +185,16 @@ the wrapper. Units, one commit each, tests first:
       without ever observing it — from the form disappearing or the request completing — accepting
       that the first real-world confirmation happens on the user's own first enquiry. The plan assumes
       (a) and will stop at U1 to ask for the capture if it cannot be obtained otherwise. Ticking this
-      line as-is chooses (a).
-- [ ] **What counts as "the same dates"?** Exact check-in and check-out match is the literal reading,
+      line as-is chooses (a). Let's do (c).
+- [x] **What counts as "the same dates"?** Exact check-in and check-out match is the literal reading,
       but a place contacted for 1–8 August is realistically "already contacted" when it turns up again
       for 2–9 August, and searches are often browsed with no dates set at all. The plan assumes: exact
       match raises the full alert, an overlapping range raises a softer note, and a no-dates search
       shows a neutral "you have contacted this place before" marker. The alternatives are strict exact
       match only, or treating any overlap as a duplicate. Ticking this line as-is chooses the first.
-- [ ] **Should the alert be able to interrupt a send?** The entry says "alerts the user", which passive
+- [x] **Should the alert be able to interrupt a send?** The entry says "alerts the user", which passive
       markers satisfy. The plan goes further and asks for confirmation before re-sending to a place
       already contacted for the same dates — more useful, but it means the extension intervenes in a
       form submission on someone else's site, which is the most intrusive thing in this plan and the
       most likely to break if the site changes. Ticking this line as-is keeps the pre-send
-      confirmation; the alternative is markers and banners only.
+      confirmation; the alternative is markers and banners only. Use passive markers.
