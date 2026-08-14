@@ -1,4 +1,4 @@
-status: in_progress
+status: done
 version: 0.1
 started_at: 2026-08-14T15:31:00+02:00
 last_session_id: 35386b06-271b-4df6-8da8-1c51dd289449
@@ -134,10 +134,67 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
         laptop whose GLib speaks Spanish, which is the point of mapping error codes.
       Also verified in the nested Shell: the **preferences window** builds and shows all five
       controls with live values (`screenshots/preferences.png`).
-- [ ] U10 — packaging: `install.sh`, release workflow, README, SETUP.md pointer, release
-      verified from a clean directory.
+- [x] **U10 — packaging.** `install.sh` (POSIX sh) finds the newest `aideas-shell-v*` release
+      through the GitHub API — not `/releases/latest`, which in a repo that releases several
+      things would hand back another idea's asset — downloads the zip, verifies its checksum
+      when the release published one, refuses anything that is not a valid zip or not this
+      uuid, installs it, compiles the schema, enables it, and fills in the box's address from
+      `ORCHESTRATOR_HEARTBEAT_URL` when the setting is still empty. It replaces the directory
+      wholesale, so a re-run is idempotent and a file dropped in a later version does not
+      linger; `--uninstall`, `--zip`, `--url` and `--no-enable` are there too, and a non-GNOME
+      session is refused politely.
+      `ci/install-test.sh` **runs it, 27 checks**: from a local zip, over HTTP with a checksum,
+      through a stubbed releases API, twice for idempotence, with a corrupt artefact, with a zip
+      claiming another uuid, and on a faked KDE session — then checks the developer's own dconf
+      database did not change.
+      `make pack` now zips the validated bundle instead of asking `gnome-extensions pack` to
+      assemble it again from different rules (that target was broken: it resolved `--schema`
+      against the source directory and never expanded its glob). `nix build` produces the
+      byte-identical artefact, and the release job needs only `zip` and `glib-compile-schemas`.
+      `.github/workflows/release-aideas.yml` publishes it. `README.md` opens with the install
+      command and carries the screenshots; `SETUP.md` gained a **Laptop** subsection pointing at
+      it, including the two box-side settings that decide whether `/state` works.
 
-Next: U10 — packaging, installer and release.
+Next: nothing — every unit is done. See **What "done" covers** below.
+
+## What "done" covers
+
+Every feature in `PLAN.md`, each with tests, and all four suites green:
+
+| Suite | What it covers | Count |
+| --- | --- | --- |
+| `make test-unit` | parsing, grouping, wording, visibility, badge, backoff, scheduler, test-connection | **205** |
+| `make test-http` | the real libsoup transport against a stub server on loopback | **16** |
+| `make test-contract` | `/state` driven over fixture repositories, keeping the two halves in step | **24** |
+| `make smoke` | the extension in a nested headless GNOME Shell, plus screenshots | **39** |
+| `make test-install` | `install.sh` executed for real from a clean directory | **27** |
+| `nix flake check` | lint, unit, http and the assembled bundle | 4 checks |
+
+| Feature in PLAN.md | Where |
+| --- | --- |
+| A panel indicator that appears with the work | `src/lib/indicatorModel.js`, `src/extension/indicator.js` — visible only while a cycle runs, six stock symbolic icons, agent/blocked badge |
+| A menu grouped by state | `src/lib/menuModel.js`, `menuItems.js` — Running, Blocked, Ready, Also in the queue; empty sections omitted; `will_run_next` marked; read-only rows |
+| A header line for the cycle itself | `Cycle running for 12 min, 2 agents` / `Idle`, with the age of the reading and the lock's last renewal |
+| Honest failure states | four readings in `src/lib/state.js`; `unavailable` and `unreachable` worded apart; last good reading kept and dated |
+| Polling that behaves | `src/lib/scheduler.js` + `backoff.js` + `stateClient.js` — one timer, single-flight, 5 s while the menu is open, backoff to 5 min, nothing while locked or idle |
+| A preferences window | `src/extension/prefs.js` — host, port, interval, always-show, and a Test button that names the real fault |
+| A documented, tested contract | `docs/state-contract.md` + `tests/test_state_contract.py` |
+| Headless GJS tests | `tests/unit/` — 205, no compositor, no network |
+| A compositor smoke test | `ci/smoke-test.sh` + `ci/probe/` — 39 checks, screenshots, five enable/disable rounds, and a request counter proving no timer survives a disable |
+| Installed with the orchestrator, on the laptop | `install.sh`, verified by `ci/install-test.sh`; pointed at from `SETUP.md`'s Laptop section |
+| CI and a release | `.github/workflows/ci-aideas.yml` (contract + flake checks), `release-aideas.yml` (tag, release, asset, checksum) |
+
+**The one thing that finishes itself.** The release for `v0.1` publishes when this work reaches
+`main`: `release-aideas.yml` runs on push, reads `version: 0.1` and `status: done` from this
+file, and creates the `aideas-shell-v0.1` tag and release itself. It has to work that way —
+the orchestrator pushes with a plain `git push`, which does not carry tags, so a tag created in
+this worktree would never reach GitHub. An agent may not push this repo, so I could not publish
+the release myself, and therefore could not download the *published* asset. What was verified
+instead, and is as close as this can get: the artefact `release-aideas.yml` will upload is the
+one `make pack` and `nix build` both produce (byte-identical, 32 670 bytes), and `install.sh`
+was executed against exactly that zip from a clean directory — over HTTP, with a checksum, and
+through a stubbed releases API. If the release has not appeared after this merges, run the
+workflow by hand from the Actions tab; nothing else is outstanding.
 
 ## Notes for later units
 

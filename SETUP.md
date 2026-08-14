@@ -107,6 +107,35 @@ systemctl status idea-heartbeat.service
 journalctl -u idea-orchestrator | grep -i unreachable
 ```
 
+### Seeing the queue in the top bar (optional)
+
+[`ideas/aideas`](ideas/aideas/) is a GNOME Shell extension for this laptop: a panel button
+while a cycle is running, whose menu lists what is running, what is ready, and what is
+blocked on a question. It reads `GET /state` from the same heartbeat server the hook above
+posts to, so there is nothing new to install on the box.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gortazar/aideas/main/ideas/aideas/install.sh | sh
+```
+
+Run it *after* exporting `ORCHESTRATOR_HEARTBEAT_URL` above and the installer takes the
+box's address from it; otherwise set it with `gnome-extensions prefs
+aideas-shell@patxi.gortazar`. On Wayland, log out and back in for the Shell to load it.
+
+Two things to know, both about the box rather than the extension:
+
+- `/state` is served by `idea-heartbeat.service`, and it can only read the queue if that
+  unit has `IDEAS_REPO_PATH` in its environment — the same value the orchestrator unit
+  uses. Without it the menu says so, in the server's own words, rather than looking broken.
+- `HEARTBEAT_BIND_IP` and `HEARTBEAT_PORT` are what the extension has to be pointed at. If
+  you changed the port from 8787, change it in the extension's preferences too.
+
+To check what the extension will see, from the laptop, without installing anything:
+
+```bash
+cd ideas/aideas && gjs -m tools/probe-state.js <box-vpn-ip> 8787
+```
+
 ## Adding an idea
 
 Add a numbered entry to [README.md](README.md) in the format documented there. That's the
