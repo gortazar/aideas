@@ -50,7 +50,12 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
       worded apart. When an attempt fails, the last good reading is shown beneath it marked
       stale and dated rather than the menu emptying itself. 36 tests, clock injected. 84 gjs
       tests green.
-- [ ] U4 — visibility and the badge.
+- [x] **U4 — visibility and the badge.** `src/lib/indicatorModel.js` decides the button as a
+      pure function of the reading: visible only while a cycle is running (the answered
+      question), with the "always show" preference overriding; six state icons, all stock
+      symbolic names so the extension ships no assets; a badge counting agents while running
+      and blocked ideas while idle, absent rather than zero; and an accessible name carrying
+      the panel's whole meaning. 21 tests. 105 gjs tests green.
 - [ ] U5 — the panel button and menu.
 - [ ] U6 — the HTTP client: libsoup, timeout, single-flight, backoff, last-good retention.
 - [ ] U7 — the scheduler: interval, menu-open rate, lock/idle suppression, injected clock.
@@ -59,7 +64,7 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
 - [ ] U10 — packaging: `install.sh`, release workflow, README, SETUP.md pointer, release
       verified from a clean directory.
 
-Next: U4 — visibility and the badge.
+Next: U5 — the panel button and menu.
 
 ## Notes for later units
 
@@ -77,6 +82,14 @@ Next: U4 — visibility and the badge.
   but a stock `python3` — which is what it is designed for, since it can then also be run on
   the box itself. PLAN.md said "the contract test through flake.nix"; this is the one
   documented deviation from it.
+- **One decision the answered question did not cover, taken in U4:** what the button does
+  when a poll fails while a cycle was running a moment ago. Strictly hiding it would blink the
+  panel out on every VPN hiccup, and would make the "unreachable" icon PLAN.md lists
+  unreachable in practice — it could only ever be seen with "always show" on. So a good
+  reading keeps the button up for 5 minutes after contact is lost, wearing the unreachable
+  icon and the count it last knew. Still "only while a cycle is running", just not forgetting
+  between two readings. A box that answers `available: false` does **not** borrow from the
+  past: it is talking to us, and what it says is that it cannot read its queue.
 - The answered open questions settle: the button is visible **only while a cycle is
   running**; this work may edit `SETUP.md` and `orchestrator/`; the release is a tag on
   this repo (`aideas-shell-v0.1`) published by `.github/workflows/release-aideas.yml`; menu
