@@ -25,7 +25,7 @@
       # people working in the recap repository directly.
       recapFor = pkgs: pkgs.buildGoModule {
         pname = "recap";
-        version = "0.3";
+        version = "0.4";
         src = recap-src;
         # modernc.org/sqlite and its dependencies, for reading opencode's store. Update
         # this hash whenever upstream's go.sum changes: `nix build` prints the one it
@@ -36,7 +36,7 @@
         ldflags = [
           "-s"
           "-w"
-          "-X github.com/gortazar/recap/internal/cli.Version=0.3"
+          "-X github.com/gortazar/recap/internal/cli.Version=0.4"
           "-X github.com/gortazar/recap/internal/cli.Commit=${recap-src.rev}"
           "-X github.com/gortazar/recap/internal/cli.BuildDate=nix"
         ];

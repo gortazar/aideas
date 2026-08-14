@@ -1,5 +1,5 @@
-status: in_progress
-version: 0.3
+status: done
+version: 0.4
 started_at: 2026-08-09
 last_session_id: fa22503c-6cd0-436e-b54f-1a557e15f321
 last_run: 2026-08-13T23:28:10+02:00
@@ -34,7 +34,26 @@ last_cycle_cost_usd: 24.105846499999995
       which is the whole point of it. The cap is doing its job at 30d and the paragraphs are
       honest about it: seven project lines say "earlier activity not read". No README
       warning is warranted, so none was added.
-- [ ] U5 — version 0.4, release v0.4, verify the published one-liner
+- [x] U5 — version 0.4, released as v0.4, published one-liner verified from a clean
+      directory: `--since 6h`, `--since 7d` and the new error messages all exercised
+      against the installed binary
+
+**v0.4 is published**: https://github.com/gortazar/recap/releases/tag/v0.4. Release workflow
+green including both smoke jobs; the published one-liner was then run here from a clean
+directory and `--since 6h`, `--since 7d`, `--since yesterday` and `--since 0` all behaved.
+
+The entry was (b), the hardening one, and the answer to "is it already delivered?" turned out
+to be "mostly, and the gaps were the ones the plan named". Nothing about the accepted forms
+changed: the table test pins `24h`, `90m`, `2d` and `1.5d` to exactly what they meant in 0.3,
+and no existing test needed editing.
+
+One thing found on the way that was not in the plan. Bumping the version changed the release
+binaries, one artefact's SHA256 came out starting with `0`, and `tools/install_test.sh`
+turned out to corrupt checksums with `sed 's/^[0-9a-f]/0/'` — a no-op when the character is
+already `0`. The test that proves a bad download installs nothing had been watching a bad
+download install fine, for that release. The installer was never wrong; the test was, and
+only for some releases. It now writes 64 zeros, which no file hashes to. Worth remembering as
+a category: a corruption helper that can quietly corrupt nothing.
 
 ## Log
 - 2026-08-13T23:28:10+02:00 — done ($24.105846499999995)
