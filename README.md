@@ -74,6 +74,8 @@ makes position a safe identity: the active list only ever holds work still to do
    each place contacted, extract the dates, the text and detect when the send button of the contact form has been pushed, to store the info. If the button is not pressed, we
    can't assume the place has been contacted and no info is stored for that place.
 
+5. [recap](ideas/recap/) - Add an option to ask for the sessions in the last n hours or n days: --since 6h --since 7d. Minor.
+
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
