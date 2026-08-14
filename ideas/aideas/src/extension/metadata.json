@@ -1,0 +1,9 @@
+{
+  "uuid": "aideas-shell@patxi.gortazar",
+  "name": "aideas",
+  "description": "Shows what the idea-builder orchestrator is doing, in the top bar. A button appears while a cycle is running; its menu lists which ideas are running, which are ready to be built next, and which are blocked waiting for you to answer a question. Reads GET /state from the orchestrator box over HTTP and spawns no processes.",
+  "shell-version": ["46", "47", "48", "49", "50"],
+  "settings-schema": "org.gnome.shell.extensions.aideas",
+  "url": "https://github.com/gortazar/aideas/tree/main/ideas/aideas",
+  "version-name": "0.1"
+}

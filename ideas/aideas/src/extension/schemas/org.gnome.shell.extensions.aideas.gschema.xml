@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.aideas"
+          path="/org/gnome/shell/extensions/aideas/">
+
+    <key name="orchestrator-host" type="s">
+      <default>''</default>
+      <summary>Orchestrator host</summary>
+      <description>
+        Host name or IP of the box running the orchestrator's heartbeat server, reachable
+        over the VPN. Empty by default and deliberately so: an unconfigured extension says
+        to set an address rather than polling localhost, which is never the right guess.
+      </description>
+    </key>
+
+    <key name="orchestrator-port" type="i">
+      <range min="1" max="65535"/>
+      <default>8787</default>
+      <summary>Orchestrator port</summary>
+      <description>
+        Port the heartbeat server listens on. 8787 is its default, and the same port
+        HEARTBEAT_PORT sets for POST /heartbeat.
+      </description>
+    </key>
+
+    <key name="poll-interval-seconds" type="i">
+      <range min="10" max="300"/>
+      <default>30</default>
+      <summary>Seconds between readings</summary>
+      <description>
+        How often GET /state is read while the menu is closed. The menu polls faster while
+        it is open, and nothing is polled at all while the session is locked or idle.
+      </description>
+    </key>
+
+    <key name="always-show" type="b">
+      <default>false</default>
+      <summary>Keep the button in the top bar even when no cycle is running</summary>
+      <description>
+        Off by default: the button appears when a cycle is running and is hidden otherwise.
+        Turning this on keeps it visible always, with the icon carrying the state, which is
+        what you want if you would rather see blocked ideas without opening a terminal.
+      </description>
+    </key>
+
+  </schema>
+</schemalist>

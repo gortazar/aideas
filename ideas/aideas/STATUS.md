@@ -24,8 +24,16 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
       repositories built on disk (running cycle, stale lock, corrupt lock, blocked idea,
       duplicate slugs, no `PLAN.md`, no `STATUS.md`, empty queue, unset `IDEAS_REPO_PATH`,
       unparseable queue). All green with stock `python3`, no dependencies.
-- [ ] U2 — the flake and the skeleton: `flake.nix`, eslint config, gjs test runner,
-      `metadata.json`, an `extension.js` that enables and disables cleanly, CI green.
+- [x] **U2 — the flake and the skeleton.** `flake.nix` with three checks — `lint` (eslint,
+      offline, built-in rules only), `unit` (the headless gjs suite) and `bundle` (the
+      assembled extension validated by `tools/check-bundle.js`) — all three green locally
+      under `nix flake check`, plus a `packages.default` that produces the release zip.
+      `Makefile`, `tests/harness.js` and `tests/run.js` (both from `ideas/gnome-tasks`),
+      `metadata.json` for GNOME 46–50, the GSettings schema, an `extension.js` whose
+      `disable()` undoes its `enable()`, and `src/lib/duration.js` — the header line's
+      wording — with 11 tests. 17 gjs tests green.
+      `.github/workflows/ci-aideas.yml` gained a second job for the contract test, and now
+      also triggers on changes to `orchestrator/`.
 - [ ] U3 — parsing and grouping: a `/state` body in, sections and rows out.
 - [ ] U4 — visibility and the badge.
 - [ ] U5 — the panel button and menu.
@@ -36,7 +44,7 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
 - [ ] U10 — packaging: `install.sh`, release workflow, README, SETUP.md pointer, release
       verified from a clean directory.
 
-Next: U2 — the flake and the skeleton.
+Next: U3 — parsing and grouping.
 
 ## Notes for later units
 
@@ -48,6 +56,12 @@ Next: U2 — the flake and the skeleton.
 - **`lock_age_seconds` survives a dead cycle** (`running: false`, non-null age), which is
   exactly the signal for a box that stopped renewing. `cycle_started_at` does *not*: it is
   null unless the cycle is live.
+- **The contract test is not a flake check, deliberately.** The flake's root is this folder,
+  and `tests/test_state_contract.py` imports the orchestrator from two directories up, which
+  a flake cannot see. It runs as its own CI job and as `make test-contract`, needing nothing
+  but a stock `python3` — which is what it is designed for, since it can then also be run on
+  the box itself. PLAN.md said "the contract test through flake.nix"; this is the one
+  documented deviation from it.
 - The answered open questions settle: the button is visible **only while a cycle is
   running**; this work may edit `SETUP.md` and `orchestrator/`; the release is a tag on
   this repo (`aideas-shell-v0.1`) published by `.github/workflows/release-aideas.yml`; menu
