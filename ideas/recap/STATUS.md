@@ -1,9 +1,40 @@
-status: not_started
+status: in_progress
 version: 0.3
 started_at: 2026-08-09
 last_session_id: fa22503c-6cd0-436e-b54f-1a557e15f321
 last_run: 2026-08-13T23:28:10+02:00
 last_cycle_cost_usd: 24.105846499999995
+
+## Units — 0.4 (`--since 6h`, `--since 7d`)
+- [x] U0 — restore the submodule pin, again: the gitlink was back at the 0.2-era commit
+      9c19569 while flake.lock and the v0.3 tag both said 5a9bdf0. Second cycle running
+      that this has happened, so it is worth saying plainly: **the orchestrator's merge of
+      this branch does not carry the submodule bump**, and the first job of every cycle is
+      `git submodule update --init` plus `scripts/check-pin.sh`.
+- [x] U1 — the grammar: `s`, `m`, `h`, `d`, `w`, chainable, case-insensitive, fractions
+      allowed; a bare number and an absolute time both errors, per the answered questions.
+      The table test pins every form that parsed before, unchanged.
+- [x] U2 — the messages: the flag error shows the vocabulary and an example, a bad value in
+      the config file names the file and the key rather than the flag, and a zero or
+      negative window is an error naming `--all` instead of silently becoming it.
+- [x] U3 — docs: a Durations section in the README with every unit, the two refusals and
+      the positive-window rule; usage lines, flag table, config section and `--help` all
+      naming the same list, with a test on `--help`.
+- [x] U4 — measured, cold, on this machine's real store (25 projects):
+
+      | window | cold | |
+      |---|---|---|
+      | `--since 24h` | 293 ms | |
+      | `--since 7d` | 305 ms | |
+      | `--since 30d` | 318 ms | 17 of 27 sessions truncated |
+      | `--all` | 324 ms | |
+
+      Warm is 12 ms. A wide window costs about 25 ms, not the multiple the plan feared,
+      because the 1 MiB cap added in 0.3 bounds each session whatever the window asks for —
+      which is the whole point of it. The cap is doing its job at 30d and the paragraphs are
+      honest about it: seven project lines say "earlier activity not read". No README
+      warning is warranted, so none was added.
+- [ ] U5 — version 0.4, release v0.4, verify the published one-liner
 
 ## Log
 - 2026-08-13T23:28:10+02:00 — done ($24.105846499999995)
