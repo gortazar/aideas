@@ -1,11 +1,13 @@
 status: in_progress
 version: 0.1
 started_at: 2026-08-14
-last_session_id:
-last_run: 2026-08-14
+last_session_id: 2aab31b6-ac0c-4cab-8c08-70e5c1cbc553
+last_run: 2026-08-14T20:02:19+02:00
+last_cycle_cost_usd: 20.04429199999999
 
 ## Log
-<!-- Newest entries on top. The orchestrator prepends here after each cycle. -->
+- 2026-08-14T20:02:19+02:00 — in_progress ($20.04429199999999)
+
 
 2026-08-14 — U1 and U2 done. The research risk the plan called the biggest one turned out
 to be surmountable: rentalia.com answers 403 to curl and to headless Chromium, but
@@ -16,8 +18,6 @@ one, which is what the second open question asked for. There is no `<form>` elem
 page at all, so capture must be a capture-phase click, never a `submit` listener.
 
 ## Units
-<!-- The honest progress report: one line per unit of work, ticked only once it is
-     committed with its tests passing. Refresh this at every unit, not at session end. -->
 - [x] U1 — research and fixtures: listing, listing-sent, listing-mangled, search-results
       captured and scrubbed; `docs/rentalia-research.md` written from them.
 - [x] U2 — skeleton: MV3 manifest with rentalia as an *optional* host permission, event
