@@ -1,11 +1,13 @@
 status: in_progress
 version: 0.1
 started_at: 2026-08-14T15:31:00+02:00
-last_session_id:
-last_run:
+last_session_id: 35386b06-271b-4df6-8da8-1c51dd289449
+last_run: 2026-08-14T16:13:45+02:00
+last_cycle_cost_usd: 19.85455449999999
 
 ## Log
-<!-- Newest entries on top. The orchestrator prepends here after each cycle. -->
+- 2026-08-14T16:13:45+02:00 — in_progress ($19.85455449999999)
+
 
 Difficulty estimate: **medium**, as PLAN.md said. The GNOME Shell side is well-trodden
 (`ideas/gnome-tasks` is an in-repo extension with a gjs test harness to copy), and `/state`
@@ -13,9 +15,6 @@ already serves exactly what the menu needs. What has to be invented is the packa
 idea has no upstream repo, so its flake, CI, installer and release all live here.
 
 ## Units
-<!-- The honest progress report: one line per unit of work, ticked only once it is
-     committed with its tests passing. Refresh this at every unit, not at session end.
-     Keep "next" to the single unit being started now. -->
 - [x] **U1 — the contract.** `docs/state-contract.md` specifies the `/state` response as a
       versioned surface: the two body shapes, the six always-present row keys, the two
       conditional ones, and the closed five-word `state` vocabulary.
