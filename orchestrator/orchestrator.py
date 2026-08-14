@@ -1126,6 +1126,80 @@ class Orchestrator:
             log(f"{slug}: finished, but a new entry is queued for it; reopening.")
             self.reopen_for_next_entry(slug)
 
+    def submodule_paths(self, worktree: Path, slug: str) -> list[str]:
+        """Submodules belonging to this idea, from the worktree's own .gitmodules."""
+        listing = git("config", "-f", ".gitmodules", "--get-regexp", r"^submodule\..*\.path$",
+                      cwd=worktree)
+        paths = []
+        for line in listing.stdout.splitlines():
+            parts = line.split(None, 1)
+            if len(parts) == 2 and parts[1].startswith(f"ideas/{slug}/"):
+                paths.append(parts[1])
+        return paths
+
+    def settle_submodules(self, agent: Agent) -> None:
+        """Rescue work inside the idea's submodules before the worktree is destroyed.
+
+        A submodule inside a linked worktree keeps its git directory under
+        .git/worktrees/<wt>/modules/<path> — *per worktree*, not shared with the
+        superproject. `git worktree remove --force` therefore deletes every commit the
+        agent made in there. Worse, the parent's sweep-up records the new gitlink first,
+        so the repo ends up pointing at a commit that exists nowhere: a dangling submodule
+        reference rather than an obvious loss. An idea's plan recorded losing two sessions
+        to exactly this.
+
+        The checkout is also on a detached HEAD, which is why an agent's own
+        `git push origin main` from inside it is a silent no-op — it pushes the local
+        `main`, not the work.
+
+        So: commit anything uncommitted in there, then get the commits somewhere that
+        outlives the worktree — the submodule's own remote first, and failing that the
+        superproject's shared module directory under a rescue ref.
+        """
+        for path in self.submodule_paths(agent.worktree, agent.slug):
+            sub = agent.worktree / path
+            if not (sub / ".git").exists():
+                continue
+
+            if git("status", "--porcelain", cwd=sub).stdout.strip():
+                git("add", "-A", cwd=sub)
+                git("commit", "-m", f"{agent.slug}: uncommitted work from automated build cycle",
+                    "--quiet", cwd=sub)
+                log(f"{agent.slug}: swept up uncommitted work inside {path}.")
+
+            head = git("rev-parse", "HEAD", cwd=sub).stdout.strip()
+            if not head:
+                continue
+            # Already on the remote? Then nothing can be lost.
+            if git("branch", "-r", "--contains", head, cwd=sub).stdout.strip():
+                continue
+
+            branch = git("rev-parse", "--abbrev-ref", "origin/HEAD", cwd=sub).stdout.strip()
+            branch = branch.split("/", 1)[1] if "/" in branch else "main"
+            if git("push", "--quiet", "origin", f"HEAD:refs/heads/{branch}", cwd=sub).returncode == 0:
+                log(f"{agent.slug}: pushed {path} to origin/{branch} ({head[:8]}).")
+                continue
+
+            # Could not push — keep the objects in the superproject so the gitlink the
+            # parent is about to record still resolves after the worktree is gone.
+            shared = self.repo / ".git" / "modules" / path
+            worktree_git = (sub / ".git").read_text().split("gitdir:", 1)[-1].strip() \
+                if (sub / ".git").is_file() else str(sub / ".git")
+            source = (sub / worktree_git).resolve() if not Path(worktree_git).is_absolute() \
+                else Path(worktree_git)
+            rescued = False
+            if shared.is_dir() and source.exists():
+                if git("fetch", "--quiet", str(source), head, cwd=shared).returncode == 0:
+                    git("update-ref", f"refs/aideas/rescued/{agent.slug}/{head[:8]}", head,
+                        cwd=shared)
+                    rescued = True
+            log(f"WARNING: {agent.slug}: could not push {path} to its remote. "
+                + (f"Objects rescued into .git/modules/{path} as "
+                   f"refs/aideas/rescued/{agent.slug}/{head[:8]}."
+                   if rescued else
+                   "The commits exist ONLY in the worktree and will be lost when it is "
+                   "removed — resolve this before the next cycle."))
+
     def finalize(self, agent: Agent) -> None:
         slug = agent.slug
         result = agent.load_result()
@@ -1139,6 +1213,10 @@ class Orchestrator:
                 log(f"{slug}: recovered session {session_id} from its transcript.")
         if session_id:
             (self.state_dir / "sessions" / f"{slug}.id").write_text(session_id)
+
+        # Rescue submodule work first: the sweep below records the gitlink, and a gitlink
+        # is worthless if the commit it names dies with the worktree.
+        self.settle_submodules(agent)
 
         # Sweep up whatever the agent left uncommitted in its own worktree.
         git("add", "-A", cwd=agent.worktree)
