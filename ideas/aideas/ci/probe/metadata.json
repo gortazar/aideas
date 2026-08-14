@@ -1,0 +1,8 @@
+{
+  "uuid": "aideas-probe@test.invalid",
+  "name": "aideas probe",
+  "description": "Test instrument, never shipped. Exposes org.gnome.AideasProbe on the session bus so the smoke test can read the aideas panel button and its menu back out of a real compositor, take screenshots, and toggle the extension.",
+  "shell-version": ["46", "47", "48", "49", "50"],
+  "url": "https://github.com/gortazar/aideas/tree/main/ideas/aideas",
+  "version-name": "0.1"
+}

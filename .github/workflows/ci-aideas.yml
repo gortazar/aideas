@@ -1,18 +1,36 @@
-# Generated from ideas/_template/ci.yml. Edit freely — it is only created once, never
-# regenerated, so your changes to the real test command will stick.
+# Generated from ideas/_template/ci.yml, then extended for this idea.
+#
+# aideas has no upstream repository — the entry in README.md says to build it in this repo —
+# so unlike ci-pwgen.yml or ci-recap-gs.yml this is the idea's *real* test suite, not a
+# wrapper check of a submodule pin.
 name: CI - aideas
 
 on:
   push:
     paths:
       - "ideas/aideas/**"
+      - "orchestrator/**"
       - ".github/workflows/ci-aideas.yml"
   pull_request:
     paths:
       - "ideas/aideas/**"
+      - "orchestrator/**"
       - ".github/workflows/ci-aideas.yml"
 
 jobs:
+  # The /state contract, driven over fixture repositories. Its own job because it reaches
+  # outside ideas/aideas — it imports orchestrator/orchestrator.py and
+  # orchestrator/heartbeat_server.py, which the idea's flake cannot see, its root being the
+  # idea folder. Stock python3, no dependencies, which is the point: it also runs on the box.
+  # Changes to orchestrator/ trigger it too, since that is the half that can drift.
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest discover -s ideas/aideas/tests -v
+
+  # Lint, the headless gjs suite, and the assembled bundle. All three come from
+  # ideas/aideas/flake.nix, so `nix flake check` locally runs exactly this.
   test:
     runs-on: ubuntu-latest
     defaults:
