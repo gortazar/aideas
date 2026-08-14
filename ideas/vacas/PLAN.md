@@ -198,3 +198,20 @@ the wrapper. Units, one commit each, tests first:
       form submission on someone else's site, which is the most intrusive thing in this plan and the
       most likely to break if the site changes. Ticking this line as-is keeps the pre-send
       confirmation; the alternative is markers and banners only. Use passive markers.
+- [ ] **The AMO API key, please — it is the only thing left.** The first question chose (b): sign
+      with `web-ext sign` in CI and attach the signed `.xpi` to the GitHub release, and it asked for
+      confirmation that the credentials would be provided. They are not there yet:
+      `gh secret list --repo gortazar/vacas` is empty, so `v0.1` has not been tagged — a tag now
+      would only produce a failed workflow and a version number burned on nothing.
+      Everything else for U12 is built and tested: the release workflow, and `install.sh` run end to
+      end against a locally built asset (it refused the unsigned build, and installed a
+      signature-bearing one into a sandbox profile).
+      What is needed: create an API key at <https://addons.mozilla.org/developers/addon/api/key/>
+      and add both halves as secrets in `github.com/gortazar/vacas` —
+      `AMO_JWT_ISSUER` (the "JWT issuer" string) and `AMO_JWT_SECRET` (the "JWT secret"). Then
+      ticking this line is enough: the next cycle tags `v0.1`, the workflow signs and publishes, the
+      published asset gets installed in a clean profile, and the idea is done.
+      If you would rather not have an AMO account at all, say so on this line and the alternative is
+      a listed AMO submission (public listing, review latency) or accepting that vacas is only
+      installable in Developer Edition or Nightly — which under AGENTS.md would leave the entry
+      unfinishable, so it needs to be a deliberate choice.
