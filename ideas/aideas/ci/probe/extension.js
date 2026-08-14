@@ -44,11 +44,10 @@ const IFACE = `
       <arg type="s" name="path" direction="in"/>
       <arg type="s" name="result" direction="out"/>
     </method>
-    <!-- Disable and re-enable aideas `rounds` times, which is the leak test. -->
-    <method name="Cycle">
-      <arg type="i" name="rounds" direction="in"/>
-      <arg type="s" name="result" direction="out"/>
-    </method>
+    <!-- One half of an enable/disable round. The rounds are driven from outside, one call at a
+         time with a wait between them: disabling and re-enabling within a single main-loop
+         iteration leaves ExtensionManager's bookkeeping out of step with reality, and the
+         extension stays down with no error logged. Lock and unlock are seconds apart anyway. -->
     <method name="SetEnabled">
       <arg type="b" name="enabled" direction="in"/>
       <arg type="s" name="result" direction="out"/>
@@ -56,16 +55,22 @@ const IFACE = `
   </interface>
 </node>`;
 
-/** Every St.Label text under an actor, in tree order — how a menu item's words are read back. */
+/**
+ * Every St.Label text under an actor, in tree order — how a menu item's words are read back.
+ *
+ * Descending stops at whatever has text, because an St.Label owns an internal Clutter.Text
+ * carrying the same string: recursing into it reports every label in the menu twice.
+ */
 function labelsOf(actor) {
     const found = [];
     const walk = node => {
         if (node === null || node === undefined)
             return;
-        // St.Label has a `text` property; everything else is a container to descend into.
         const text = node.text;
-        if (typeof text === 'string' && text !== '')
+        if (typeof text === 'string' && text !== '') {
             found.push(text);
+            return;
+        }
         for (const child of node.get_children?.() ?? [])
             walk(child);
     };
@@ -208,15 +213,5 @@ export default class AideasProbe extends Extension {
         else
             manager.disableExtension(UUID);
         return 'ok';
-    }
-
-    /** Disable and re-enable, `rounds` times. Synchronous: both calls are synchronous in the Shell. */
-    Cycle(rounds) {
-        const manager = Main.extensionManager;
-        for (let round = 0; round < rounds; round++) {
-            manager.disableExtension(UUID);
-            manager.enableExtension(UUID);
-        }
-        return `ok: ${rounds} rounds`;
     }
 }

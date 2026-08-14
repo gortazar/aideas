@@ -30,6 +30,11 @@
             ./tests/http
             ./tests/stub-state-server.py
             ./tools
+            # The smoke test's probe extension is linted too, and worth it: the stray backtick
+            # that broke it (inside a template literal holding D-Bus XML) is a parse error
+            # eslint reports in a second, where the compositor took a four-minute run to say
+            # only that the probe never appeared on the bus.
+            ./ci
             ./eslint.config.mjs
             ./Makefile
           ];
@@ -43,12 +48,14 @@
             glib # glib-compile-schemas, gsettings
             gtk4 # the preferences window
             libadwaita
-            gnome-shell # `gnome-extensions pack`, and the Shell typelibs
+            gnome-shell # `gnome-extensions enable/prefs`, and the Shell typelibs
             eslint
             python3 # the /state contract test, and the stub server the smoke test uses
+            dbus # dbus-run-session, which ci/install-test.sh needs to isolate dconf
             gnumake
             jq
             zip
+            unzip
             curl
           ];
 
@@ -136,13 +143,15 @@
       });
 
       # The release artefact: the same zip `make pack` produces and the release workflow
-      # uploads, so `nix build` and a published asset cannot be different things.
+      # uploads, so `nix build` and a published asset cannot be different things. gjs is here
+      # because `make pack` validates the bundle before zipping it; gnome-shell is not, because
+      # nothing assembles the zip but zip itself.
       packages = forAllSystems (pkgs: {
         default = pkgs.stdenv.mkDerivation {
           pname = "aideas-shell-extension";
           version = "0.1";
           src = sourceFor pkgs;
-          nativeBuildInputs = [ pkgs.glib pkgs.gnome-shell pkgs.gnumake pkgs.zip ];
+          nativeBuildInputs = [ pkgs.glib pkgs.gjs pkgs.gnumake pkgs.zip ];
           buildPhase = ''
             export HOME=$TMPDIR
             make pack

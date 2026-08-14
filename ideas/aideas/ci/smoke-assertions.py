@@ -172,7 +172,9 @@ def main():
     check("2 unanswered questions" in labels,
           "the blocked idea says how many questions, in the orchestrator's words", joined)
     check("vacas" in labels, "the ready idea is listed", joined)
-    check("behind #3" in labels, "the queued idea says what it is behind", joined)
+    # The quiet section joins the version to the note, so the row reads "v0.4 · behind #3".
+    check(any("behind #3" in text for text in labels),
+          "the queued idea says what it is behind", joined)
     check("Preferences" in labels, "the menu offers Preferences", joined)
 
     reactive = [item for item in panel["items"] if item["reactive"]]
@@ -242,17 +244,35 @@ def main():
           json.dumps(describe())[:300])
 
     # --- five enable/disable rounds --------------------------------------------------------
-    print("\nfive enable/disable rounds")
+    #
+    # One D-Bus call per half-round, each waited on. Disabling and re-enabling inside a single
+    # main-loop iteration is not a round: ExtensionManager's bookkeeping ends up out of step
+    # with reality and the extension stays down, with nothing logged. A screen lock and the
+    # unlock after it are seconds apart, which is what this imitates.
+    print("\nfive enable/disable rounds (what every screen lock does)")
     before = served(options.running_port)
-    check(probe("Cycle", "5").startswith("ok"), "five rounds ran without an error")
-    wait_until(lambda: describe().get("present"), 30, what="the button after cycling")
+    rounds_ok = True
+    for round_number in range(1, 6):
+        probe("SetEnabled", "false")
+        if wait_until(lambda: describe().get("present") is False, 15,
+                      what=f"round {round_number}: the button to go") is None:
+            rounds_ok = False
+            break
+        probe("SetEnabled", "true")
+        if wait_until(lambda: describe().get("present") is True, 15,
+                      what=f"round {round_number}: the button to come back") is None:
+            rounds_ok = False
+            break
+    check(rounds_ok, "five rounds, each leaving and rejoining the panel")
+
     panel = describe()
-    check(panel.get("present") is True, "the button is back in the panel")
+    check(panel.get("present") is True, "the button is in the panel after five rounds",
+          json.dumps(panel)[:200])
     check(panel.get("instances") == 1, "and there is exactly one of it",
           f"instances={panel.get('instances')}")
     after = wait_until(lambda: served(options.running_port) > before, 30,
                        what="a poll after re-enabling")
-    check(after is not None, "it is still polling after being re-enabled",
+    check(after is not None, "it is still polling after five rounds",
           f"served {before} before the rounds")
 
     # --- nothing left behind ---------------------------------------------------------------
@@ -272,7 +292,9 @@ def main():
           f"{quiet_start} -> {quiet_end} over {quiet_seconds} s")
 
     probe("SetEnabled", "true")
-    wait_until(lambda: describe().get("visible"), 30, what="the button after re-enabling")
+    check(wait_until(lambda: describe().get("visible"), 30,
+                     what="the button after re-enabling") is not None,
+          "and it comes back when the extension is enabled again")
     shoot(f"{options.screenshots}/panel-running.png")
 
     print(f"\n{checks - len(failures)} passed, {len(failures)} failed, {checks} total")

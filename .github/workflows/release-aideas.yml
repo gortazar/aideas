@@ -1,0 +1,143 @@
+# Publish the aideas GNOME Shell extension.
+#
+# aideas has no upstream repository of its own — the entry in README.md says to build it in this
+# repo — so the release is a tag on *this* repo, `aideas-shell-v<version>`, published from here.
+# That was settled by the third answered open question in ideas/aideas/PLAN.md, and this file is
+# the second (and last) thing aideas touches outside its own folder.
+#
+# **The workflow creates its own tag.** It has to: the orchestrator pushes with a plain
+# `git push`, which does not carry tags, so a tag made in an agent's worktree would never reach
+# GitHub and a tag-triggered release would never fire. Instead this runs on every push to main
+# that touches the idea, reads the version out of ideas/aideas/STATUS.md, and publishes only
+# when that idea says `status: done` and the tag does not exist yet. So a release goes out once,
+# when the work is declared finished, and re-running is harmless.
+#
+# Nothing here needs a secret: the automatic GITHUB_TOKEN can tag, release and upload assets in
+# the repository the workflow lives in.
+name: Release - aideas
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ideas/aideas/**"
+      - ".github/workflows/release-aideas.yml"
+  # So a release can also be published by hand — from the Actions tab — if it is ever wanted
+  # before the version changes, or if a run failed.
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Publish even if ideas/aideas/STATUS.md does not say status: done"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # create the tag and the release, and upload the asset
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags, so the "already released" check is honest
+
+      - name: Read the version and status from STATUS.md
+        id: idea
+        run: |
+          set -euo pipefail
+          status=$(sed -n 's/^status:[[:space:]]*//p' ideas/aideas/STATUS.md | head -1)
+          version=$(sed -n 's/^version:[[:space:]]*//p' ideas/aideas/STATUS.md | head -1)
+          [ -n "$version" ] || { echo "no version: in ideas/aideas/STATUS.md" >&2; exit 1; }
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=aideas-shell-v$version" >> "$GITHUB_OUTPUT"
+          echo "aideas is $status at version $version"
+
+      - name: Decide whether to publish
+        id: decide
+        env:
+          STATUS: ${{ steps.idea.outputs.status }}
+          TAG: ${{ steps.idea.outputs.tag }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          publish=yes
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists — nothing to publish."
+            publish=no
+          elif [ "$STATUS" != "done" ] && [ "$FORCE" != "true" ]; then
+            echo "aideas is '$STATUS', not 'done' — not publishing $TAG yet."
+            publish=no
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+      - name: Install what packing needs
+        if: steps.decide.outputs.publish == 'yes'
+        # Just zip and glib-compile-schemas: `make pack` zips the bundle `make build` assembles,
+        # rather than asking gnome-extensions to assemble it again, so the whole gnome-shell
+        # closure stays out of this job.
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq zip libglib2.0-bin
+
+      - name: Pack the extension
+        if: steps.decide.outputs.publish == 'yes'
+        working-directory: ideas/aideas
+        run: |
+          set -euo pipefail
+          make pack
+          cd build
+          sha256sum aideas-shell@patxi.gortazar.shell-extension.zip \
+            > aideas-shell@patxi.gortazar.shell-extension.zip.sha256
+          cat aideas-shell@patxi.gortazar.shell-extension.zip.sha256
+
+      - name: Check the artefact is the version it claims
+        if: steps.decide.outputs.publish == 'yes'
+        working-directory: ideas/aideas
+        env:
+          VERSION: ${{ steps.idea.outputs.version }}
+        run: |
+          set -euo pipefail
+          unzip -p "build/aideas-shell@patxi.gortazar.shell-extension.zip" metadata.json |
+            tee /dev/stderr | grep -q "\"version-name\": \"$VERSION\"" || {
+              echo "metadata.json version-name does not match STATUS.md ($VERSION)" >&2
+              exit 1
+            }
+
+      - name: Create the release
+        if: steps.decide.outputs.publish == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.idea.outputs.tag }}
+          VERSION: ${{ steps.idea.outputs.version }}
+        working-directory: ideas/aideas
+        # --target pins the tag to this commit; gh creates the tag as part of the release, which
+        # is why nothing has to push one. The notes go via a file rather than an inline heredoc,
+        # which inside a YAML block scalar is one indentation mistake away from silently
+        # swallowing the rest of the script.
+        run: |
+          set -euo pipefail
+          {
+            echo "A GNOME Shell panel indicator for the idea-builder orchestrator. A button"
+            echo "appears while a cycle is running; its menu lists which ideas are running,"
+            echo "which are ready to be built next, and which are blocked waiting for an answer."
+            echo
+            echo "Install without compiling anything:"
+            echo
+            echo '```sh'
+            echo "curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/ideas/aideas/install.sh | sh"
+            echo '```'
+            echo
+            echo "Then set the orchestrator's address with \`gnome-extensions prefs"
+            echo "aideas-shell@patxi.gortazar\`, or export \`ORCHESTRATOR_HEARTBEAT_URL\` before"
+            echo "installing and the installer fills it in for you."
+            echo
+            echo "GNOME Shell 46-50. Reads \`GET /state\` over plain HTTP and sends nothing."
+          } > release-notes.md
+
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "aideas $VERSION - the orchestrator's state in the GNOME top bar" \
+            --notes-file release-notes.md \
+            "build/aideas-shell@patxi.gortazar.shell-extension.zip" \
+            "build/aideas-shell@patxi.gortazar.shell-extension.zip.sha256"
+          echo "published $TAG"

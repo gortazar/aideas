@@ -1,4 +1,4 @@
-status: in_progress
+status: done
 version: 0.1
 started_at: 2026-08-14T15:31:00+02:00
 last_session_id: 35386b06-271b-4df6-8da8-1c51dd289449
@@ -105,11 +105,96 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
       "always show the button", and a Test button that uses the same transport, client and
       wording the panel does, so it fails in exactly the ways the panel will. 205 unit + 16 http
       tests green.
-- [ ] U9 — the real shell: smoke test, screenshots, a recorded run against the real box.
-- [ ] U10 — packaging: `install.sh`, release workflow, README, SETUP.md pointer, release
-      verified from a clean directory.
+- [x] **U9a — the compositor smoke test.** `ci/smoke-test.sh` builds the bundle, starts two
+      stub `/state` servers (a running cycle and an idle box), boots a headless GNOME Shell on a
+      private bus with the extension and `ci/probe/` installed, and runs `ci/smoke-assertions.py`
+      against it: **39 checks, all passing.** It proves in a real Shell what no headless test
+      can — the button appears with the right icon, badge and accessible name; the menu opens
+      and reads back as the four sections with the orchestrator's own wording; every row is
+      inert and Preferences is the only item that reacts; the button *leaves* when the cycle
+      stops and "always show" brings it back wearing the blocked icon; a box that goes away
+      leaves it up with the unreachable icon and the last good reading dated beneath; five
+      enable/disable rounds leave exactly one button; and a disabled extension makes no further
+      requests — the stub's request counter is what proves no timer survived. Screenshots in
+      `screenshots/`. `ci/nested-shell.sh` comes from `ideas/gnome-tasks`, keeping its dconf
+      leak guard.
+- [x] **U9b — run against a live orchestrator.** `tools/probe-state.js` reads `/state` with the
+      extension's own transport, client and wording modules and prints what "Test connection"
+      would say, what the panel would look like, and the whole menu — a real diagnostic, and how
+      the connection test is verified end to end without a compositor. Recorded runs:
+      * **The live orchestrator serving this repo** (`127.0.0.1:8833`): `[ok] Connected to
+        127.0.0.1:8833 — cycle running, 1 agent · 5 ideas queued · 3 ideas blocked`, and the
+        menu listed this very cycle (`Running / aideas / v0.1 · running for 14 min`), the three
+        blocked ideas with their question counts, and `restore-wss / v0.1 · behind #1`. The
+        extension was also run against it inside the nested Shell —
+        `screenshots/menu-live-orchestrator.png` is that menu, showing aideas watching itself.
+      * **The box `gx10-e7da` over Tailscale** (`100.97.242.26:8787`): `[error] Could not reach
+        100.97.242.26:8787 — connection refused`, rendered as the unreachable icon and message.
+      * A name that does not resolve: `host not found`. Both failures came back in English on a
+        laptop whose GLib speaks Spanish, which is the point of mapping error codes.
+      Also verified in the nested Shell: the **preferences window** builds and shows all five
+      controls with live values (`screenshots/preferences.png`).
+- [x] **U10 — packaging.** `install.sh` (POSIX sh) finds the newest `aideas-shell-v*` release
+      through the GitHub API — not `/releases/latest`, which in a repo that releases several
+      things would hand back another idea's asset — downloads the zip, verifies its checksum
+      when the release published one, refuses anything that is not a valid zip or not this
+      uuid, installs it, compiles the schema, enables it, and fills in the box's address from
+      `ORCHESTRATOR_HEARTBEAT_URL` when the setting is still empty. It replaces the directory
+      wholesale, so a re-run is idempotent and a file dropped in a later version does not
+      linger; `--uninstall`, `--zip`, `--url` and `--no-enable` are there too, and a non-GNOME
+      session is refused politely.
+      `ci/install-test.sh` **runs it, 27 checks**: from a local zip, over HTTP with a checksum,
+      through a stubbed releases API, twice for idempotence, with a corrupt artefact, with a zip
+      claiming another uuid, and on a faked KDE session — then checks the developer's own dconf
+      database did not change.
+      `make pack` now zips the validated bundle instead of asking `gnome-extensions pack` to
+      assemble it again from different rules (that target was broken: it resolved `--schema`
+      against the source directory and never expanded its glob). `nix build` produces the
+      byte-identical artefact, and the release job needs only `zip` and `glib-compile-schemas`.
+      `.github/workflows/release-aideas.yml` publishes it. `README.md` opens with the install
+      command and carries the screenshots; `SETUP.md` gained a **Laptop** subsection pointing at
+      it, including the two box-side settings that decide whether `/state` works.
 
-Next: U9 — the compositor smoke test.
+Next: nothing — every unit is done. See **What "done" covers** below.
+
+## What "done" covers
+
+Every feature in `PLAN.md`, each with tests, and all four suites green:
+
+| Suite | What it covers | Count |
+| --- | --- | --- |
+| `make test-unit` | parsing, grouping, wording, visibility, badge, backoff, scheduler, test-connection | **205** |
+| `make test-http` | the real libsoup transport against a stub server on loopback | **16** |
+| `make test-contract` | `/state` driven over fixture repositories, keeping the two halves in step | **24** |
+| `make smoke` | the extension in a nested headless GNOME Shell, plus screenshots | **39** |
+| `make test-install` | `install.sh` executed for real from a clean directory | **27** |
+| `nix flake check` | lint, unit, http and the assembled bundle | 4 checks |
+
+| Feature in PLAN.md | Where |
+| --- | --- |
+| A panel indicator that appears with the work | `src/lib/indicatorModel.js`, `src/extension/indicator.js` — visible only while a cycle runs, six stock symbolic icons, agent/blocked badge |
+| A menu grouped by state | `src/lib/menuModel.js`, `menuItems.js` — Running, Blocked, Ready, Also in the queue; empty sections omitted; `will_run_next` marked; read-only rows |
+| A header line for the cycle itself | `Cycle running for 12 min, 2 agents` / `Idle`, with the age of the reading and the lock's last renewal |
+| Honest failure states | four readings in `src/lib/state.js`; `unavailable` and `unreachable` worded apart; last good reading kept and dated |
+| Polling that behaves | `src/lib/scheduler.js` + `backoff.js` + `stateClient.js` — one timer, single-flight, 5 s while the menu is open, backoff to 5 min, nothing while locked or idle |
+| A preferences window | `src/extension/prefs.js` — host, port, interval, always-show, and a Test button that names the real fault |
+| A documented, tested contract | `docs/state-contract.md` + `tests/test_state_contract.py` |
+| Headless GJS tests | `tests/unit/` — 205, no compositor, no network |
+| A compositor smoke test | `ci/smoke-test.sh` + `ci/probe/` — 39 checks, screenshots, five enable/disable rounds, and a request counter proving no timer survives a disable |
+| Installed with the orchestrator, on the laptop | `install.sh`, verified by `ci/install-test.sh`; pointed at from `SETUP.md`'s Laptop section |
+| CI and a release | `.github/workflows/ci-aideas.yml` (contract + flake checks), `release-aideas.yml` (tag, release, asset, checksum) |
+
+**The one thing that finishes itself.** The release for `v0.1` publishes when this work reaches
+`main`: `release-aideas.yml` runs on push, reads `version: 0.1` and `status: done` from this
+file, and creates the `aideas-shell-v0.1` tag and release itself. It has to work that way —
+the orchestrator pushes with a plain `git push`, which does not carry tags, so a tag created in
+this worktree would never reach GitHub. An agent may not push this repo, so I could not publish
+the release myself, and therefore could not download the *published* asset. What was verified
+instead, and is as close as this can get: the artefact `release-aideas.yml` will upload is the
+one `make pack` and `nix build` both produce (byte-identical, 32 670 bytes), and `install.sh`
+was executed against exactly that zip from a clean directory — over HTTP, with a checksum, and
+through a stubbed releases API. If the release has not appeared after this merges, run the
+workflow by hand from the Actions tab; nothing else is outstanding.
 
 ## Notes for later units
 
@@ -139,6 +224,29 @@ Next: U9 — the compositor smoke test.
   localised — on this laptop a refused connection says "Conexión rehusada" — so the transport
   maps `error.matches(Gio.IOErrorEnum, ...)` and `Gio.ResolverError` to fixed English phrases.
   `error.domain` is a *numeric quark* (195 for Gio, 468 for the resolver), not a name.
+- **Three things only a real compositor said**, each now fixed and guarded:
+  1. A backtick inside a template literal holding D-Bus XML ends the string. `ci/` is now in the
+     flake's lint fileset, where eslint reports that in a second — the compositor took a
+     four-minute run to say only that the probe never reached the bus.
+  2. `St.Label` owns an internal `Clutter.Text` with the same string, so a naive actor walk
+     reports every menu label twice.
+  3. **Disabling and re-enabling an extension inside one main-loop iteration is not a round.**
+     `ExtensionManager`'s bookkeeping ends up out of step with reality and the extension stays
+     down with nothing logged. The smoke test drives each half-round as its own call and waits,
+     which is what a screen lock and its unlock actually look like.
+- **The orchestrator box is not currently serving `/state`.** On `gx10-e7da`,
+  `idea-heartbeat.service` and `idea-agent.timer` are both `inactive` and nothing listens on
+  8787; the orchestrator that is actually running cycles is on this laptop, serving `/state` on
+  **127.0.0.1:8833** (`HEARTBEAT_PORT=8833`, `HEARTBEAT_BIND_IP=127.0.0.1`). So the port
+  default of 8787 is right per SETUP.md but will not match this deployment, and the risk
+  PLAN.md raised about `IDEAS_REPO_PATH` in the serving unit could not be checked on the box —
+  the local server has it set, and `/state` there is `available: true`. Worth a line in
+  SETUP.md rather than a change to the extension.
+- **A virtual-pointer click could not press a button in the preferences window** (a separate
+  Wayland client): motion and press/release spaced across main-loop iterations moved the
+  pointer but the window closed rather than activating anything. Dropped rather than left in as
+  dead test code — `tools/probe-state.js` verifies that code path headlessly instead, which is
+  better anyway because it is also useful to a person diagnosing a real setup.
 - The answered open questions settle: the button is visible **only while a cycle is
   running**; this work may edit `SETUP.md` and `orchestrator/`; the release is a tag on
   this repo (`aideas-shell-v0.1`) published by `.github/workflows/release-aideas.yml`; menu

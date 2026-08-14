@@ -10,7 +10,7 @@ REPO    := ../..
 GJS ?= gjs
 
 .PHONY: help check lint test test-unit test-http test-contract build check-bundle pack install \
-        uninstall enable disable prefs logs smoke clean
+        uninstall enable disable prefs logs smoke test-install clean
 
 help:
 	@echo "aideas — the orchestrator's state in the GNOME top bar"
@@ -22,9 +22,10 @@ help:
 	@echo "  make test-contract  the /state contract, against fixture repositories"
 	@echo "  make build          assemble $(BUNDLE)"
 	@echo "  make check-bundle   validate the assembled bundle (metadata + imports)"
-	@echo "  make pack           build + gnome-extensions pack -> the release artefact"
+	@echo "  make pack           build + zip -> the release artefact"
 	@echo "  make install        install and enable it in this session"
 	@echo "  make smoke          end-to-end test in a nested headless Shell"
+	@echo "  make test-install   run install.sh for real, from a clean directory"
 
 check: lint test check-bundle
 
@@ -64,11 +65,14 @@ build:
 check-bundle: build
 	$(GJS) -m tools/check-bundle.js $(BUNDLE)
 
-pack: build
-	cd $(BUILD) && gnome-extensions pack --force \
-	    $(if $(wildcard src/extension/schemas),--schema=$(UUID)/schemas/*.gschema.xml,) \
-	    --extra-source=lib \
-	    $(UUID)
+# The release artefact. A .shell-extension.zip is just a zip whose root holds metadata.json,
+# which is exactly what `make build` has already assembled and `check-bundle` has validated —
+# so this zips that, rather than asking `gnome-extensions pack` to assemble it a second time
+# from a different set of rules. It also keeps the whole gnome-shell closure out of the release
+# workflow, which only needs zip and glib-compile-schemas.
+pack: build check-bundle
+	rm -f $(BUILD)/$(UUID).shell-extension.zip
+	cd $(BUNDLE) && zip -qr ../$(UUID).shell-extension.zip .
 	@echo "packed: $(BUILD)/$(UUID).shell-extension.zip"
 
 # --- install -------------------------------------------------------------------------------
@@ -96,6 +100,12 @@ logs:
 
 smoke:
 	./ci/smoke-test.sh
+
+# Runs the installer against the packed artefact, over HTTP and through a stubbed releases API.
+# Isolated: its own XDG dirs and its own session bus, so neither the real extensions directory
+# nor the real dconf database is touched.
+test-install:
+	./ci/install-test.sh
 
 clean:
 	rm -rf $(BUILD)
