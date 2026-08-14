@@ -16,6 +16,8 @@ The behaviour of each path is what a test needs to provoke:
     /state-slow         a 200 that arrives after --slow seconds, to be timed out
     /state-500          a server error
     /other              valid JSON that is not /state, like a wrong port
+    /requests           how many state reads have been served, which is how the smoke test
+                        proves a disabled extension left no timer behind still polling
 """
 import argparse
 import json
@@ -57,6 +59,9 @@ IDLE = {
 
 
 def make_handler(options):
+    # Counts every /state* read. /requests itself is not a read, so a test can poll it freely.
+    served = {"count": 0}
+
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
@@ -71,9 +76,18 @@ def make_handler(options):
         def do_GET(self):  # noqa: N802 — the BaseHTTPRequestHandler spelling
             path = self.path.split("?", 1)[0]
 
+            if path == "/requests":
+                self._send(200, json.dumps(served))
+                return
+            if path.startswith("/state"):
+                served["count"] += 1
+
             if path == "/state":
                 if options.body is not None:
                     self._send(200, options.body)
+                    return
+                if options.mode == "idle":
+                    self._send(200, json.dumps(IDLE))
                     return
                 running = dict(RUNNING, cycle_started_at=time.time() - 720)
                 self._send(200, json.dumps(running))
@@ -110,6 +124,10 @@ def main():
                         help="exact body to return from /state")
     parser.add_argument("--slow", type=float, default=30.0,
                         help="seconds /state-slow waits before answering")
+    parser.add_argument("--mode", choices=("running", "idle"), default="running",
+                        help="what /state reports: a running cycle, or an idle box with a "
+                             "blocked idea. Two servers in the two modes are how the smoke "
+                             "test moves the extension between states.")
     options = parser.parse_args()
 
     # Threaded, and it has to be: with HTTP/1.1 keep-alive a single-threaded server holds one
