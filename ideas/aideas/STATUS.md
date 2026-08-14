@@ -34,7 +34,14 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
       wording — with 11 tests. 17 gjs tests green.
       `.github/workflows/ci-aideas.yml` gained a second job for the contract test, and now
       also triggers on changes to `orchestrator/`.
-- [ ] U3 — parsing and grouping: a `/state` body in, sections and rows out.
+- [x] **U3a — parsing.** `src/lib/state.js` turns a `/state` body into one of four readings —
+      `ok`, `unavailable`, `unreachable`, `unconfigured` — with every field either usable or
+      null, and never throws. Unknown `state` words keep their own name and are flagged
+      `known: false` rather than dropped; duplicate slugs and slugless rows survive; an
+      absurd queue is capped at 200 rows with the remainder counted. 31 tests, including a
+      body that is JSON but not `/state` (a wrong port), which reports unreachable rather
+      than pretending. 48 gjs tests green.
+- [ ] U3b — grouping and wording: a reading in, menu sections and a header line out.
 - [ ] U4 — visibility and the badge.
 - [ ] U5 — the panel button and menu.
 - [ ] U6 — the HTTP client: libsoup, timeout, single-flight, backoff, last-good retention.
@@ -44,7 +51,7 @@ idea has no upstream repo, so its flake, CI, installer and release all live here
 - [ ] U10 — packaging: `install.sh`, release workflow, README, SETUP.md pointer, release
       verified from a clean directory.
 
-Next: U3 — parsing and grouping.
+Next: U3b — grouping and wording.
 
 ## Notes for later units
 
