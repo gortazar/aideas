@@ -1,5 +1,9 @@
 # Generated from ideas/_template/ci.yml. Edit freely — it is only created once, never
 # regenerated, so your changes to the real test command will stick.
+#
+# The extension itself lives in github.com/gortazar/vacas and runs its own suite there.
+# What this checks is the wrapper: that the submodule pointer and the flake input name the
+# same commit, and that the commit they name still passes its dependency-free tests.
 name: CI - vacas
 
 on:
@@ -23,4 +27,7 @@ jobs:
       - uses: cachix/install-nix-action@v27
         with:
           extra_nix_config: "experimental-features = nix-command flakes"
+      # check-pin.sh reads the gitlink straight out of the index, so the submodule need
+      # not be checked out for this to be a real check.
+      - run: ./scripts/check-pin.sh
       - run: nix flake check
