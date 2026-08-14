@@ -160,19 +160,21 @@ Units, each one commit, tests first:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **When should the button be visible?** The entry says "a button when aideas is running", which
+- [x] **When should the button be visible?** The entry says "a button when aideas is running", which
       read literally means it disappears whenever no cycle is active — and with it the blocked and
       ready lists, which are most useful precisely when nothing is running. The plan assumes: visible
       when a cycle is running **or** at least one idea is blocked, hidden otherwise, with an
       "always show" preference. The alternatives are (b) strictly only while a cycle runs, or
-      (c) always visible, with the icon carrying the state. Ticking this line as-is chooses the first.
-- [ ] **May this work edit `SETUP.md` and `orchestrator/`?** AGENTS.md forbids working outside the
+      (c) always visible, with the icon carrying the state. Ticking this line as-is chooses the first. 
+      Visible only when the cycle is running.
+- [x] **May this work edit `SETUP.md` and `orchestrator/`?** AGENTS.md forbids working outside the
       idea folder, but "the extension must install along with the orchestrator" needs at least a
       pointer in SETUP.md's **Laptop** section, and two of the risks above (a `/state` cache,
       `IDEAS_REPO_PATH` in `idea-heartbeat.service`) would be one-line fixes there. The plan assumes:
       SETUP.md may gain a short subsection, `orchestrator/` is read-only and anything needed there is
-      raised as a new question instead. Ticking this line as-is chooses that.
-- [ ] **Where does the release come from, with no upstream repo?** AGENTS.md requires a release with
+      raised as a new question instead. Ticking this line as-is chooses that. For this project, and
+      only for this project, you can work outside the ideas folder.
+- [x] **Where does the release come from, with no upstream repo?** AGENTS.md requires a release with
       built artefacts and an install path that compiles nothing, but this idea has no repository of
       its own to release from. The options: (a) tag this repo `aideas-shell-v0.1` and publish the zip
       from a workflow here — which means a second file outside the idea folder,
@@ -180,7 +182,7 @@ Units, each one commit, tests first:
       install channel; (c) both, with EGO as the user-facing route and the tag as the reproducible
       one. The plan assumes (a), because EGO review is a multi-week loop and this extension is useless
       to anyone without an orchestrator box of their own. Ticking this line as-is chooses (a).
-- [ ] **Should a menu row do anything when clicked?** The plan says no: rows display, and answering a
+- [x] **Should a menu row do anything when clicked?** The plan says no: rows display, and answering a
       blocked idea means editing `PLAN.md` on the box. Cheap alternatives if wanted: open the idea's
       folder on GitHub in a browser, or copy the slug to the clipboard. Ticking this line as-is keeps
       the menu read-only.
