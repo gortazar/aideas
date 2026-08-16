@@ -1,0 +1,26 @@
+# Generated from ideas/_template/ci.yml. Edit freely — it is only created once, never
+# regenerated, so your changes to the real test command will stick.
+name: CI - lo-pert
+
+on:
+  push:
+    paths:
+      - "ideas/lo-pert/**"
+      - ".github/workflows/ci-lo-pert.yml"
+  pull_request:
+    paths:
+      - "ideas/lo-pert/**"
+      - ".github/workflows/ci-lo-pert.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ideas/lo-pert
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: "experimental-features = nix-command flakes"
+      - run: nix flake check
