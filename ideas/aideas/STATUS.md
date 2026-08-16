@@ -56,11 +56,26 @@ shipped broken and stayed broken for two days without anyone being told.
       now installed unverified. `ci/install-test.sh` grew from 27 checks to **37**, covering
       the fallback, a wrong digest, a sums file that does not mention our asset, the encoded
       name, no checksum at all, and a releases list carrying suffixed tags.
-- [ ] U4 — the workflow rewritten around `nix build`, the flake checks and `release-plan.sh`.
+- [x] **U4 — the workflow rewritten.** `.github/workflows/release-aideas.yml` now: gates
+      cheaply on `status: done` before doing anything expensive; installs Nix; asserts one
+      version across `STATUS.md`, `metadata.json` and `flake.nix` (via `nix eval`); runs
+      `nix flake check` **and** the `/state` contract test before publishing anything; builds
+      the artefact with **`nix build`** — the same derivation the checks just validated, so a
+      tool missing from the runner cannot recur for anything the flake declares; uploads three
+      assets (the zip, `<zip>.sha256`, `SHA256SUMS`); and asks `ci/release-plan.sh` for the
+      decision and the tag. Triggers narrow from `ideas/aideas/**` to the shipped inputs, so a
+      `STATUS.md` edit no longer starts a Nix build for nothing.
+      Reviewed against the failed run's step list: the step that failed (`make pack` needing
+      `gjs`) is gone, and each step that was skipped now has a reason to run. Every shell
+      snippet in it was executed locally against the real data — the version check prints
+      `STATUS.md=0.1 metadata.json=0.1 flake.nix=0.1`, the build step produces the three assets,
+      and the plan step reads the live releases list and answers
+      `publish=yes tag=aideas-shell-v0.1-2`.
+      `ci/install-test.sh` gained the exact published layout as a case: **39 checks**.
 - [ ] U5 — `tools/check-release.sh`, run against the existing v0.1 release.
 - [ ] U6 — the bump to 0.2, the README section, and `status: done`.
 
-Next: U4 — the workflow rewritten.
+Next: U5 — tools/check-release.sh.
 
 ### What the failed run actually said
 

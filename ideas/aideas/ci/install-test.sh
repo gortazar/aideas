@@ -212,6 +212,20 @@ check "and verified against SHA256SUMS" \
     "grep -q 'checksum verified against SHA256SUMS' '$WORK/sums.log'"
 
 echo
+echo "== the exact layout the release workflow publishes: zip, .sha256 and SHA256SUMS"
+BOTH="$SERVE/both"
+mkdir -p "$BOTH"
+cp "$ZIP" "$BOTH/$UUID.shell-extension.zip"
+(cd "$BOTH" && sha256sum "$UUID.shell-extension.zip" >"$UUID.shell-extension.zip.sha256" &&
+    cp "$UUID.shell-extension.zip.sha256" SHA256SUMS)
+rm -rf "$EXT_DIR"
+./install.sh --url "http://127.0.0.1:$PORT/both/$UUID.shell-extension.zip" --no-enable \
+    >"$WORK/both.log" 2>&1 || { cat "$WORK/both.log"; exit 1; }
+check "installed" "[[ -f '$EXT_DIR/extension.js' ]]"
+check "and verified against the .sha256, which is asked for first" \
+    "grep -q 'checksum verified against $UUID.shell-extension.zip.sha256' '$WORK/both.log'"
+
+echo
 echo "== a SHA256SUMS whose digest is wrong"
 BAD="$SERVE/badsums"
 mkdir -p "$BAD"
