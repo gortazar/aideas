@@ -26,15 +26,20 @@ last_cycle_cost_usd: 20.323337000000002
       fsync + rename with a retained previous generation, capture rules tested against fixtures,
       and a D-Bus test proving the daemon writes a change nobody asked it to write
 
-**Green:** `nix flake check` — 29 unit tests, 6 D-Bus tests on a private bus, ruff, extension
-syntax. **Verified by hand** against a real headless GNOME Shell 46 with `gnome-terminal`: the
-extension answers `Ping`/`GetLayout` (with a connector name from DisplayConfig)/`ListWindows`, the
-daemon captures a second window unprompted, and `restore-wss status` prints the live session.
-`tools/smoke-nested.sh` automates those five steps; its last step-by-step run was manual, the
-scripted form has not been run end to end since the retry fix.
+- [x] M3 — restore: the ported window matcher, the restore plan (idempotent, monitor-relative
+      geometry, ambiguity refused rather than guessed), the extension's placement and launch
+      methods, and `restore-wss restore` with `--dry-run`, `--yes` and `--json`
 
-Next: M3 — restore: launch apps, recreate workspaces, place windows, match launches to windows,
-and make a second run a no-op.
+**Green:** `nix flake check` — 71 unit tests, 9 D-Bus tests on a private bus, ruff, extension
+syntax. **`tools/smoke-nested.sh`: all 8 checks pass** against a real headless GNOME Shell 46 with
+`gnome-terminal` (run 2026-08-17): the extension answers over D-Bus, the daemon captures a window
+move unprompted, and after the application is killed `restore-wss restore` launches it again and
+puts it back on the workspace and at the position it was captured on. The application rounded
+700x500 down to 694x489 — a terminal snapping to its character grid, which is the "the app's own
+size constraints win" finding from M0, observed again.
+
+Next: M5 — terminals: the `/proc` process-tree capture the M0 probe proved possible, redaction of
+secret-looking arguments at capture time, and the whitelist command policy.
 
 ## Findings that change the plan
 
