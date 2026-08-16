@@ -38,8 +38,15 @@ puts it back on the workspace and at the position it was captured on. The applic
 700x500 down to 694x489 — a terminal snapping to its character grid, which is the "the app's own
 size constraints win" finding from M0, observed again.
 
-Next: M5 — terminals: the `/proc` process-tree capture the M0 probe proved possible, redaction of
-secret-looking arguments at capture time, and the whitelist command policy.
+- [x] M5 — terminals and commands: `/proc` process-tree capture (tabs, per-tab cwd, foreground
+      job), capture-time redaction, the `never`/`whitelist`/`always` policy with its two overrides,
+      `config.toml`, and terminal restore that reopens every tab at its directory and re-runs a
+      command only when the policy allows it
+
+**Green:** `nix flake check` — 127 unit tests, 9 D-Bus tests, ruff, extension syntax.
+
+Next: M4 — documents (tier 1): the adapter framework, `/proc/<pid>/cmdline` and `fd`,
+`recently-used.xbel`, and LibreOffice's own picklist, each with a confidence score.
 
 ## Findings that change the plan
 
