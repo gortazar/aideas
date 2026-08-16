@@ -1,4 +1,4 @@
-status: in_progress
+status: done
 version: 0.2
 started_at: 2026-08-14T15:31:00+02:00
 last_session_id: 35386b06-271b-4df6-8da8-1c51dd289449
@@ -83,9 +83,69 @@ shipped broken and stayed broken for two days without anyone being told.
       first`, which is precisely the gap that made that release install unverified. Its failure
       paths were exercised too: a version that has not been released and a repository with no
       such releases both report clearly and exit 1; a healthy release exits 0.
-- [ ] U6 — the bump to 0.2, the README section, and `status: done`.
+- [x] **U6 — the bump and the docs.** `version: 0.2` here, `version-name` in `metadata.json`
+      and `packages.default.version` in `flake.nix` — the three the workflow now asserts are one
+      value. `tests/unit/metadata.test.js` follows; `ci/install-test.sh` reads the version from
+      `metadata.json` instead of hard-coding it, so the next bump needs no edit there. `README.md`
+      gains a **Releases** section: what triggers a release (shipped inputs only), what the job
+      does before publishing, what a release contains, the suffixed tag scheme, and how to
+      publish by hand and confirm afterwards with `make check-release`. `ci/nested-shell.sh`
+      also learned to clear a leftover nested shell holding its Wayland display, which is what
+      stopped the smoke test running at all on this box.
 
-Next: U6 — the bump to 0.2 and the docs.
+Next: nothing — every unit is done. See **What 0.2 covers** below.
+
+## What 0.2 covers
+
+The release path, fixed and testable from a worktree. Every suite green at version 0.2:
+
+| Suite | Covers | Result |
+| --- | --- | --- |
+| `make test-unit` | the pure logic, unchanged this entry | **205 pass** |
+| `make test-http` | libsoup against a stub server, **plus the code-to-phrase mapping** | **29 pass** |
+| `make test-contract` | `/state` over fixture repositories | **24 pass** |
+| `make test-pack` | the artefact is a function of the source, and `nix build` agrees | **7 pass** |
+| `make test-release` | the release decision, over fixture releases lists | **19 pass** |
+| `make test-install` | `install.sh` executed from a clean directory | **39 pass** |
+| `make smoke` | the extension in a nested headless GNOME Shell | **39 pass** |
+| `nix flake check` | lint, unit, http, bundle | **4 green** |
+
+| Feature in PLAN.md | Where |
+| --- | --- |
+| A release job that can build the artefact | `nix build`, the derivation `nix flake check` validates — no apt, no missing `gjs` |
+| The release runs the tests it is releasing | `nix flake check` + the `/state` contract, before anything is published |
+| Triggered by the extension, not its paperwork | `paths:` narrowed to `src/**`, `Makefile`, `flake.nix`, `flake.lock`, `tools/check-bundle.js`, `ci/release-plan.sh`, the workflow |
+| A guard that turns "changed" into content | `ci/release-plan.sh` compares the built artefact against the newest published one, by digest |
+| A reproducible zip | `make pack`: fixed epoch, sorted entries, fixed modes, `TZ=UTC`, `zip -X -D` — `ci/pack-test.sh` |
+| A tag scheme where "newest wins" holds | `aideas-shell-v0.2`, then `-2`, `-3`; `install.sh` takes the newest, tested with suffixed tags |
+| Assets the installer can verify | three per release; `install.sh` falls back to `SHA256SUMS` |
+| The decision as a tested script | `ci/release-plan.sh` + `ci/release-test.sh` |
+| Version consistency enforced | one step asserts `STATUS.md` = `metadata.json` = `flake.nix` |
+| The installer verified against a release-shaped source | `ci/install-test.sh`, 27 → 39 checks |
+| A post-merge check anyone can run | `tools/check-release.sh` (`make check-release`) |
+| v0.2 published, and the README saying how | the workflow publishes on merge; README has a **Releases** section |
+
+**What was proved before the merge, and what still cannot be.** Every part of the workflow was
+executed here against real data: the version check (`STATUS.md=0.2 metadata.json=0.2
+flake.nix=0.2`), the build producing the three assets, and `ci/release-plan.sh` reading the
+**live** releases list and answering `publish=yes tag=aideas-shell-v0.1-2` for a rebuild of 0.1.
+`install.sh` was run against the **live v0.1 release** and now reports `checksum verified
+against SHA256SUMS`, where before it verified nothing. `tools/check-release.sh` was run against
+that same release and reported truthfully, warnings and all.
+
+What cannot be proved from here is unchanged from last entry and is the whole reason this one
+existed: an agent may not push this repo, so the workflow's first real run happens after the
+merge. **On merge this should publish `aideas-shell-v0.2`** — `status: done`, the version is
+0.2 everywhere, the trigger paths include `src/`, `Makefile` and `flake.nix`, all of which
+changed. Afterwards, one command says whether it did:
+
+```sh
+cd ideas/aideas && make check-release
+```
+
+If it did not: the Actions tab, then `Run workflow` (with *force* if needed). The two failures
+that silently produced no release before — `gjs` missing from the runner, and a red CI that
+nobody was told about — are both fixed, and the second is why `check-release.sh` exists.
 
 ### The other reason nothing would have published
 
