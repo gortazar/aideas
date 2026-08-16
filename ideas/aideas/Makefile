@@ -9,6 +9,10 @@ REPO    := ../..
 
 GJS ?= gjs
 
+# 1980-01-01 00:00:00 UTC — the earliest a zip can record, and exactly what nixpkgs' stdenv
+# exports, so `make pack` here and `nix build` in the sandbox produce the same bytes.
+SOURCE_DATE_EPOCH ?= 315532800
+
 .PHONY: help check lint test test-unit test-http test-contract build check-bundle pack install \
         uninstall enable disable prefs logs smoke test-install clean
 
@@ -70,10 +74,20 @@ check-bundle: build
 # so this zips that, rather than asking `gnome-extensions pack` to assemble it a second time
 # from a different set of rules. It also keeps the whole gnome-shell closure out of the release
 # workflow, which only needs zip and glib-compile-schemas.
+#
+# Reproducible, deliberately: the same source must give the same bytes, on this laptop and on a
+# runner. Three things would otherwise vary — the mtimes `cp` stamps on every copied file, the
+# readdir order `zip -r` walks in, and the uid/gid and extended timestamps zip stores by
+# default. The release workflow decides whether to publish by comparing this artefact against
+# the published one, so without this every run would look like a change and publish a
+# byte-different copy of an identical extension forever.
 pack: build check-bundle
 	rm -f $(BUILD)/$(UUID).shell-extension.zip
-	cd $(BUNDLE) && zip -qr ../$(UUID).shell-extension.zip .
+	find $(BUNDLE) -exec touch -h -d @$(SOURCE_DATE_EPOCH) {} +
+	cd $(BUNDLE) && find . -type f -printf '%P\n' | LC_ALL=C sort | \
+	    zip -qX -D -@ ../$(UUID).shell-extension.zip
 	@echo "packed: $(BUILD)/$(UUID).shell-extension.zip"
+	@sha256sum $(BUILD)/$(UUID).shell-extension.zip
 
 # --- install -------------------------------------------------------------------------------
 
