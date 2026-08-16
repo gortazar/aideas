@@ -19,8 +19,19 @@ jobs:
       run:
         working-directory: ideas/lo-pert
     steps:
+      # The extension itself lives in gortazar/lo-pert, checked out here as the
+      # upstream/ submodule. Its own CI runs the headless LibreOffice tests; this
+      # job checks the wrapper and the commit this idea currently points at.
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: cachix/install-nix-action@v27
         with:
           extra_nix_config: "experimental-features = nix-command flakes"
-      - run: nix flake check
+      # Cheap, and it fails for a reason no other step would catch: the submodule
+      # and the flake input pointing at different commits.
+      - run: ./scripts/check-pin.sh
+      # The pure core's unit tests (including the hypothesis properties) at the
+      # pinned commit. The tests that need an office stay upstream, where the
+      # LibreOffice download is already paid for.
+      - run: nix flake check --print-build-logs
