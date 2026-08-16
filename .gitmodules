@@ -10,3 +10,6 @@
 [submodule "ideas/title-slides/upstream"]
 	path = ideas/title-slides/upstream
 	url = https://github.com/gortazar/title-slides.git
+[submodule "ideas/lo-pert/upstream"]
+	path = ideas/lo-pert/upstream
+	url = https://github.com/gortazar/lo-pert.git
