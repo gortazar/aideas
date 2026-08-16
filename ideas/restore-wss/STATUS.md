@@ -1,6 +1,6 @@
-status: not_started
+status: in_progress
 version: 0.1
-started_at:
+started_at: 2026-08-16
 last_session_id:
 last_run:
 
@@ -11,6 +11,6 @@ last_run:
 <!-- The honest progress report: one line per unit of work, ticked only once it is
      committed with its tests passing. Refresh this at every unit, not at session end.
      Keep "next" to the single unit being started now. -->
-- [ ] <first unit — one observable behaviour>
+- [x] Upstream repository created (`gortazar/restore-wss`), pinned here as the `upstream` submodule
 
-Next: <the one unit being worked on now>
+Next: M0 — `docs/similar-tools.md`, the prior-art study.
