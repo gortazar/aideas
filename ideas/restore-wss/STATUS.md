@@ -1,16 +1,15 @@
 status: in_progress
 version: 0.1
 started_at: 2026-08-16
-last_session_id:
-last_run:
+last_session_id: ebf1ecd2-6691-4213-9815-2f9920396ad5
+last_run: 2026-08-16T22:39:18+02:00
+last_cycle_cost_usd: 20.323337000000002
 
 ## Log
-<!-- Newest entries on top. The orchestrator prepends here after each cycle. -->
+- 2026-08-16T22:39:18+02:00 — in_progress ($20.323337000000002)
+
 
 ## Units
-<!-- The honest progress report: one line per unit of work, ticked only once it is
-     committed with its tests passing. Refresh this at every unit, not at session end.
-     Keep "next" to the single unit being started now. -->
 - [x] Upstream repository created (`gortazar/restore-wss`), pinned here as the `upstream` submodule
 - [x] M0a — `docs/similar-tools.md`: eleven tools read from source, plus `tools/wayland-globals.sh`
       and its committed output proving GNOME 46 here has no session-management Wayland global
