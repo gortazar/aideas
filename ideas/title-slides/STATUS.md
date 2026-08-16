@@ -9,8 +9,9 @@ the setext trap and getting a real `quarto render` to run hermetically in CI wer
 bulk of the work, exactly as the plan predicted.
 
 Upstream: https://github.com/gortazar/title-slides — released as
-[v0.1](https://github.com/gortazar/title-slides/releases/tag/v0.1), submodule pointer
-committed at the tagged commit.
+[v0.1](https://github.com/gortazar/title-slides/releases/tag/v0.1). The submodule pointer
+here tracks upstream `main`, which is the v0.1 tag plus one README-wording commit made
+after the release; the published artefact is unaffected.
 
 ## What "done" covers
 
