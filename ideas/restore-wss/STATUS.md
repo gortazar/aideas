@@ -51,8 +51,16 @@ size constraints win" finding from M0, observed again.
 
 **Green:** `nix flake check` — 148 unit tests, 9 D-Bus tests, ruff, extension syntax.
 
-Next: M6 — VPN: capture and reactivate NetworkManager connections (NM only, per the answered
-question), storing the connection's identity and never a credential.
+- [x] M6 — VPN: NetworkManager only, identity only (uuid/name/type, never a credential), polled at
+      most every 30 s; restore activates by UUID, leaves a connected VPN alone, and reports one
+      that wants a password as `needs-you` rather than as a failure. Verified read-only against
+      the real NetworkManager here (1 active VPN, 28 known connections).
+
+**Green:** `nix flake check` — 157 unit tests, 9 D-Bus tests, ruff, extension syntax.
+
+Next: M7 — the systemd user unit and login integration, the docs deliverables
+(`state-schema.md`, `app-adapters.md`, `limitations.md`, `shared-core.md`), the README with the
+install command, and the release + installer.
 
 ## Findings that change the plan
 
