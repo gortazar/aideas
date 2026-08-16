@@ -70,54 +70,7 @@ makes position a safe identity: the active list only ever holds work still to do
    each place contacted, extract the dates, the text and detect when the send button of the contact form has been pushed, to store the info. If the button is not pressed, we
    can't assume the place has been contacted and no info is stored for that place.
 
-4. [title-slides](ideas/title-slides) - A quarto extension that when activated with `title-slides: true` in the frontmatter uses the first h2 title as the default title for that slide 
-   and any consecutive ones until a new h2 title found. So the following sample: 
-   ```markdown
-   ---
-   type: pdf
-   title-slides: true
-   ---
-   # About Quarto
-   ---
-   ## Introduction
-
-   blabla
-   ---
-   bloblo
-   ---
-   ## References
-   
-   1. one
-   2. two
-   ---
-   3. three
-   ```
-   Must be equivalent to this one:
-   ```markdown
-   ---
-   type: pdf
-   ---
-   # About Quarto
-   ---
-   ## Introduction
-
-   blabla
-   ---
-   ## Introduction
-   
-   bloblo
-   ---
-   ## References
-   
-   1. one
-   2. two
-   ---
-   ## References
-   
-   3. three
-   ```
-
-5. [lo-pert](ideas/lo-pert) - A LibreOffice plugin to build Pert diagrams. It must provide states (circles with two numbers on the upper half, and one 
+4. [lo-pert](ideas/lo-pert) - A LibreOffice plugin to build Pert diagrams. It must provide states (circles with two numbers on the upper half, and one 
    on the lower one), and actions (links that start on a state and end on another state and have a label). The plugin must support building
    automatically a pert diagram out of a precedence table, calculating the early and late times for each state. 
 
@@ -171,3 +124,14 @@ makes position a safe identity: the active list only ever holds work still to do
    This project must be done within this repo. Do not create an external repo for this. The gnome shell extension must install along with the orchestrator.
 
 9. [recap](ideas/recap/) - Add an option to ask for the sessions in the last n hours or n days: --since 6h --since 7d. Minor. (finished 2026-08-14, v0.4)
+
+10. [title-slides](ideas/title-slides) - A quarto extension that when activated with `title-slides: true` in the frontmatter uses the first h2 title as the default title for that slide (finished 2026-08-16, v0.1)
+   and any consecutive ones until a new h2 title found. So the following sample: 
+   ```markdown
+   ---
+   type: pdf
+   title-slides: true
+   ---
+   # About Quarto
+   ---
+   ## Introduction

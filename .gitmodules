@@ -7,3 +7,12 @@
 [submodule "ideas/recap-gs/upstream"]
 	path = ideas/recap-gs/upstream
 	url = https://github.com/gortazar/recap-gs.git
+[submodule "ideas/title-slides/upstream"]
+	path = ideas/title-slides/upstream
+	url = https://github.com/gortazar/title-slides.git
+[submodule "ideas/restore-wss/upstream"]
+	path = ideas/restore-wss/upstream
+	url = https://github.com/gortazar/restore-wss.git
+[submodule "ideas/lo-pert/upstream"]
+	path = ideas/lo-pert/upstream
+	url = https://github.com/gortazar/lo-pert.git
