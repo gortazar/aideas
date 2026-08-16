@@ -58,9 +58,6 @@ makes position a safe identity: the active list only ever holds work still to do
    each place contacted, extract the dates, the text and detect when the send button of the contact form has been pushed, to store the info. If the button is not pressed, we
    can't assume the place has been contacted and no info is stored for that place.
 
-3. [aideas](ideas/aideas/) - Build a release workflow to run every time changes are made to aideas gnome shell extension that publishes the extension as required
-   by the install script. As a result of this change a new release of the extension must be made available in this repo. Minor version.
-
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
@@ -138,3 +135,6 @@ makes position a safe identity: the active list only ever holds work still to do
    * Restoring command line apps and the commands with which they were started and from where. For instance, a terminal running an ssh session with a my-host node, or a claude session 
      started with claude -r or claude -n from a my-repo folder.
    * Restoring which vpn was active if any 
+
+13. [aideas](ideas/aideas/) - Build a release workflow to run every time changes are made to aideas gnome shell extension that publishes the extension as required (finished 2026-08-17, v0.2)
+   by the install script. As a result of this change a new release of the extension must be made available in this repo. Minor version.
