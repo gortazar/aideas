@@ -14,7 +14,8 @@ GJS ?= gjs
 SOURCE_DATE_EPOCH ?= 315532800
 
 .PHONY: help check lint test test-unit test-http test-contract build check-bundle pack install \
-        uninstall enable disable prefs logs smoke test-install clean
+        uninstall enable disable prefs logs smoke test-install test-pack test-release \
+        check-release clean
 
 help:
 	@echo "aideas — the orchestrator's state in the GNOME top bar"
@@ -30,6 +31,9 @@ help:
 	@echo "  make install        install and enable it in this session"
 	@echo "  make smoke          end-to-end test in a nested headless Shell"
 	@echo "  make test-install   run install.sh for real, from a clean directory"
+	@echo "  make test-pack      the artefact is a function of the source alone"
+	@echo "  make test-release   the release decision, over fixture releases lists"
+	@echo "  make check-release  ask GitHub whether the published release is really there"
 
 check: lint test check-bundle
 
@@ -126,6 +130,17 @@ smoke:
 # nor the real dconf database is touched.
 test-install:
 	./ci/install-test.sh
+
+test-pack:
+	./ci/pack-test.sh
+
+test-release:
+	./ci/release-test.sh
+
+# Run this *after* a merge reaches main: it is what says whether the release actually
+# published, which no test in this repo can know beforehand.
+check-release:
+	./tools/check-release.sh
 
 clean:
 	rm -rf $(BUILD)

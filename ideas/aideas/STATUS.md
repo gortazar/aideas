@@ -72,10 +72,20 @@ shipped broken and stayed broken for two days without anyone being told.
       and the plan step reads the live releases list and answers
       `publish=yes tag=aideas-shell-v0.1-2`.
       `ci/install-test.sh` gained the exact published layout as a case: **39 checks**.
-- [ ] U5 — `tools/check-release.sh`, run against the existing v0.1 release.
+- [x] **U5 — the post-merge check.** `tools/check-release.sh` (also `make check-release`) asks
+      GitHub for the newest `aideas-shell-v*` release and reports whether it is really there and
+      is what this tree describes: the tag matches `STATUS.md`'s version (accepting a suffixed
+      tag as the same version), the artefact downloads, its sha256 matches the digest GitHub
+      reports, its `metadata.json` says the same `version-name`, and each published checksum
+      file is present and correct. Read-only and unauthenticated.
+      **Run against the existing v0.1 release, where it reports truthfully:** 6 passed, 0
+      failed, 1 warned — the warning being `no <asset>.sha256 — install.sh asks for this one
+      first`, which is precisely the gap that made that release install unverified. Its failure
+      paths were exercised too: a version that has not been released and a repository with no
+      such releases both report clearly and exit 1; a healthy release exits 0.
 - [ ] U6 — the bump to 0.2, the README section, and `status: done`.
 
-Next: U5 — tools/check-release.sh.
+Next: U6 — the bump to 0.2 and the docs.
 
 ### What the failed run actually said
 
