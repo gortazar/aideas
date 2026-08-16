@@ -104,7 +104,11 @@ check "the schema source is there" \
     "[[ -f '$EXT_DIR/schemas/org.gnome.shell.extensions.aideas.gschema.xml' ]]"
 check "the schema was compiled" "[[ -f '$EXT_DIR/schemas/gschemas.compiled' ]]"
 check "metadata names this uuid" "grep -q '$UUID' '$EXT_DIR/metadata.json'"
-check "it reports the version it installed" "grep -q 'installed 0.1' '$WORK/local.log'"
+# Read rather than hard-coded, so a version bump does not need an edit here.
+VERSION=$(sed -n 's/.*"version-name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+    src/extension/metadata.json | head -1)
+check "it reports the version it installed ($VERSION)" \
+    "grep -q 'installed $VERSION' '$WORK/local.log'"
 
 # The settings have to be readable through the installed schema — that is what the panel and
 # the preferences window both do first.
