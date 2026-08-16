@@ -87,6 +87,25 @@ shipped broken and stayed broken for two days without anyone being told.
 
 Next: U6 — the bump to 0.2 and the docs.
 
+### The other reason nothing would have published
+
+`CI - aideas` had **never passed** — every run since the idea was created failed, which nobody
+had reason to look at because the *release* workflow was the one being discussed. The cause was
+a single test in the `http` suite: `a name that does not resolve is "host not found"`. A laptop
+with a resolver reports `Gio.ResolverError.NOT_FOUND`; a build sandbox on a runner, with no
+`/etc/resolv.conf` at all, reports something else, so the assertion passed here and failed
+there on every single run.
+
+That matters to this entry directly: the new release job runs `nix flake check` **before**
+publishing, so this test would have failed the release too — a second silent non-release, for a
+different reason, discovered only because the job was rewritten to run its own tests.
+
+The fix separates the two things that test was conflating. The code-to-phrase mapping is now
+pinned hermetically against `GLib.Error`s constructed by hand — eleven codes across
+`Gio.IOErrorEnum` and `Gio.ResolverError`, plus an unmapped one — and the live DNS case asserts
+only what is true anywhere: that the reason is one of the module's own phrases and is plain
+ASCII, never a localised GLib message. `tests/http`: 16 checks → **29**.
+
 ### What the failed run actually said
 
 Checked rather than assumed, and one correction to PLAN.md's account:
