@@ -44,12 +44,23 @@ shipped broken and stayed broken for two days without anyone being told.
       failed download, a tag with no zip asset, disagreeing versions, and four kinds of bad
       input. Also run against the **real** releases list from the GitHub API, where it read the
       live `digest` and correctly proposed `aideas-shell-v0.1-2` for the reproducible rebuild.
-- [ ] U3 — the `SHA256SUMS` fallback in `install.sh`, verified against the live v0.1 layout.
+- [x] **U3 — the checksum fallback.** `install.sh` now accepts both layouts that exist:
+      `<asset>.sha256`, which the release workflow uploads, and `SHA256SUMS`, which the v0.1
+      release and the other ideas in this repo publish. It matches the asset by both the
+      percent-encoded name from the URL and the plain one written inside the file, falls back
+      to the single `.shell-extension.zip` line when a sums file names it differently, and
+      treats a malformed or unrelated sums file as *no* checksum rather than as a mismatch. A
+      checksum that is present and wrong still refuses to install.
+      **Proved against the live release**: `./install.sh` with no arguments now prints
+      `checksum verified against SHA256SUMS` for `aideas-shell-v0.1` — the release that until
+      now installed unverified. `ci/install-test.sh` grew from 27 checks to **37**, covering
+      the fallback, a wrong digest, a sums file that does not mention our asset, the encoded
+      name, no checksum at all, and a releases list carrying suffixed tags.
 - [ ] U4 — the workflow rewritten around `nix build`, the flake checks and `release-plan.sh`.
 - [ ] U5 — `tools/check-release.sh`, run against the existing v0.1 release.
 - [ ] U6 — the bump to 0.2, the README section, and `status: done`.
 
-Next: U3 — the SHA256SUMS fallback in install.sh.
+Next: U4 — the workflow rewritten.
 
 ### What the failed run actually said
 

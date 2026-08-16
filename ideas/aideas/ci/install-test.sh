@@ -4,9 +4,15 @@
 #   ci/install-test.sh
 #
 # "An installer that was never executed is a guess." This executes it three ways — from a local
-# zip, over HTTP from a served release asset (with a checksum), and through the GitHub releases
-# API answered by a stub — and checks what landed on disk, that a second run is idempotent, and
-# that --uninstall leaves nothing behind.
+# zip, over HTTP from a served release asset, and through the GitHub releases API answered by a
+# stub — and checks what landed on disk, that a second run is idempotent, and that --uninstall
+# leaves nothing behind.
+#
+# It also covers both checksum layouts that exist in the wild, because asking for only one of
+# them is how the single published release came to install without verifying anything:
+# `<asset>.sha256`, which the release workflow uploads, and `SHA256SUMS`, which that release and
+# the other ideas in this repo publish — including a wrong digest, a sums file that does not
+# mention our asset, and the percent-encoded asset name GitHub actually serves.
 #
 # Everything happens under a throwaway XDG_DATA_HOME, so the developer's real extensions
 # directory is never touched. The one thing it cannot do is enable the extension, which needs a
@@ -186,20 +192,100 @@ else
     check "the wrong extension is rejected" "grep -q 'is not $UUID' '$WORK/other.log'"
 fi
 
-# --- 5. the releases API path -------------------------------------------------------------------
+# --- 5. the checksum layouts that exist in the wild ----------------------------------------------
+#
+# Two shapes are published: `<asset>.sha256`, which the release workflow uploads, and
+# `SHA256SUMS`, which the hand-made v0.1 release and the other ideas in this repo publish.
+# Asking only for the first is what made the one release that exists install unverified.
+echo
+echo "== a release that publishes SHA256SUMS instead of <asset>.sha256"
+SUMS="$SERVE/sums"
+mkdir -p "$SUMS"
+cp "$ZIP" "$SUMS/$UUID.shell-extension.zip"
+(cd "$SUMS" && sha256sum "$UUID.shell-extension.zip" >SHA256SUMS)
+
+rm -rf "$EXT_DIR"
+./install.sh --url "http://127.0.0.1:$PORT/sums/$UUID.shell-extension.zip" --no-enable \
+    >"$WORK/sums.log" 2>&1 || { cat "$WORK/sums.log"; exit 1; }
+check "installed" "[[ -f '$EXT_DIR/extension.js' ]]"
+check "and verified against SHA256SUMS" \
+    "grep -q 'checksum verified against SHA256SUMS' '$WORK/sums.log'"
+
+echo
+echo "== a SHA256SUMS whose digest is wrong"
+BAD="$SERVE/badsums"
+mkdir -p "$BAD"
+cp "$ZIP" "$BAD/$UUID.shell-extension.zip"
+printf '%s  %s\n' "$(printf 'a%.0s' {1..64})" "$UUID.shell-extension.zip" >"$BAD/SHA256SUMS"
+rm -rf "$EXT_DIR"
+if ./install.sh --url "http://127.0.0.1:$PORT/badsums/$UUID.shell-extension.zip" --no-enable \
+    >"$WORK/badsums.log" 2>&1; then
+    check "a wrong checksum stops the install" "false"
+else
+    check "a wrong checksum stops the install" "grep -q 'checksum mismatch' '$WORK/badsums.log'"
+    check "and nothing was installed" "[[ ! -d '$EXT_DIR' ]]"
+fi
+
+echo
+echo "== a SHA256SUMS that does not mention our asset"
+NOTOURS="$SERVE/notours"
+mkdir -p "$NOTOURS"
+cp "$ZIP" "$NOTOURS/$UUID.shell-extension.zip"
+printf '%s  %s\n' "$(printf 'b%.0s' {1..64})" "some-other-idea-x86_64" >"$NOTOURS/SHA256SUMS"
+rm -rf "$EXT_DIR"
+./install.sh --url "http://127.0.0.1:$PORT/notours/$UUID.shell-extension.zip" --no-enable \
+    >"$WORK/notours.log" 2>&1 || { cat "$WORK/notours.log"; exit 1; }
+check "an unrelated sums file is treated as no checksum, not as a mismatch" \
+    "grep -q 'no checksum published' '$WORK/notours.log'"
+check "and the install still happens, structurally checked" "[[ -f '$EXT_DIR/extension.js' ]]"
+
+echo
+echo "== the percent-encoded name GitHub actually serves"
+# GitHub's download URLs encode the @ in the uuid; the name inside SHA256SUMS does not.
+ENC="$SERVE/encoded"
+mkdir -p "$ENC"
+cp "$ZIP" "$ENC/$UUID.shell-extension.zip"
+(cd "$ENC" && sha256sum "$UUID.shell-extension.zip" >SHA256SUMS)
+rm -rf "$EXT_DIR"
+./install.sh --url "http://127.0.0.1:$PORT/encoded/aideas-shell%40patxi.gortazar.shell-extension.zip" \
+    --no-enable >"$WORK/encoded.log" 2>&1 || { cat "$WORK/encoded.log"; exit 1; }
+check "the encoded URL still finds its line in SHA256SUMS" \
+    "grep -q 'checksum verified against SHA256SUMS' '$WORK/encoded.log'"
+
+echo
+echo "== a release with no checksum at all"
+NONE="$SERVE/nochecksum"
+mkdir -p "$NONE"
+cp "$ZIP" "$NONE/$UUID.shell-extension.zip"
+rm -rf "$EXT_DIR"
+./install.sh --url "http://127.0.0.1:$PORT/nochecksum/$UUID.shell-extension.zip" --no-enable \
+    >"$WORK/none.log" 2>&1 || { cat "$WORK/none.log"; exit 1; }
+check "installs, and says it could not verify" "grep -q 'no checksum published' '$WORK/none.log'"
+check "the extension is there" "[[ -f '$EXT_DIR/extension.js' ]]"
+
+# --- 6. the releases API path --------------------------------------------------------------------
 echo
 echo "== the default path: asking the GitHub releases API"
 mkdir -p "$SERVE/repos/gortazar/aideas"
+# Newest first, as the API returns them, and carrying the tag scheme the release workflow now
+# produces: a suffixed tag for a further artefact at the same version. install.sh takes the
+# first .shell-extension.zip under an aideas-shell-v tag, so the suffixed one must win.
 cat >"$SERVE/repos/gortazar/aideas/releases" <<JSON
 [
   {"tag_name": "some-other-idea-v9.9", "assets": [
     {"browser_download_url": "http://127.0.0.1:$PORT/download/some-other-idea-v9.9/other.zip"}]},
+  {"tag_name": "aideas-shell-v0.2-2", "assets": [
+    {"browser_download_url": "http://127.0.0.1:$PORT/aideas-shell-v0.2-2/$UUID.shell-extension.zip"}]},
+  {"tag_name": "aideas-shell-v0.2", "assets": [
+    {"browser_download_url": "http://127.0.0.1:$PORT/aideas-shell-v0.2/$UUID.shell-extension.zip"}]},
   {"tag_name": "aideas-shell-v0.1", "assets": [
     {"browser_download_url": "http://127.0.0.1:$PORT/aideas-shell-v0.1/$UUID.shell-extension.zip"}]}
 ]
 JSON
-mkdir -p "$SERVE/aideas-shell-v0.1"
-cp "$ZIP" "$SERVE/aideas-shell-v0.1/$UUID.shell-extension.zip"
+for tag in aideas-shell-v0.2-2 aideas-shell-v0.2 aideas-shell-v0.1; do
+    mkdir -p "$SERVE/$tag"
+    cp "$ZIP" "$SERVE/$tag/$UUID.shell-extension.zip"
+done
 
 rm -rf "$EXT_DIR"
 # The installer's API endpoint is derived from $OWNER_REPO; point its whole base at the stub.
@@ -208,16 +294,17 @@ chmod +x "$WORK/install-stubbed.sh"
 "$WORK/install-stubbed.sh" --no-enable >"$WORK/api.log" 2>&1 ||
     { cat "$WORK/api.log"; echo "the API path failed" >&2; exit 1; }
 check "found the release asset through the API" "[[ -f '$EXT_DIR/extension.js' ]]"
-check "and picked the aideas-shell tag, not another idea's release" \
-    "grep -q 'aideas-shell-v0.1' '$WORK/api.log'"
+check "and picked the newest aideas-shell tag, suffix and all" \
+    "grep -q 'aideas-shell-v0.2-2' '$WORK/api.log'"
+check "not another idea's release" "! grep -q 'some-other-idea' '$WORK/api.log'"
 
-# --- 6. uninstall --------------------------------------------------------------------------------
+# --- 7. uninstall --------------------------------------------------------------------------------
 echo
 echo "== uninstall leaves nothing behind"
 ./install.sh --uninstall >"$WORK/uninstall.log" 2>&1
 check "the extension directory is gone" "[[ ! -d '$EXT_DIR' ]]"
 
-# --- 7. a non-GNOME session ----------------------------------------------------------------------
+# --- 8. a non-GNOME session ----------------------------------------------------------------------
 echo
 echo "== a non-GNOME session is refused politely"
 if XDG_CURRENT_DESKTOP=KDE ./install.sh --zip "$ZIP" --no-enable >"$WORK/kde.log" 2>&1; then
@@ -227,7 +314,7 @@ else
     check "and installs nothing" "[[ ! -d '$EXT_DIR' ]]"
 fi
 
-# --- 8. and none of it touched the real desktop ----------------------------------------------
+# --- 9. and none of it touched the real desktop ----------------------------------------------
 echo
 echo "== the developer's own dconf database is untouched"
 REAL_DCONF_AFTER="absent"
