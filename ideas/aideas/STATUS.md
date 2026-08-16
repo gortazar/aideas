@@ -25,16 +25,31 @@ shipped broken and stayed broken for two days without anyone being told.
       clean build and asserts one SHA-256, asserts the stored date is the epoch and the entry
       order is sorted, asserts a different `SOURCE_DATE_EPOCH` really changes the artefact, and
       compares `make pack` against `nix build`.
-      It caught what it was written for: before the fix the two packs differed, **and so did
-      `nix build` and `make pack`** — so 0.1's "byte-identical" claim held only by coincidence
-      of matching mtimes, exactly as the plan suspected.
-- [ ] U2 — `ci/release-plan.sh` and its test, against a stubbed releases API.
+      It caught what it was written for, and then two more: **modes** (zip records unix mode
+      bits, so umask 002 here and 022 in a sandbox pack identical files differently) and
+      **timezone** (a zip entry's timestamp is stored as local time with no zone, so the same
+      epoch became 00:00 in the sandbox and 01:00 on this CET laptop). All three are fixed and
+      `nix build` now produces the artefact `make pack` does, byte for byte. 0.1's
+      "byte-identical" claim had held only by coincidence of matching mtimes.
+- [x] **U2 — the decision, as a tested script.** `ci/release-plan.sh` decides — from the
+      version, the status, the releases list and the built artefact — whether to publish and
+      under which tag, printing `publish`/`tag`/`reason` for a workflow to consume and its
+      reasoning on stderr. It publishes only when `status: done`; refuses when `STATUS.md` and
+      `metadata.json` disagree about the version; compares the built artefact against the
+      newest published one by the API's `digest`, falling back to downloading it; and names the
+      tag `aideas-shell-v<version>`, then `-2`, `-3` as artefacts change within a version.
+      `ci/release-test.sh` drives it over fixture JSON — **19 checks**, no network, no GitHub:
+      not-done, empty list, first release of a version, identical bytes, second and third
+      artefacts at one version, other ideas' tags in the list, a release with no digest, a
+      failed download, a tag with no zip asset, disagreeing versions, and four kinds of bad
+      input. Also run against the **real** releases list from the GitHub API, where it read the
+      live `digest` and correctly proposed `aideas-shell-v0.1-2` for the reproducible rebuild.
 - [ ] U3 — the `SHA256SUMS` fallback in `install.sh`, verified against the live v0.1 layout.
 - [ ] U4 — the workflow rewritten around `nix build`, the flake checks and `release-plan.sh`.
 - [ ] U5 — `tools/check-release.sh`, run against the existing v0.1 release.
 - [ ] U6 — the bump to 0.2, the README section, and `status: done`.
 
-Next: U2 — ci/release-plan.sh and its test.
+Next: U3 — the SHA256SUMS fallback in install.sh.
 
 ### What the failed run actually said
 
