@@ -15,8 +15,13 @@ last_run:
 - [x] M0a — `docs/similar-tools.md`: eleven tools read from source, plus `tools/wayland-globals.sh`
       and its committed output proving GNOME 46 here has no session-management Wayland global
 
-Next: M0b — the probe: what a real window and its `/proc` tree expose on this machine, captured as
-fixtures.
+- [x] M0b — `docs/platform-findings.md` + `tools/proc-probe.py` + `tools/nested-shell.sh`: the
+      terminal question answered against a real `gnome-terminal` (tabs are enumerable from `/proc`;
+      the foreground job is the descendant whose pgrp equals the session leader's `tpgid`), with two
+      committed process-tree fixtures
+
+Next: M1 — the skeleton: flake, pytest, CI, and a daemon and extension that talk over D-Bus well
+enough for `restore-wss status` to print an empty session.
 
 ## Findings that change the plan
 
