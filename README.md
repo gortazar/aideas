@@ -49,28 +49,16 @@ makes position a safe identity: the active list only ever holds work still to do
 
 ## Ideas
 
-1. [Restore workspaces](ideas/restore-wss/) - The goal of this tool is to restore all the workspaces as they were before the system powered off or rebooted.
-   The tool needs to record which apps were open on which workspace, and restore all of them. The restoration must left the different workspaces as they
-   were before the power off or reboot. If needed, the user can be asked about information that cannot be collected automatically, or
-   that cannot be collected with confidence. A config file must be stored in the home folder of the user in a dedicated hidden folder (such as .restore-wss)
-   and it must contain all the information needed to restore the workspaces. First, an in-depth study of similar tools must be done and reported as a markdown
-   file in the idea folder. The tool must support:
-   * Restoring apps opened and which file or folder are they working on. For instance, libreoffice with a "Thesis" document opened, or a Codium instance
-     with a my-app folder opened.
-   * Restoring command line apps and the commands with which they were started and from where. For instance, a terminal running an ssh session with a my-host node, or a claude session 
-     started with claude -r or claude -n from a my-repo folder.
-   * Restoring which vpn was active if any 
-
-2. [Restore workspaces](ideas/restore-wss) - Support for restoring browsers and the tabs that were open inside them (may require a browser extension). First, an in-depth research
+1. [Restore workspaces](ideas/restore-wss) - Support for restoring browsers and the tabs that were open inside them (may require a browser extension). First, an in-depth research
    must be done to find similar extensions that could be used as-is, and this report is to be written in the idea folder as "browser-extensions-research.md".
 
-3. [vacas](ideas/vacas/) - A Firefox extension that is activated on demand by user, and tracks user's requests for Rentalia's holidays rental site. It will store locally which 
+2. [vacas](ideas/vacas/) - A Firefox extension that is activated on demand by user, and tracks user's requests for Rentalia's holidays rental site. It will store locally which 
    places were asked for availability, on which dates, and if the same place appears again in a new search with the same dates, it alerts the user that it was already contacted.
    The extension will store as well the text that was sent. In order to build vacas, the Rentalia web must be researched in search of placeholders to use for detecting the contact form of
    each place contacted, extract the dates, the text and detect when the send button of the contact form has been pushed, to store the info. If the button is not pressed, we
    can't assume the place has been contacted and no info is stored for that place.
 
-4. [aideas](ideas/aideas/) - Build a release workflow to run every time changes are made to aideas gnome shell extension that publishes the extension as required
+3. [aideas](ideas/aideas/) - Build a release workflow to run every time changes are made to aideas gnome shell extension that publishes the extension as required
    by the install script. As a result of this change a new release of the extension must be made available in this repo. Minor version.
 
 ## Finished
@@ -138,3 +126,15 @@ makes position a safe identity: the active list only ever holds work still to do
 11. [lo-pert](ideas/lo-pert) - A LibreOffice plugin to build Pert diagrams. It must provide states (circles with two numbers on the upper half, and one (finished 2026-08-17, v0.1)
    on the lower one), and actions (links that start on a state and end on another state and have a label). The plugin must support building
    automatically a pert diagram out of a precedence table, calculating the early and late times for each state. 
+
+12. [Restore workspaces](ideas/restore-wss/) - The goal of this tool is to restore all the workspaces as they were before the system powered off or rebooted. (finished 2026-08-17, v0.1)
+   The tool needs to record which apps were open on which workspace, and restore all of them. The restoration must left the different workspaces as they
+   were before the power off or reboot. If needed, the user can be asked about information that cannot be collected automatically, or
+   that cannot be collected with confidence. A config file must be stored in the home folder of the user in a dedicated hidden folder (such as .restore-wss)
+   and it must contain all the information needed to restore the workspaces. First, an in-depth study of similar tools must be done and reported as a markdown
+   file in the idea folder. The tool must support:
+   * Restoring apps opened and which file or folder are they working on. For instance, libreoffice with a "Thesis" document opened, or a Codium instance
+     with a my-app folder opened.
+   * Restoring command line apps and the commands with which they were started and from where. For instance, a terminal running an ssh session with a my-host node, or a claude session 
+     started with claude -r or claude -n from a my-repo folder.
+   * Restoring which vpn was active if any 

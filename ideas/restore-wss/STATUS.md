@@ -1,12 +1,14 @@
-status: done
+status: not_started
 version: 0.1
 started_at: 2026-08-16
 last_session_id: ebf1ecd2-6691-4213-9815-2f9920396ad5
-last_run: 2026-08-16T22:39:18+02:00
-last_cycle_cost_usd: 20.323337000000002
+last_run: 2026-08-17T01:17:09+02:00
+last_cycle_cost_usd: 9.534980500000001
 
 ## Log
+- 2026-08-17T01:17:09+02:00 — done ($9.534980500000001)
 - 2026-08-16T22:39:18+02:00 — in_progress ($20.323337000000002)
+
 
 ## Units
 - [x] Upstream repository created (`gortazar/restore-wss`), pinned here as the `upstream` submodule
