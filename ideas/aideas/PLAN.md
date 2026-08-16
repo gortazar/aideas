@@ -153,21 +153,22 @@ Units, each one commit, tests first:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **Should a change merged while the idea is still `in_progress` publish a release?** The entry
+- [x] **Should a change merged while the idea is still `in_progress` publish a release?** The entry
       says "every time changes are made", and the plan assumes yes: any push to `main` that changes
       the packed artefact and passes the full suite publishes, so the newest release is always the
       newest working extension. The alternative is to keep the v0.1 gate — publish only when
       `STATUS.md` says `status: done` — which means the release is always a finished entry, at the
       cost of "every change" not being literally true, since the orchestrator merges mid-build work
-      to `main` every cycle. Ticking this line as-is chooses publishing on every green change.
-- [ ] **When the artefact changes but the version does not, what should the release be called?**
+      to `main` every cycle. Ticking this line as-is chooses publishing on every green change. No, releases
+      are made when the task is done.
+- [x] **When the artefact changes but the version does not, what should the release be called?**
       The plan assumes a suffixed tag — `aideas-shell-v0.2-2`, `-3` — so every published artefact
       keeps its own immutable tag and the installer's "newest first" rule picks the right one. The
       alternatives are (b) replace the assets on the existing `aideas-shell-v0.2` release in place,
       which keeps one release per version but makes a tag mean two different zips over time, or
       (c) publish nothing until the version is bumped, which makes releases per-entry again.
-      Ticking this line as-is chooses the suffixed tag.
-- [ ] **What counts as proof that the release exists, given no agent can publish one?** AGENTS.md
+      Ticking this line as-is chooses the suffixed tag. Suffixed tag.
+- [x] **What counts as proof that the release exists, given no agent can publish one?** AGENTS.md
       requires downloading the published asset and running the installer from a clean directory
       before an entry is done, but the release is created by the workflow *after* the merge, which
       is after the last cycle ends. The plan assumes: `ci/install-test.sh` against the locally built
