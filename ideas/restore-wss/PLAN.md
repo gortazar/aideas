@@ -221,34 +221,34 @@ nested headless Shell attempted in CI but treated as a risk rather than a plan.
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] How should `restore-wss` relate to `gnome-tasks` (idea 2)? They need the same window-capture
+- [x] How should `restore-wss` relate to `gnome-tasks` (idea 2)? They need the same window-capture
       extension, the same app adapters and the same placement logic, differing mainly in what
       triggers a restore (a reboot versus a task switch). Options: (a) build `restore-wss`
       standalone and accept the duplication, (b) build it as a client of the `gnome-tasks` daemon,
       treating "the session at shutdown" as an implicit task, (c) extract the shared capture/restore
-      core into a component both use. Which?
-- [ ] Should restore happen automatically at the first login after a reboot, or only when the user
+      core into a component both use. Which? c
+- [x] Should restore happen automatically at the first login after a reboot, or only when the user
       runs `restore-wss restore` (or clicks a notification)? Automatic is what "restore the
       workspaces" literally asks for, but it launches a dozen apps and possibly commands
-      unattended, which is a lot to do to someone who just wanted to check their email.
-- [ ] Is the command re-run policy right? The plan defaults to `whitelist` — reopen every terminal
+      unattended, which is a lot to do to someone who just wanted to check their email. Make it configurable.
+- [x] Is the command re-run policy right? The plan defaults to `whitelist` — reopen every terminal
       at its correct working directory, but only re-execute commands whose program is on an
       allow-list (`ssh`, `claude`, editors, …), offering the rest in the review step. Is that the
-      wanted default, or should captured commands always be re-run, or never?
-- [ ] Which VPN setups actually need supporting on this machine — NetworkManager connections only,
+      wanted default, or should captured commands always be re-run, or never? that's the desired behavior.
+- [x] Which VPN setups actually need supporting on this machine — NetworkManager connections only,
       or also `wg-quick`, `tailscale`, or an `openvpn`/`openconnect` invocation? Supporting only NM
-      is a fraction of the work.
-- [ ] What should the interactive review look like: a terminal TUI (fine when the user runs
+      is a fraction of the work. network manager only
+- [x] What should the interactive review look like: a terminal TUI (fine when the user runs
       `restore` themselves, wrong for an automatic login restore), a GTK/libadwaita dialog, or a
-      GNOME notification that opens one? This follows from the automatic-versus-manual answer.
-- [ ] Should only the latest snapshot be kept, or a short history the user can restore from
+      GNOME notification that opens one? This follows from the automatic-versus-manual answer.gtk libadwaita 
+- [x] Should only the latest snapshot be kept, or a short history the user can restore from
       ("yesterday morning's workspaces"), and should the user be able to save a snapshot under a
-      name and restore it deliberately? History is cheap to store but adds a whole selection UX.
-- [ ] What is the daemon written in? The extension must be GJS (compositor access), but the daemon
+      name and restore it deliberately? History is cheap to store but adds a whole selection UX. no history
+- [x] What is the daemon written in? The extension must be GJS (compositor access), but the daemon
       does `/proc` parsing, D-Bus and NetworkManager work where Python 3 + PyGObject is the boring,
       well-supported choice. The alternative is GJS everywhere so the two halves share code — which
-      also matters for the first question above. Preference?
-- [ ] Does "restore the workspaces as they were" include restoring the *desktop-level* state around
+      also matters for the first question above. Preference? Python 
+- [x] Does "restore the workspaces as they were" include restoring the *desktop-level* state around
       them — workspace names, which workspace was active, and window stacking/focus order — or only
       which apps are where? The plan captures active workspace and stacking but treats names and
-      exact focus order as best-effort.
+      exact focus order as best-effort. Whatever is possible without a huge effort
