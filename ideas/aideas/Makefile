@@ -83,9 +83,15 @@ check-bundle: build
 # byte-different copy of an identical extension forever.
 pack: build check-bundle
 	rm -f $(BUILD)/$(UUID).shell-extension.zip
+	# Modes as well as times: zip records the unix mode bits, so a developer's umask of 002
+	# and a build sandbox's 022 produce different archives from identical files.
+	find $(BUNDLE) -type f -exec chmod 644 {} +
+	find $(BUNDLE) -type d -exec chmod 755 {} +
 	find $(BUNDLE) -exec touch -h -d @$(SOURCE_DATE_EPOCH) {} +
+	# TZ=UTC because a zip entry's timestamp is stored as *local* time with no zone: the same
+	# epoch packs as 00:00 in the sandbox and 01:00 on a CET laptop without this.
 	cd $(BUNDLE) && find . -type f -printf '%P\n' | LC_ALL=C sort | \
-	    zip -qX -D -@ ../$(UUID).shell-extension.zip
+	    TZ=UTC zip -qX -D -@ ../$(UUID).shell-extension.zip
 	@echo "packed: $(BUILD)/$(UUID).shell-extension.zip"
 	@sha256sum $(BUILD)/$(UUID).shell-extension.zip
 
