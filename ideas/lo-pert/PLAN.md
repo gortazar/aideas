@@ -134,10 +134,10 @@ Three layers, all runnable headless:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] Which number goes where in the state circle? The plan assumes upper-left = early time, upper-right = late time, lower = event number. The other common convention puts the event number on top and the two times below. Which one is intended?
-- [ ] Where does the precedence table live? Options: a selected cell range in a Calc sheet (the diagram then goes to a new Draw document), a table typed into a dialog inside Draw, or a CSV/text file picked from disk. Which is the primary input — and are the others in scope at all?
-- [ ] Is Draw the only target application, or must the extension also work in Impress (same drawing API) and be launchable from Calc where the table lives?
-- [ ] What exactly does an action's label show — the activity identifier only, or identifier plus duration (e.g. `A(3)`)? And does "PERT" here mean the three-estimate form (optimistic / most likely / pessimistic, combined into an expected duration), or a single duration per activity as in CPM?
-- [ ] Is the diagram generated once and then freely hand-editable, or must it stay linked to its precedence table so that editing a duration recomputes the times in place? The second is a substantially larger piece of work.
-- [ ] Should the critical path (and per-event slack) be marked in the drawing? It falls straight out of the early/late times, but the idea does not ask for it, so it is not in *Features* until you say so.
-- [ ] Is publishing to extensions.libreoffice.org required for "installable", or is a GitHub release carrying the `.oxt` plus the `install.sh` one-liner enough?
+- [x] Which number goes where in the state circle? The plan assumes upper-left = early time, upper-right = late time, lower = event number. The other common convention puts the event number on top and the two times below. Which one is intended? assumption is right 
+- [x] Where does the precedence table live? Options: a selected cell range in a Calc sheet (the diagram then goes to a new Draw document), a table typed into a dialog inside Draw, or a CSV/text file picked from disk. Which is the primary input — and are the others in scope at all? calc
+- [x] Is Draw the only target application, or must the extension also work in Impress (same drawing API) and be launchable from Calc where the table lives? impress as well
+- [x] What exactly does an action's label show — the activity identifier only, or identifier plus duration (e.g. `A(3)`)? And does "PERT" here mean the three-estimate form (optimistic / most likely / pessimistic, combined into an expected duration), or a single duration per activity as in CPM? id plus duration, a single expected duration for now
+- [x] Is the diagram generated once and then freely hand-editable, or must it stay linked to its precedence table so that editing a duration recomputes the times in place? The second is a substantially larger piece of work. It's generated once
+- [x] Should the critical path (and per-event slack) be marked in the drawing? It falls straight out of the early/late times, but the idea does not ask for it, so it is not in *Features* until you say so. Yes
+- [x] Is publishing to extensions.libreoffice.org required for "installable", or is a GitHub release carrying the `.oxt` plus the `install.sh` one-liner enough? GH release plus install for now
