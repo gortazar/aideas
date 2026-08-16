@@ -1,79 +1,116 @@
-status: in_progress
+status: done
 version: 0.1
 started_at: 2026-08-16
 last_session_id: ebf1ecd2-6691-4213-9815-2f9920396ad5
-last_run: 2026-08-17T01:06:32+02:00
-last_cycle_cost_usd: 6.9443265
+last_run: 2026-08-16T22:39:18+02:00
+last_cycle_cost_usd: 20.323337000000002
 
 ## Log
-- 2026-08-17T01:06:32+02:00 — in_progress ($6.9443265)
-- 2026-08-17T00:51:48+02:00 — in_progress ($38.213336000000005)
 - 2026-08-16T22:39:18+02:00 — in_progress ($20.323337000000002)
-
-
-
 
 ## Units
 - [x] Upstream repository created (`gortazar/restore-wss`), pinned here as the `upstream` submodule
 - [x] M0a — `docs/similar-tools.md`: eleven tools read from source, plus `tools/wayland-globals.sh`
       and its committed output proving GNOME 46 here has no session-management Wayland global
-
 - [x] M0b — `docs/platform-findings.md` + `tools/proc-probe.py` + `tools/nested-shell.sh`: the
-      terminal question answered against a real `gnome-terminal` (tabs are enumerable from `/proc`;
-      the foreground job is the descendant whose pgrp equals the session leader's `tpgid`), with two
-      committed process-tree fixtures
+      terminal question answered against a real `gnome-terminal`, with two committed process-tree
+      fixtures
+- [x] M1 — skeleton: `flake.nix` (unit, D-Bus, ruff and extension-syntax checks), `Makefile`, CI,
+      the `org.gnome.SessionCore` extension, the `org.gnome.RestoreWss` daemon, `restore-wss status`
+- [x] M2 — capture and crash-safe snapshot storage (temp + fsync + rename, previous generation
+      retained, torn file falls back)
+- [x] M3 — restore: the ported window matcher, the idempotent plan, the extension's placement and
+      launch methods, `restore-wss restore` with `--dry-run`/`--yes`/`--json`
+- [x] M4 — documents: the per-application adapter table, five sources in order of preference, a
+      confidence on each, and readers for both recent-document stores
+- [x] M5 — terminals and commands: `/proc` capture of tabs, working directories and foreground
+      jobs; capture-time redaction; the `never`/`whitelist`/`always` policy with its two overrides;
+      terminal restore as argv with no shell
+- [x] M6 — VPN: NetworkManager only, identity only, `needs-you` rather than failure when it wants
+      a password
+- [x] M7 — the GTK/libadwaita review window, the systemd user unit and login check, `list` and
+      `diff`, the four documentation deliverables, the README, the installer and the v0.1 release
 
-- [x] M1 — skeleton: `flake.nix` (unit, D-Bus, ruff and extension-syntax checks), `Makefile`, CI in
-      the upstream repo, the `org.gnome.SessionCore` extension and the `org.gnome.RestoreWss`
-      daemon, `restore-wss status`
-- [x] M2 — capture and crash-safe snapshot: `~/.restore-wss/state/session.json` written temp +
-      fsync + rename with a retained previous generation, capture rules tested against fixtures,
-      and a D-Bus test proving the daemon writes a change nobody asked it to write
+**Green:** `nix flake check` upstream — 174 unit tests, 9 D-Bus tests on a private bus, ruff,
+extension syntax. Green in GitHub Actions too (CI and Release workflows on the v0.1 tag).
+`nix flake check` here — the pinned commit's unit suite plus a deliverables check;
+`scripts/check-pin.sh` passes.
 
-- [x] M3 — restore: the ported window matcher, the restore plan (idempotent, monitor-relative
-      geometry, ambiguity refused rather than guessed), the extension's placement and launch
-      methods, and `restore-wss restore` with `--dry-run`, `--yes` and `--json`
+## What "done" covers
 
-**Green:** `nix flake check` — 71 unit tests, 9 D-Bus tests on a private bus, ruff, extension
-syntax. **`tools/smoke-nested.sh`: all 8 checks pass** against a real headless GNOME Shell 46 with
-`gnome-terminal` (run 2026-08-17): the extension answers over D-Bus, the daemon captures a window
-move unprompted, and after the application is killed `restore-wss restore` launches it again and
-puts it back on the workspace and at the position it was captured on. The application rounded
-700x500 down to 694x489 — a terminal snapping to its character grid, which is the "the app's own
-size constraints win" finding from M0, observed again.
+Every feature in `PLAN.md` is built, tested and released as **v0.1**, installable with:
 
-- [x] M5 — terminals and commands: `/proc` process-tree capture (tabs, per-tab cwd, foreground
-      job), capture-time redaction, the `never`/`whitelist`/`always` policy with its two overrides,
-      `config.toml`, and terminal restore that reopens every tab at its directory and re-runs a
-      command only when the policy allows it
+```console
+curl -fsSL https://raw.githubusercontent.com/gortazar/restore-wss/main/install.sh | sh
+```
 
-**Green:** `nix flake check` — 127 unit tests, 9 D-Bus tests, ruff, extension syntax.
+| Feature | Where |
+| --- | --- |
+| In-depth study of prior art | `docs/similar-tools.md` — eleven tools read from source, each with what it cannot do and what this takes from it |
+| Continuous session capture | extension signals → daemon, debounced and rate-limited; never a logout hook |
+| Crash-safe snapshot storage | `src/restore_wss/storage.py`: temp + fsync + rename, `session.prev.json`, mode 0700 |
+| Documents, tiered by app | `src/restore_wss/documents.py` + `recentfiles.py`, confidence per source |
+| Command-line session capture | `procwalk.py` + `terminals.py`: tabs, per-tab cwd, foreground job, redaction at capture time |
+| Command restore with a confirmation gate | `policy.py`: whitelist by default, deny-list and redaction override the mode in both directions |
+| Workspace-faithful restore | `plan.py` + `restore.py` + `src/extension/placement.js`; idempotent, monitor-relative geometry |
+| Interactive review | `review.py`, GTK4/libadwaita; screenshot in the README |
+| VPN capture and restore | `vpn.py`, NetworkManager only |
+| CLI | `status`, `save`, `list`, `diff`, `restore`, `daemon`, `login-check`, `--json` on the read-only ones |
+| Login integration | `data/systemd/restore-wss.service` + `data/autostart/…`; boot-id comparison in `login.py` |
+| Exclusions, pause, privacy | `config.toml`; nothing leaves the machine; state dir 0700 |
+| Reproducible environment + green CI | `flake.nix` upstream and here; `.github/workflows/ci-restore-wss.yml` |
+| README with real evidence | install command first, worked example, screenshot, six documents |
 
-- [x] M4 — documents (tier 1): the per-application adapter table, five sources in order of
-      preference, a confidence on each, and readers for both recent-document stores — checked
-      against the real files here (400 freedesktop entries; 25 in LibreOffice's own picklist)
+### Verified against real things, not only fakes
 
-**Green:** `nix flake check` — 148 unit tests, 9 D-Bus tests, ruff, extension syntax.
+* **`tools/smoke-nested.sh`: all 8 checks passed** on a real headless GNOME Shell 46 with
+  `gnome-terminal` — capture, an unprompted write, and a full restore that put the window back on
+  the workspace and at the position it was captured on (the terminal rounded 700x500 to 694x489,
+  its character grid, which is the "the app's own size wins" finding observed again).
+* **The published installer was run from a clean directory** against the real release asset:
+  checksum verified, CLI, extension, unit and autostart entry installed, `restore-wss --version`,
+  `list` and `status` all correct.
+* **NetworkManager** was read on this machine: one active VPN, 28 known connections.
+* **Both recent-document stores** were read here: 400 freedesktop entries across 12 applications,
+  and 25 entries in LibreOffice's own picklist.
+* The **review window** was rendered and screenshotted in a nested session.
 
-- [x] M6 — VPN: NetworkManager only, identity only (uuid/name/type, never a credential), polled at
-      most every 30 s; restore activates by UUID, leaves a connected VPN alone, and reports one
-      that wants a password as `needs-you` rather than as a failure. Verified read-only against
-      the real NetworkManager here (1 active VPN, 28 known connections).
+### What is built but not verified
 
-**Green:** `nix flake check` — 157 unit tests, 9 D-Bus tests, ruff, extension syntax.
+Stated plainly, because "done" should not imply more than was checked:
 
-Next: M7 — the systemd user unit and login integration, the docs deliverables
-(`state-schema.md`, `app-adapters.md`, `limitations.md`, `shared-core.md`), the README with the
-install command, and the release + installer.
+* **The smoke test was last run in full at M3.** M4–M7 (documents, terminals, VPN, the review
+  window) are covered by unit and D-Bus tests and by the individual real-world checks above, but
+  the eight-step end-to-end script has not been re-run since; the session was asked to stop before
+  it did. Re-running `tools/smoke-nested.sh` is the first thing to do if this is picked up again.
+* **Nobody has installed this into a real logged-in session.** The extension has only run in a
+  nested Shell; `make install` plus a log out needs the machine's owner.
+* **LibreOffice and Codium capture were never exercised**: both are snaps here, and snapd refuses
+  to launch a confined app into the nested session. The LibreOffice *picklist reader* was checked
+  against the real file; the window-to-document correlation was not.
+* **Connector stability across a real replug** is untested — one virtual monitor in the harness.
+* **Which terminal window owns which tab** is an open gap, documented in `docs/limitations.md`:
+  with two terminal windows open, tabs may be grouped onto the wrong window.
 
-## Findings that change the plan
+## Findings that changed the plan
 
 - `xx_session_management_v1` has been renamed and promoted: it is `xdg-session-management-v1` in
   wayland-protocols *staging* since 2026-03-23. Mutter has implemented it since the `gnome-47`
   branch (storing state in a GVDB file), KWin since 2026-04. **Not on this machine** — GNOME 46's
   registry advertises no such global (`docs/probe-data/wayland-globals.txt`) — and still opt-in per
-  application everywhere, so the introspection design stands; the schema will reserve a field for
-  windows that restore themselves.
+  application everywhere, so the introspection design stood; the schema reserves
+  `session_protocol` for windows that restore themselves.
 - The command-replay allow-list is not excessive caution: `i3-restore` and `tmux-resurrect` both
-  landed on the same answer, while Another Window Session Manager and `i3-resurrect` replay captured
-  command lines through a shell unreviewed.
+  landed on the same answer, while Another Window Session Manager and `i3-resurrect` replay
+  captured command lines through a shell unreviewed.
+- Terminal tabs *are* enumerable from `/proc` with no help from the emulator, which made multi-tab
+  capture possible — a risk `PLAN.md` flagged and the probe retired.
+- LibreOffice does not write to `recently-used.xbel`; the headline "Thesis in LibreOffice" case
+  needs its own picklist reader.
+- Two in-process D-Bus deadlocks shaped the code: an extension cannot call
+  `org.gnome.Mutter.DisplayConfig` synchronously (mutter serves it), and a test cannot call a
+  service it hosts itself.
+
+Difficulty estimate: **hard**, as `PLAN.md` said — two processes, a platform that hides what the
+idea needs, and security-sensitive replay. The prior-art study and the `/proc` probe are what made
+it tractable.
