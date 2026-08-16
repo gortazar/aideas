@@ -1,0 +1,5 @@
+# Every idea's first entry appends its submodule to this one shared file, so two agents
+# doing their first build in the same cycle both touch it and the second merge conflicts —
+# their branches are otherwise disjoint. The sections are per-idea and append-only, so
+# taking both sides is always the right answer here.
+.gitmodules merge=union
