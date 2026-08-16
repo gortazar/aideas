@@ -23,8 +23,11 @@
     in
     {
       devShells = forAllSystems (pkgs: {
+        # Just enough to check the wrapper: the pin check needs git and jq, and nothing
+        # here renders anything. Developing the extension itself means `nix develop` in
+        # upstream/, which brings the pinned quarto with it.
         default = pkgs.mkShell {
-          packages = [ pkgs.quarto pkgs.pandoc pkgs.git pkgs.jq ];
+          packages = [ pkgs.git pkgs.jq ];
         };
       });
 
