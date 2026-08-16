@@ -47,6 +47,24 @@ need() {
     command -v "$1" >/dev/null 2>&1 || die "$1 is required but not installed"
 }
 
+# The digest for our asset out of a SHA256SUMS file, or nothing.
+#
+# The name in the URL is percent-encoded (`aideas-shell%40patxi…`) while the name inside
+# SHA256SUMS is not, so both spellings are tried. Failing that, a sums file listing exactly one
+# `.shell-extension.zip` is unambiguous enough to use — a release publishes one extension.
+checksum_from_sums() {
+    sums="$1"
+    encoded="${2##*/}"
+    plain=$(printf '%s' "$encoded" | sed 's/%40/@/g; s/%2[bB]/+/g')
+
+    found=$(awk -v a="$encoded" -v b="$plain" '$2 == a || $2 == b { print $1; exit }' "$sums")
+    if [ -z "$found" ] &&
+        [ "$(grep -c '\.shell-extension\.zip$' "$sums" 2>/dev/null || echo 0)" = "1" ]; then
+        found=$(awk '/\.shell-extension\.zip$/ { print $1; exit }' "$sums")
+    fi
+    printf '%s' "$found"
+}
+
 # --- uninstall -------------------------------------------------------------------------------
 
 if [ "${UNINSTALL:-no}" = yes ]; then
@@ -113,16 +131,47 @@ Check https://github.com/$OWNER_REPO/releases, or pass --url."
     curl -fsSL --retry 3 -o "$WORK/extension.zip" "$URL" ||
         die "could not download $URL"
 
-    # A checksum if the release published one next to the asset. Absent is not an error: the
-    # structural check below still refuses anything that is not this extension.
-    if curl -fsSL --retry 2 -o "$WORK/extension.zip.sha256" "$URL.sha256" 2>/dev/null; then
-        if command -v sha256sum >/dev/null 2>&1; then
-            expected=$(cut -d' ' -f1 <"$WORK/extension.zip.sha256")
-            actual=$(sha256sum "$WORK/extension.zip" | cut -d' ' -f1)
-            [ "$expected" = "$actual" ] ||
-                die "checksum mismatch: expected $expected, got $actual. Refusing to install."
-            say "aideas: checksum verified"
-        fi
+    # A checksum, if the release published one. Two shapes are accepted, because two exist:
+    # `<asset>.sha256`, which the release workflow uploads, and `SHA256SUMS`, which the v0.1
+    # release and the other ideas in this repo publish. Asking only for the first is what made
+    # the one release that exists install without verifying anything.
+    #
+    # An absent checksum is not an error — the structural checks below still refuse anything
+    # that is not this extension — but a checksum that is present and wrong stops the install.
+    expected=""
+    from=""
+    if curl -fsSL --retry 2 -o "$WORK/asset.sha256" "$URL.sha256" 2>/dev/null; then
+        expected=$(cut -d' ' -f1 <"$WORK/asset.sha256")
+        from="${URL##*/}.sha256"
+    elif curl -fsSL --retry 2 -o "$WORK/SHA256SUMS" "${URL%/*}/SHA256SUMS" 2>/dev/null; then
+        expected=$(checksum_from_sums "$WORK/SHA256SUMS" "$URL")
+        from="SHA256SUMS"
+    fi
+
+    case "$expected" in
+        # A sha256 and nothing else. Anything shorter, longer or non-hex means the file was
+        # not what it looked like, and is treated as no checksum at all rather than as a
+        # mismatch — refusing to install over a malformed sums file would be a poor trade.
+        [0-9a-fA-F][0-9a-fA-F]*)
+            if [ "${#expected}" -ne 64 ]; then
+                warn "aideas: $from does not hold a sha256 — installing without verifying"
+                expected=""
+            fi
+            ;;
+        *)
+            [ -n "$expected" ] && warn "aideas: could not read a checksum from $from"
+            expected=""
+            ;;
+    esac
+
+    if [ -n "$expected" ] && command -v sha256sum >/dev/null 2>&1; then
+        actual=$(sha256sum "$WORK/extension.zip" | cut -d' ' -f1)
+        [ "$expected" = "$actual" ] ||
+            die "checksum mismatch: $from says $expected, the download is $actual.
+Refusing to install."
+        say "aideas: checksum verified against $from"
+    elif [ -z "$expected" ]; then
+        say "aideas: no checksum published for this release — installing unverified"
     fi
 fi
 

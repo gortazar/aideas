@@ -9,8 +9,13 @@ REPO    := ../..
 
 GJS ?= gjs
 
+# 1980-01-01 00:00:00 UTC — the earliest a zip can record, and exactly what nixpkgs' stdenv
+# exports, so `make pack` here and `nix build` in the sandbox produce the same bytes.
+SOURCE_DATE_EPOCH ?= 315532800
+
 .PHONY: help check lint test test-unit test-http test-contract build check-bundle pack install \
-        uninstall enable disable prefs logs smoke test-install clean
+        uninstall enable disable prefs logs smoke test-install test-pack test-release \
+        check-release clean
 
 help:
 	@echo "aideas — the orchestrator's state in the GNOME top bar"
@@ -26,6 +31,9 @@ help:
 	@echo "  make install        install and enable it in this session"
 	@echo "  make smoke          end-to-end test in a nested headless Shell"
 	@echo "  make test-install   run install.sh for real, from a clean directory"
+	@echo "  make test-pack      the artefact is a function of the source alone"
+	@echo "  make test-release   the release decision, over fixture releases lists"
+	@echo "  make check-release  ask GitHub whether the published release is really there"
 
 check: lint test check-bundle
 
@@ -70,10 +78,26 @@ check-bundle: build
 # so this zips that, rather than asking `gnome-extensions pack` to assemble it a second time
 # from a different set of rules. It also keeps the whole gnome-shell closure out of the release
 # workflow, which only needs zip and glib-compile-schemas.
+#
+# Reproducible, deliberately: the same source must give the same bytes, on this laptop and on a
+# runner. Three things would otherwise vary — the mtimes `cp` stamps on every copied file, the
+# readdir order `zip -r` walks in, and the uid/gid and extended timestamps zip stores by
+# default. The release workflow decides whether to publish by comparing this artefact against
+# the published one, so without this every run would look like a change and publish a
+# byte-different copy of an identical extension forever.
 pack: build check-bundle
 	rm -f $(BUILD)/$(UUID).shell-extension.zip
-	cd $(BUNDLE) && zip -qr ../$(UUID).shell-extension.zip .
+	# Modes as well as times: zip records the unix mode bits, so a developer's umask of 002
+	# and a build sandbox's 022 produce different archives from identical files.
+	find $(BUNDLE) -type f -exec chmod 644 {} +
+	find $(BUNDLE) -type d -exec chmod 755 {} +
+	find $(BUNDLE) -exec touch -h -d @$(SOURCE_DATE_EPOCH) {} +
+	# TZ=UTC because a zip entry's timestamp is stored as *local* time with no zone: the same
+	# epoch packs as 00:00 in the sandbox and 01:00 on a CET laptop without this.
+	cd $(BUNDLE) && find . -type f -printf '%P\n' | LC_ALL=C sort | \
+	    TZ=UTC zip -qX -D -@ ../$(UUID).shell-extension.zip
 	@echo "packed: $(BUILD)/$(UUID).shell-extension.zip"
+	@sha256sum $(BUILD)/$(UUID).shell-extension.zip
 
 # --- install -------------------------------------------------------------------------------
 
@@ -106,6 +130,17 @@ smoke:
 # nor the real dconf database is touched.
 test-install:
 	./ci/install-test.sh
+
+test-pack:
+	./ci/pack-test.sh
+
+test-release:
+	./ci/release-test.sh
+
+# Run this *after* a merge reaches main: it is what says whether the release actually
+# published, which no test in this repo can know beforehand.
+check-release:
+	./tools/check-release.sh
 
 clean:
 	rm -rf $(BUILD)
