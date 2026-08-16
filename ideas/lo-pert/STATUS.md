@@ -1,8 +1,12 @@
 status: done
 version: 0.1
 started_at: 2026-08-16
-last_session_id:
-last_run:
+last_session_id: 5cd14740-5e02-4bd6-ba13-af3c70e03e4b
+last_run: 2026-08-17T00:51:48+02:00
+last_cycle_cost_usd: 6.690109500000002
+
+## Log
+- 2026-08-17T00:51:48+02:00 — done ($6.690109500000002)
 
 Difficulty estimate: hard, as planned. The graph work (dummy activities, event
 identity, numbering) and the extension packaging were each about as much trouble as
@@ -10,8 +14,6 @@ expected; the two things that could have sunk the design — PyUNO under nix, an
 connectors gluing to grouped shapes — were settled in the M0 spike and cost nothing
 afterwards.
 
-## Log
-<!-- Newest entries on top. The orchestrator prepends here after each cycle. -->
 
 2026-08-16 — **0.1 done, released and verified installable.**
 [v0.1](https://github.com/gortazar/lo-pert/releases/tag/v0.1) carries
@@ -32,9 +34,6 @@ survive an .odg round trip. The pure core has its first piece (precedence table
 parsing and validation) upstream and green.
 
 ## Units
-<!-- The honest progress report: one line per unit of work, ticked only once it is
-     committed with its tests passing. Refresh this at every unit, not at session end.
-     Keep "next" to the single unit being started now. -->
 - [x] Precedence table parsing and validation (26 unit tests, upstream `src/lopert/table.py`)
 - [x] M0 spike: `import uno` under nix; connector glued to a group shape survives moves and save/reload
 - [x] Wrapper: upstream submodule, flake with the pinned-commit checks, check-pin.sh
