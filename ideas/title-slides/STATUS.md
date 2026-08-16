@@ -1,8 +1,12 @@
 status: done
 version: 0.1
 started_at: 2026-08-16
-last_session_id:
-last_run: 2026-08-16
+last_session_id: 498f8809-49e3-4e71-b8bb-3905366ad588
+last_run: 2026-08-16T21:29:26+02:00
+last_cycle_cost_usd: 12.985914499999996
+
+## Log
+- 2026-08-16T21:29:26+02:00 — done ($12.985914499999996)
 
 Difficulty estimate: medium — as forecast. The transform itself was short; identifiers,
 the setext trap and getting a real `quarto render` to run hermetically in CI were the
@@ -48,8 +52,6 @@ recorded in the log below: `slide-level: 0` makes the filter inert (no heading s
 slide, so there is no title to carry), and Quarto had to be pinned from its own release
 because nixpkgs' quarto cannot render at all.
 
-## Log
-<!-- Newest entries on top. The orchestrator prepends here after each cycle. -->
 
 ### 2026-08-16 — 0.1 delivered
 
@@ -101,9 +103,6 @@ Two mechanics worth recording, both feeding later units:
   the source text, not the AST.
 
 ## Units
-<!-- The honest progress report: one line per unit of work, ticked only once it is
-     committed with its tests passing. Refresh this at every unit, not at session end.
-     Keep "next" to the single unit being started now. -->
 - [x] M0 — spike: confirmed rules survive, inserted headings split slides, ids/classes land
 - [x] Extension skeleton + title inheritance across top-level rules, with the metadata switch
 - [x] Wrapper here: `upstream` submodule, `flake.nix` consuming it, `scripts/check-pin.sh`,
