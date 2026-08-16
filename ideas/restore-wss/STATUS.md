@@ -45,8 +45,14 @@ size constraints win" finding from M0, observed again.
 
 **Green:** `nix flake check` — 127 unit tests, 9 D-Bus tests, ruff, extension syntax.
 
-Next: M4 — documents (tier 1): the adapter framework, `/proc/<pid>/cmdline` and `fd`,
-`recently-used.xbel`, and LibreOffice's own picklist, each with a confidence score.
+- [x] M4 — documents (tier 1): the per-application adapter table, five sources in order of
+      preference, a confidence on each, and readers for both recent-document stores — checked
+      against the real files here (400 freedesktop entries; 25 in LibreOffice's own picklist)
+
+**Green:** `nix flake check` — 148 unit tests, 9 D-Bus tests, ruff, extension syntax.
+
+Next: M6 — VPN: capture and reactivate NetworkManager connections (NM only, per the answered
+question), storing the connection's identity and never a credential.
 
 ## Findings that change the plan
 
