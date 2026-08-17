@@ -75,11 +75,25 @@ symbolic icons) can only be confirmed in a real compositor.
       `ICONS`. `tools/check-bundle.js` imports the bundle's own icon map and fails if a named
       icon did not ship, because that failure is otherwise a silent blank square; **verified by
       deleting one from a built bundle and watching it fail**. 239 gjs tests green.
-- [ ] U5 — the `allBlocked` state and its visibility clause.
+- [x] **U5 — `allBlocked`.** A queue where nothing can move without a person is now its own
+      panel state: the reading is good, no cycle is running, at least one idea is blocked, and
+      there is nothing the orchestrator could pick up. `queued` deliberately does not count as
+      work — a duplicate entry behind a blocked one is stuck too — while `ready`, `running` and
+      `to be planned` do, and so does a state word this version does not recognise, because
+      declaring the whole queue stuck on the strength of a word we do not understand would be
+      worse than saying nothing. It wears the struck-through bulb, badges the number of blocked
+      ideas, and reads as `aideas: every idea is blocked, 3 waiting for an answer`.
+      It also **summons the button by itself**, the second answered question: this state is
+      never "running", so under the old rule alone it could never have been seen. 10 tests, all
+      of them boundaries: one ready idea among blocked ones, a queued duplicate, an unplanned
+      idea, an empty queue, a running cycle, an unknown state, and an unreachable box.
+      The menu header still says `Idle` for such a queue — accurate, and the Blocked section
+      right beneath it lists every idea and its questions. Changing that wording was not part of
+      this entry.
 - [ ] U6 — the compositor: smoke assertions and screenshots.
 - [ ] U7 — the bump to 0.3 and the docs.
 
-Next: U5 — the allBlocked state.
+Next: U6 — the compositor.
 
 ### Answered questions, as read
 

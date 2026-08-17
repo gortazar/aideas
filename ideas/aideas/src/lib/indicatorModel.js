@@ -2,10 +2,15 @@
 // badge counts. A pure function of the same reading the menu is built from, so "what does the
 // panel look like right now" is a value a test can assert.
 //
-// The visibility rule is settled by an answered open question in PLAN.md: **the button is
-// visible only while a cycle is running**, with an "always show" preference for people who
-// would rather keep it. Blocked ideas do not summon it, which is why the Blocked section only
-// appears to someone who has the button for another reason.
+// The visibility rule comes from two answered open questions. The first: **the button is
+// visible while a cycle is running**, with an "always show" preference for people who would
+// rather keep it. Some blocked ideas do not summon it — the queue is still moving, and the
+// Blocked section is there for whoever has the button for another reason.
+//
+// The second added one clause: **when every idea is blocked, the button appears anyway**. That
+// state is never "running" by definition, so under the first rule alone it could never be seen;
+// and it is the one state whose entire meaning is that a person is now the only thing that can
+// move the queue.
 //
 // One nuance that rule does not cover: what to do when an attempt fails while a cycle was
 // running a moment ago. Hiding the button on a single dropped poll would make the panel blink
@@ -55,6 +60,30 @@ function countBlocked(reading) {
     return reading.rows.filter(row => row.state === 'blocked').length;
 }
 
+/**
+ * States the orchestrator could pick up, so that a queue holding one of them is not stuck.
+ *
+ * `queued` is deliberately not here: a duplicate entry sitting behind a blocked one is stuck
+ * too, and counting it as work would hide exactly the situation this state exists to show.
+ */
+const PICKABLE_STATES = ['ready', 'running', 'to be planned'];
+
+/**
+ * Is every idea blocked — is a person now the only thing that can move the queue?
+ *
+ * Stricter than "some rows are blocked": there must be at least one blocked idea and nothing at
+ * all the orchestrator could otherwise start. A row whose state this version of the extension
+ * does not recognise counts as pickable, because claiming the whole queue is stuck on the
+ * strength of a word we do not understand would be worse than saying nothing.
+ */
+function everyIdeaBlocked(reading) {
+    if (reading.rows.length === 0)
+        return false; // an empty queue is not blocked, it is empty
+    if (!reading.rows.some(row => row.state === 'blocked'))
+        return false;
+    return !reading.rows.some(row => PICKABLE_STATES.includes(row.state) || !row.known);
+}
+
 /** The last good reading, if there is one and it is recent enough to still mean something. */
 function stillSpeaking(lastGood, now, staleAfterSeconds) {
     if (!lastGood || !lastGood.reading || lastGood.reading.status !== Status.OK)
@@ -82,8 +111,14 @@ export function buildIndicator({
     const blocked = ok ? countBlocked(reading) : 0;
 
     let state;
-    if (ok)
-        state = reading.running ? 'running' : (blocked > 0 ? 'blocked' : 'idle');
+    if (ok) {
+        if (reading.running)
+            state = 'running';
+        else if (everyIdeaBlocked(reading))
+            state = 'allBlocked';
+        else
+            state = blocked > 0 ? 'blocked' : 'idle';
+    }
     else if (reading.status === Status.UNCONFIGURED)
         state = 'unconfigured';
     else if (reading.status === Status.UNAVAILABLE)
@@ -98,12 +133,17 @@ export function buildIndicator({
         : null;
     const rememberedRunning = remembered !== null && remembered.running;
 
-    const visible = alwaysShow || (ok && reading.running) || rememberedRunning;
+    // The one extra clause, from the answered open question: an all-blocked queue is never
+    // running, so under the plain "only while a cycle is running" rule this state could never
+    // be seen — and it is the only state whose entire meaning is that a person is the
+    // bottleneck. So it summons the button by itself.
+    const visible = alwaysShow || (ok && reading.running) || rememberedRunning ||
+        state === 'allBlocked';
 
     let badge = null;
     if (state === 'running' && reading.agents.length > 0)
         badge = String(reading.agents.length);
-    else if (state === 'blocked')
+    else if (state === 'blocked' || state === 'allBlocked')
         badge = String(blocked);
     else if (rememberedRunning && remembered.agents.length > 0)
         badge = String(remembered.agents.length);
@@ -127,6 +167,9 @@ function accessibleName(state, reading, blocked, remembered) {
                 : 'aideas: cycle running';
         case 'blocked':
             return `aideas: idle, ${blocked} blocked ${blocked === 1 ? 'idea' : 'ideas'}`;
+        case 'allBlocked':
+            // The whole thing in one line, because for a screen reader this *is* the panel.
+            return `aideas: every idea is blocked, ${blocked} waiting for an answer`;
         case 'idle':
             return 'aideas: idle';
         case 'unavailable':
