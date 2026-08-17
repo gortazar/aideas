@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A lit bulb with a question punched out of the glass: something is waiting to be answered,
+     but the queue can still move. No rays — nothing is running right now. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <g fill="currentColor">
+    <!-- the glass, with the question mark as a hole so it reads at 16px -->
+    <path fill-rule="evenodd" d="M8 1.4a4.6 4.6 0 0 0-2.3 8.58v0.72h4.6V9.98A4.6 4.6 0 0 0 8 1.4zm0.02 1.7c1.1 0 1.94 0.66 1.94 1.6 0 0.62-0.3 1-0.86 1.42-0.46 0.35-0.6 0.5-0.6 0.86v0.28H7.4V6.9c0-0.6 0.22-0.9 0.78-1.32 0.42-0.32 0.54-0.46 0.54-0.76 0-0.34-0.28-0.58-0.7-0.58-0.44 0-0.74 0.26-0.78 0.7H6.1c0.04-0.98 0.84-1.64 1.94-1.64zM7.3 7.94h1.32v1.2H7.3z"/>
+    <path d="M6.25 11.4h3.5v1.2h-3.5z"/>
+    <path d="M6.7 13.1h2.6v1.2H6.7z"/>
+  </g>
+</svg>

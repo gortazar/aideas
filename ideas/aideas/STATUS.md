@@ -57,12 +57,29 @@ symbolic icons) can only be confirmed in a real compositor.
       questions rendering exactly as before, a row from a box that never sent texts, two blocked
       ideas keeping their own, questions present behind a running cycle, and dimmed along with
       everything else in a stale last-good reading. 228 gjs tests green; flake check green.
-- [ ] U4 — the bulbs: the SVG family, the loader, `ICONS` repointed.
+- [x] **U4 — the bulbs.** `src/extension/icons/` ships four SVGs on the 16px Adwaita grid, one
+      colour and that colour `currentColor`, named `-symbolic.svg` — which is the suffix the
+      shell's texture cache looks for before recolouring rather than blitting. `ICONS` keeps its
+      shape (a state-to-name map, one lookup, still pure): the four *queue* states point at
+      bulbs, and `unreachable`/`unavailable`/`unconfigured` keep their stock glyphs, per the
+      answered question. `indicator.js` resolves a shipped name to a `Gio.FileIcon` under the
+      extension's own `icons/`, and a stock name through the icon theme as before.
+      The four were drawn, rendered and **looked at** at 16 and 64 px before being kept: the
+      first attempt had a visibly smaller glass for `running`, which would have made the button
+      appear to shrink whenever a cycle started. All four now share one glass and base, and
+      differ only in the drawing: rays (running), a question punched through the glass
+      (blocked), hollow (idle), struck through (all blocked).
+      12 tests assert what recolouring depends on — the `-symbolic` name, no hex or named
+      colour anywhere, `currentColor`, the 16px viewBox, no embedded raster or script — plus
+      that every name in `ICONS` is a file that ships and every shipped file is named by
+      `ICONS`. `tools/check-bundle.js` imports the bundle's own icon map and fails if a named
+      icon did not ship, because that failure is otherwise a silent blank square; **verified by
+      deleting one from a built bundle and watching it fail**. 239 gjs tests green.
 - [ ] U5 — the `allBlocked` state and its visibility clause.
 - [ ] U6 — the compositor: smoke assertions and screenshots.
 - [ ] U7 — the bump to 0.3 and the docs.
 
-Next: U4 — the bulbs.
+Next: U5 — the allBlocked state.
 
 ### Answered questions, as read
 

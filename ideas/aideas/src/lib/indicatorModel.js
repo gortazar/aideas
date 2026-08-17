@@ -19,18 +19,37 @@ import { Status } from './state.js';
 /** How long a good reading keeps speaking for the panel after contact is lost. */
 export const DEFAULT_STALE_AFTER_SECONDS = 300;
 
+/** Icons this extension ships are named with this prefix; everything else is a stock name. */
+export const SHIPPED_ICON_PREFIX = 'aideas-';
+
 /**
- * Symbolic icons, all stock freedesktop names — the extension ships no image assets, so
- * there is nothing to theme wrongly and nothing for EGO to object to.
+ * One icon per state.
+ *
+ * The *queue* states wear this idea's own bulb, so the button has an identity of its own
+ * instead of looking like a gear, then a question mark, then a pause sign. They are shipped
+ * SVGs drawn on the 16px grid with `fill="currentColor"` and a `-symbolic` name, which is what
+ * makes GNOME recolour them to the panel foreground: grey with the rest of the top bar, in
+ * light themes and dark, dimming when the panel dims. Nothing is *painted* grey — it is grey
+ * because it is symbolic, and the state is therefore carried by the drawing, never by colour.
+ *
+ * The three states that are about the *connection* rather than the queue keep their stock
+ * freedesktop glyphs. That is the answered open question: a network-offline or a warning sign
+ * says more about a box that cannot be reached than any bulb could.
  */
 export const ICONS = {
-    running: 'system-run-symbolic',
-    blocked: 'dialog-question-symbolic',
-    idle: 'media-playback-pause-symbolic',
+    running: `${SHIPPED_ICON_PREFIX}bulb-running-symbolic`,
+    blocked: `${SHIPPED_ICON_PREFIX}bulb-blocked-symbolic`,
+    idle: `${SHIPPED_ICON_PREFIX}bulb-idle-symbolic`,
+    allBlocked: `${SHIPPED_ICON_PREFIX}bulb-all-blocked-symbolic`,
     unreachable: 'network-offline-symbolic',
     unavailable: 'dialog-warning-symbolic',
     unconfigured: 'preferences-system-symbolic',
 };
+
+/** Is this name a file this extension ships, rather than one the icon theme knows? */
+export function isShippedIcon(name) {
+    return typeof name === 'string' && name.startsWith(SHIPPED_ICON_PREFIX);
+}
 
 function countBlocked(reading) {
     return reading.rows.filter(row => row.state === 'blocked').length;

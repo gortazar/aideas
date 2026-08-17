@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A plain bulb, hollow: nothing is running and nothing is waiting on anybody. Hollow against
+     solid is the difference that survives at 16px, where a subtler one would not. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <g fill="currentColor">
+    <path fill-rule="evenodd" d="M8 1.4a4.6 4.6 0 0 0-2.3 8.58v0.72h4.6V9.98A4.6 4.6 0 0 0 8 1.4zm0 1.3a3.3 3.3 0 0 1 1.65 6.16l-0.65 0.37v0.17H7v-0.17l-0.65-0.37A3.3 3.3 0 0 1 8 2.7z"/>
+    <path d="M6.25 11.4h3.5v1.2h-3.5z"/>
+    <path d="M6.7 13.1h2.6v1.2H6.7z"/>
+  </g>
+</svg>
