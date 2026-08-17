@@ -49,16 +49,13 @@ makes position a safe identity: the active list only ever holds work still to do
 
 ## Ideas
 
-1. [Restore workspaces](ideas/restore-wss) - Support for restoring browsers and the tabs that were open inside them (may require a browser extension). First, an in-depth research
-   must be done to find similar extensions that could be used as-is, and this report is to be written in the idea folder as "browser-extensions-research.md".
-
-2. [vacas](ideas/vacas/) - A Firefox extension that is activated on demand by user, and tracks user's requests for Rentalia's holidays rental site. It will store locally which 
+1. [vacas](ideas/vacas/) - A Firefox extension that is activated on demand by user, and tracks user's requests for Rentalia's holidays rental site. It will store locally which 
    places were asked for availability, on which dates, and if the same place appears again in a new search with the same dates, it alerts the user that it was already contacted.
    The extension will store as well the text that was sent. In order to build vacas, the Rentalia web must be researched in search of placeholders to use for detecting the contact form of
    each place contacted, extract the dates, the text and detect when the send button of the contact form has been pushed, to store the info. If the button is not pressed, we
    can't assume the place has been contacted and no info is stored for that place.
 
-3. [aideas](ideas/aideas) - the icon for the gnome extension must be a bulb 💡 but in grey colors, to match gnome shell appearance.  The extension must show the unanswered questions of each idea when it's blocked. When all ideas are blocked, show the bulb in a way it clearly state it. Minor.
+2. [aideas](ideas/aideas) - the icon for the gnome extension must be a bulb 💡 but in grey colors, to match gnome shell appearance.  The extension must show the unanswered questions of each idea when it's blocked. When all ideas are blocked, show the bulb in a way it clearly state it. Minor.
 
 ## Finished
 
@@ -140,3 +137,6 @@ makes position a safe identity: the active list only ever holds work still to do
 
 13. [aideas](ideas/aideas/) - Build a release workflow to run every time changes are made to aideas gnome shell extension that publishes the extension as required (finished 2026-08-17, v0.2)
    by the install script. As a result of this change a new release of the extension must be made available in this repo. Minor version.
+
+14. [Restore workspaces](ideas/restore-wss) - Support for restoring browsers and the tabs that were open inside them (may require a browser extension). First, an in-depth research (finished 2026-08-17, v0.2)
+   must be done to find similar extensions that could be used as-is, and this report is to be written in the idea folder as "browser-extensions-research.md".
