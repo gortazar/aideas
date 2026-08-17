@@ -51,7 +51,9 @@
             { src = restore-wss-src; } ''
             for f in README.md flake.nix docs/similar-tools.md docs/platform-findings.md \
                 docs/state-schema.md docs/app-adapters.md docs/limitations.md \
-                src/extension/metadata.json install.sh; do
+                docs/browser-extensions-research.md src/extension/metadata.json \
+                src/browser-extension/manifest.json \
+                src/native-host/restore-wss-firefox-host.py install.sh; do
               [ -e "$src/$f" ] || { echo "missing upstream deliverable: $f" >&2; exit 1; }
             done
             echo "deliverables OK" > "$out"

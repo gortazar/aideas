@@ -37,11 +37,11 @@
     "restore-wss-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1786921518,
-        "narHash": "sha256-QMUTIw1+7oDmTKmiLky20f0mD3iiww016vn6+o3ZMyA=",
+        "lastModified": 1786995305,
+        "narHash": "sha256-WwKR9Qvf9vzAyNDmthAhcE9RZcYHM85HFU6bFVvl9s8=",
         "owner": "gortazar",
         "repo": "restore-wss",
-        "rev": "99e2b25de3ab68539b326c4badad48567133d4f3",
+        "rev": "014024f2eaaa356c94b76d221a3a2e77d9e909e9",
         "type": "github"
       },
       "original": {
