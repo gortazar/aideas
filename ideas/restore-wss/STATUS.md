@@ -1,4 +1,4 @@
-status: not_started
+status: in_progress
 version: 0.1
 started_at: 2026-08-16
 last_session_id: ebf1ecd2-6691-4213-9815-2f9920396ad5
@@ -10,7 +10,35 @@ last_cycle_cost_usd: 9.534980500000001
 - 2026-08-16T22:39:18+02:00 — in_progress ($20.323337000000002)
 
 
-## Units
+## Units — v0.2 (browsers and the tabs inside them)
+- [x] B0 — `docs/browser-extensions-research.md`: eleven candidates read from source plus two probes
+      of this machine; go/no-go written; conclusions below
+
+Next: B1 — the `browser` block in the schema, migration from a v0.1 snapshot, and `status`/`diff`/
+`--json` showing it.
+
+### What B0 changed in the plan
+
+- **The transport cannot be D-Bus.** This machine's AppArmor profile lets Firefox execute a native
+  host under `~/snap/firefox/` (`ix`), but `ix` inherits the browser's confinement, and the profile's
+  140 session-bus rules are per-name allow-lists with no room for `org.gnome.RestoreWss`. The bridge
+  is a **file drop** under `~/snap/firefox/common/`. Evidence:
+  `docs/probe-data/snap-firefox-apparmor.txt`.
+- **The offline reader is promoted from footnote to a shipped tier.** `recovery.jsonlz4` decodes with
+  a 40-line pure-Python mozlz4 reader and holds 6 windows / 27 tabs with url, title, pinned,
+  selected, groups *and* per-window geometry — with no extension and no permission at all.
+- **No third-party extension is adopted.** The session managers expose no interface (Tab Session
+  Manager has no `nativeMessaging` permission at all); `brotab` does, but via an unauthenticated
+  localhost HTTP service exposing tab text, HTML and screenshots, and it cannot work with snap
+  Firefox as installed. The sibling `gnome-tasks` extension is adapted with attribution; its D-Bus
+  host is replaced.
+- **Correlation stays title-first**: every window on this machine reports `1165x1408 @0,0
+  maximized`, so geometry cannot break ties here.
+- **Signing needs the user's AMO credentials.** CI will run `web-ext sign` only when
+  `AMO_JWT_ISSUER`/`AMO_JWT_SECRET` exist; until then the released `.xpi` is unsigned and the README
+  says so.
+
+## Units — v0.1 (delivered, released as v0.1)
 - [x] Upstream repository created (`gortazar/restore-wss`), pinned here as the `upstream` submodule
 - [x] M0a — `docs/similar-tools.md`: eleven tools read from source, plus `tools/wayland-globals.sh`
       and its committed output proving GNOME 46 here has no session-management Wayland global
