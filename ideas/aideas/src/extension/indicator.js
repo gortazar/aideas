@@ -19,6 +19,7 @@
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
@@ -74,6 +75,34 @@ function rowItem(descriptor) {
         }));
     }
 
+    return item;
+}
+
+/**
+ * One unanswered question, indented under the idea it belongs to and dimmed.
+ *
+ * Wrapping rather than truncating: the model has already cut the text to something that fits
+ * about two lines, and the label wraps at word boundaries and ellipsizes if a theme's font makes
+ * it longer than that. Non-reactive, like every row — answering a question means editing
+ * PLAN.md on the box.
+ */
+function questionItem(descriptor) {
+    const item = new PopupMenu.PopupBaseMenuItem({
+        reactive: false,
+        can_focus: false,
+        style_class: 'popup-menu-item aideas-question',
+    });
+
+    const label = new St.Label({
+        text: descriptor.text,
+        style_class: descriptor.stale ? 'aideas-question-text aideas-dim' : 'aideas-question-text',
+        x_expand: true,
+    });
+    label.clutter_text.line_wrap = true;
+    label.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+    label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+
+    item.add_child(label);
     return item;
 }
 
@@ -168,6 +197,13 @@ class AideasIndicator extends PanelMenu.Button {
                 }
                 case 'row':
                     this.menu.addMenuItem(rowItem(item));
+                    break;
+                case 'question':
+                    this.menu.addMenuItem(questionItem(item));
+                    break;
+                case 'question-more':
+                    this.menu.addMenuItem(infoItem(item.text, null,
+                        { dim: true, styleClass: 'aideas-question' }));
                     break;
                 case 'footer':
                     this.menu.addMenuItem(infoItem(item.text, null, { dim: true }));

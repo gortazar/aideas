@@ -34,16 +34,35 @@ export function menuItems(built) {
     for (const section of built.sections) {
         blocks.push([
             { type: 'title', text: section.title },
-            ...section.rows.map(row => ({
-                type: 'row',
-                key: row.key,
-                label: row.label,
-                detail: row.detail,
-                marker: row.marker,
-                // A stale row came from the last good reading, shown because the current
-                // attempt failed. The widget dims it; the header says how old it is.
-                stale: built.stale === true,
-            })),
+            ...section.rows.flatMap(row => [
+                {
+                    type: 'row',
+                    key: row.key,
+                    label: row.label,
+                    detail: row.detail,
+                    marker: row.marker,
+                    // A stale row came from the last good reading, shown because the current
+                    // attempt failed. The widget dims it; the header says how old it is.
+                    stale: built.stale === true,
+                },
+                // A blocked idea's questions belong to it, so they follow it inside the same
+                // block — never separated from the row they are about by a separator. Keyed off
+                // the row's key, since `position` is the only unique field a row has.
+                ...(row.questions ?? []).map((question, index) => ({
+                    type: 'question',
+                    key: `${row.key}:q${index}`,
+                    text: question,
+                    stale: built.stale === true,
+                })),
+                ...(row.questionsNotShown > 0
+                    ? [{
+                        type: 'question-more',
+                        key: `${row.key}:more`,
+                        text: `+${row.questionsNotShown} more`,
+                        stale: built.stale === true,
+                    }]
+                    : []),
+            ]),
         ]);
     }
 

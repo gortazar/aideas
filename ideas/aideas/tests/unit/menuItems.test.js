@@ -144,6 +144,123 @@ suite('a failure', () => {
     });
 });
 
+suite('the questions under a blocked idea', () => {
+    const withQuestions = reading({}, [
+        idea({ position: 1, slug: 'asker', state: 'blocked', note: '2 unanswered questions',
+            open_questions: 2,
+            open_question_texts: ['Should the bulb be grey?', 'Which port does the box use?'] }),
+        idea({ position: 2, slug: 'fresh', state: 'ready', note: 'not started' }),
+    ]);
+
+    test('follow their row, inside its own block, before the next section', () => {
+        const list = items({ reading: withQuestions });
+
+        assertDeepEquals(types(list), [
+            'header', 'separator',
+            'title', 'row', 'question', 'question', 'separator',
+            'title', 'row', 'separator',
+            'preferences',
+        ]);
+    });
+
+    test('carry the question text and a key of their own', () => {
+        const list = items({ reading: withQuestions });
+        const questions = list.filter(item => item.type === 'question');
+
+        assertDeepEquals(questions.map(q => q.text),
+            ['Should the bulb be grey?', 'Which port does the box use?']);
+        assertDeepEquals(questions.map(q => q.key), ['1:asker:q0', '1:asker:q1']);
+    });
+
+    test('are never separated from the idea they belong to', () => {
+        const list = items({ reading: withQuestions });
+        const rowAt = list.findIndex(item => item.type === 'row');
+
+        assertEquals(list[rowAt + 1].type, 'question',
+            'a separator between a row and its questions would orphan them');
+    });
+
+    test('end with "+n more" when there are more than are shown', () => {
+        const list = items({ reading: reading({}, [
+            idea({ slug: 'asker', state: 'blocked', note: '7 unanswered questions',
+                open_questions: 7,
+                open_question_texts: ['one', 'two', 'three', 'four', 'five'] }),
+        ]) });
+
+        assertDeepEquals(types(list), [
+            'header', 'separator',
+            'title', 'row', 'question', 'question', 'question', 'question-more', 'separator',
+            'preferences',
+        ]);
+        assertEquals(list.find(item => item.type === 'question-more').text, '+4 more');
+    });
+
+    test('a blocked row with no questions renders exactly as it always did', () => {
+        const list = items({ reading: reading({}, [
+            idea({ slug: 'asker', state: 'blocked', note: 'STATUS.md says blocked' }),
+        ]) });
+
+        assertDeepEquals(types(list),
+            ['header', 'separator', 'title', 'row', 'separator', 'preferences']);
+    });
+
+    test('a blocked row from a box that never sent texts renders as it always did', () => {
+        const list = items({ reading: reading({}, [
+            idea({ slug: 'asker', state: 'blocked', note: '3 unanswered questions',
+                open_questions: 3 }),
+        ]) });
+
+        assertDeepEquals(types(list),
+            ['header', 'separator', 'title', 'row', 'separator', 'preferences']);
+    });
+
+    test('are dimmed with everything else in a stale reading', () => {
+        const list = items({
+            reading: unreachableReading('connection refused'),
+            lastGood: { reading: withQuestions, fetchedAt: NOW - 120 },
+        });
+
+        const questions = list.filter(item => item.type === 'question');
+        assertEquals(questions.length, 2);
+        for (const question of questions)
+            assertEquals(question.stale, true);
+    });
+
+    test('and are there behind a running cycle', () => {
+        const list = items({ reading: reading(
+            { running: true, agents: ['alpha'], cycle_started_at: NOW - 300 },
+            [
+                idea({ position: 1, slug: 'alpha', state: 'running' }),
+                idea({ position: 2, slug: 'asker', state: 'blocked', open_questions: 1,
+                    open_question_texts: ['Still waiting?'] }),
+            ]) });
+
+        assertDeepEquals(types(list), [
+            'header', 'separator',
+            'title', 'row', 'separator',
+            'title', 'row', 'question', 'separator',
+            'preferences',
+        ]);
+    });
+
+    test('two blocked ideas keep their own questions', () => {
+        const list = items({ reading: reading({}, [
+            idea({ position: 1, slug: 'first', state: 'blocked', open_questions: 1,
+                open_question_texts: ['first question'] }),
+            idea({ position: 2, slug: 'second', state: 'blocked', open_questions: 1,
+                open_question_texts: ['second question'] }),
+        ]) });
+
+        assertDeepEquals(types(list), [
+            'header', 'separator',
+            'title', 'row', 'question', 'row', 'question', 'separator',
+            'preferences',
+        ]);
+        assertDeepEquals(list.filter(i => i.type === 'question').map(i => i.text),
+            ['first question', 'second question']);
+    });
+});
+
 suite('the footer', () => {
     test('a capped queue says what it is not showing, just above Preferences', () => {
         const ideas = Array.from({ length: 203 }, (_, i) =>
@@ -158,13 +275,19 @@ suite('the footer', () => {
 
 suite('every item', () => {
     test('has a type the widget layer knows how to build', () => {
-        const known = ['header', 'message', 'title', 'row', 'footer', 'separator', 'preferences'];
+        const known = ['header', 'message', 'title', 'row', 'question', 'question-more',
+            'footer', 'separator', 'preferences'];
+        const asking = reading({}, [
+            idea({ slug: 'asker', state: 'blocked', open_questions: 9,
+                open_question_texts: ['one', 'two', 'three', 'four'] }),
+        ]);
         const menus = [
             items({ reading: busy }),
             items({ reading: reading() }),
             items({ reading: unconfiguredReading() }),
             items({ reading: unreachableReading('x'), lastGood: { reading: busy, fetchedAt: NOW } }),
             items({ reading: parseState({ available: false, reason: 'no path' }) }),
+            items({ reading: asking }),
         ];
 
         for (const list of menus) {

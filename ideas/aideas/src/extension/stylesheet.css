@@ -25,6 +25,20 @@
     opacity: 0.6;
 }
 
+/* A question sits under the idea it belongs to: indented, quieter than the row above it, and
+   narrow enough that a long one wraps instead of stretching the menu. */
+.aideas-question {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.aideas-question-text {
+    font-size: 0.9em;
+    opacity: 0.75;
+    padding-left: 1.5em;
+    max-width: 26em;
+}
+
 .aideas-marker {
     font-size: 0.8em;
     font-weight: bold;

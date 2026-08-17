@@ -44,13 +44,25 @@ symbolic icons) can only be confirmed in a real compositor.
       breaks the row), 300 characters per question, 5 questions per row. Not distrust of the box
       so much as of the *pairing*: laptop and box are updated at different times. 8 tests; 213
       gjs tests green.
-- [ ] U3 — the questions in the menu, under the idea they belong to.
+- [x] **U3 — the questions in the menu.** `menuModel.js` attaches up to three questions to each
+      blocked row (each cut at a word boundary to 120 characters, which is what makes "at most two
+      rendered lines" true without the model knowing the menu's width) plus how many are not
+      shown, counted against the *whole* `open_questions` rather than just what the server sent.
+      `menuItems.js` emits them as `question` items immediately after their row, inside the same
+      block — never separated from the idea they are about by a separator — and a `question-more`
+      item for the remainder. `indicator.js` renders them indented, dimmed, wrapped at word
+      boundaries and non-reactive; `stylesheet.css` keeps them narrow enough to wrap rather than
+      stretch the menu. Only blocked rows ever list questions.
+      15 tests, comparing whole menus: three shown of seven with `+4 more`, a blocked row with no
+      questions rendering exactly as before, a row from a box that never sent texts, two blocked
+      ideas keeping their own, questions present behind a running cycle, and dimmed along with
+      everything else in a stale last-good reading. 228 gjs tests green; flake check green.
 - [ ] U4 — the bulbs: the SVG family, the loader, `ICONS` repointed.
 - [ ] U5 — the `allBlocked` state and its visibility clause.
 - [ ] U6 — the compositor: smoke assertions and screenshots.
 - [ ] U7 — the bump to 0.3 and the docs.
 
-Next: U3 — the questions in the menu.
+Next: U4 — the bulbs.
 
 ### Answered questions, as read
 
