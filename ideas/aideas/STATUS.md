@@ -1,4 +1,4 @@
-status: not_started
+status: in_progress
 version: 0.2
 started_at: 2026-08-14T15:31:00+02:00
 last_session_id: 35386b06-271b-4df6-8da8-1c51dd289449
@@ -13,89 +13,48 @@ last_cycle_cost_usd: 26.964891
 
 
 
-Difficulty estimate: **medium**, as PLAN.md said — the change is small, but the thing being
-built can only be fully exercised by a push to `main`, which is exactly how the v0.1 workflow
-shipped broken and stayed broken for two days without anyone being told.
+Difficulty estimate: **medium**, as PLAN.md said — three small pieces that cross the `/state`
+contract, the orchestrator that serves it and the extension that renders it, plus this idea's
+first shipped image assets, whose one hard requirement (that GNOME recolours them like stock
+symbolic icons) can only be confirmed in a real compositor.
 
-## This entry (0.2) — a release workflow that actually publishes
+## This entry (0.3) — a grey bulb, and the questions behind "blocked"
 
-- [x] **U1 — a reproducible pack.** `make pack` now fixes all three sources of variation: it
-      stamps every file with `SOURCE_DATE_EPOCH` (defaulting to 315532800, the zip epoch and
-      what nixpkgs' stdenv exports), feeds `zip` a `LC_ALL=C sort`ed file list instead of
-      letting `zip -r` walk readdir order, and passes `-X -D` so no uid, gid, extended
-      timestamp or directory entry is stored. `ci/pack-test.sh` (6 checks) packs twice from a
-      clean build and asserts one SHA-256, asserts the stored date is the epoch and the entry
-      order is sorted, asserts a different `SOURCE_DATE_EPOCH` really changes the artefact, and
-      compares `make pack` against `nix build`.
-      It caught what it was written for, and then two more: **modes** (zip records unix mode
-      bits, so umask 002 here and 022 in a sandbox pack identical files differently) and
-      **timezone** (a zip entry's timestamp is stored as local time with no zone, so the same
-      epoch became 00:00 in the sandbox and 01:00 on this CET laptop). All three are fixed and
-      `nix build` now produces the artefact `make pack` does, byte for byte. 0.1's
-      "byte-identical" claim had held only by coincidence of matching mtimes.
-- [x] **U2 — the decision, as a tested script.** `ci/release-plan.sh` decides — from the
-      version, the status, the releases list and the built artefact — whether to publish and
-      under which tag, printing `publish`/`tag`/`reason` for a workflow to consume and its
-      reasoning on stderr. It publishes only when `status: done`; refuses when `STATUS.md` and
-      `metadata.json` disagree about the version; compares the built artefact against the
-      newest published one by the API's `digest`, falling back to downloading it; and names the
-      tag `aideas-shell-v<version>`, then `-2`, `-3` as artefacts change within a version.
-      `ci/release-test.sh` drives it over fixture JSON — **19 checks**, no network, no GitHub:
-      not-done, empty list, first release of a version, identical bytes, second and third
-      artefacts at one version, other ideas' tags in the list, a release with no digest, a
-      failed download, a tag with no zip asset, disagreeing versions, and four kinds of bad
-      input. Also run against the **real** releases list from the GitHub API, where it read the
-      live `digest` and correctly proposed `aideas-shell-v0.1-2` for the reproducible rebuild.
-- [x] **U3 — the checksum fallback.** `install.sh` now accepts both layouts that exist:
-      `<asset>.sha256`, which the release workflow uploads, and `SHA256SUMS`, which the v0.1
-      release and the other ideas in this repo publish. It matches the asset by both the
-      percent-encoded name from the URL and the plain one written inside the file, falls back
-      to the single `.shell-extension.zip` line when a sums file names it differently, and
-      treats a malformed or unrelated sums file as *no* checksum rather than as a mismatch. A
-      checksum that is present and wrong still refuses to install.
-      **Proved against the live release**: `./install.sh` with no arguments now prints
-      `checksum verified against SHA256SUMS` for `aideas-shell-v0.1` — the release that until
-      now installed unverified. `ci/install-test.sh` grew from 27 checks to **37**, covering
-      the fallback, a wrong digest, a sums file that does not mention our asset, the encoded
-      name, no checksum at all, and a releases list carrying suffixed tags.
-- [x] **U4 — the workflow rewritten.** `.github/workflows/release-aideas.yml` now: gates
-      cheaply on `status: done` before doing anything expensive; installs Nix; asserts one
-      version across `STATUS.md`, `metadata.json` and `flake.nix` (via `nix eval`); runs
-      `nix flake check` **and** the `/state` contract test before publishing anything; builds
-      the artefact with **`nix build`** — the same derivation the checks just validated, so a
-      tool missing from the runner cannot recur for anything the flake declares; uploads three
-      assets (the zip, `<zip>.sha256`, `SHA256SUMS`); and asks `ci/release-plan.sh` for the
-      decision and the tag. Triggers narrow from `ideas/aideas/**` to the shipped inputs, so a
-      `STATUS.md` edit no longer starts a Nix build for nothing.
-      Reviewed against the failed run's step list: the step that failed (`make pack` needing
-      `gjs`) is gone, and each step that was skipped now has a reason to run. Every shell
-      snippet in it was executed locally against the real data — the version check prints
-      `STATUS.md=0.1 metadata.json=0.1 flake.nix=0.1`, the build step produces the three assets,
-      and the plan step reads the live releases list and answers
-      `publish=yes tag=aideas-shell-v0.1-2`.
-      `ci/install-test.sh` gained the exact published layout as a case: **39 checks**.
-- [x] **U5 — the post-merge check.** `tools/check-release.sh` (also `make check-release`) asks
-      GitHub for the newest `aideas-shell-v*` release and reports whether it is really there and
-      is what this tree describes: the tag matches `STATUS.md`'s version (accepting a suffixed
-      tag as the same version), the artefact downloads, its sha256 matches the digest GitHub
-      reports, its `metadata.json` says the same `version-name`, and each published checksum
-      file is present and correct. Read-only and unauthenticated.
-      **Run against the existing v0.1 release, where it reports truthfully:** 6 passed, 0
-      failed, 1 warned — the warning being `no <asset>.sha256 — install.sh asks for this one
-      first`, which is precisely the gap that made that release install unverified. Its failure
-      paths were exercised too: a version that has not been released and a repository with no
-      such releases both report clearly and exit 1; a healthy release exits 0.
-- [x] **U6 — the bump and the docs.** `version: 0.2` here, `version-name` in `metadata.json`
-      and `packages.default.version` in `flake.nix` — the three the workflow now asserts are one
-      value. `tests/unit/metadata.test.js` follows; `ci/install-test.sh` reads the version from
-      `metadata.json` instead of hard-coding it, so the next bump needs no edit there. `README.md`
-      gains a **Releases** section: what triggers a release (shipped inputs only), what the job
-      does before publishing, what a release contains, the suffixed tag scheme, and how to
-      publish by hand and confirm afterwards with `make check-release`. `ci/nested-shell.sh`
-      also learned to clear a leftover nested shell holding its Wayland display, which is what
-      stopped the smoke test running at all on this box.
+- [x] **U1 — the server side.** `/state` now carries the questions, not just how many.
+      `open_question_lines()` in `orchestrator.py` is the single reader of a `PLAN.md`'s
+      `## Open Questions` section, and `count_open_questions()` is now literally the length of
+      what it returns — so the count a menu shows and the texts it lists cannot disagree. Each
+      question is folded to one line (the lines it was wrapped across joined, whitespace
+      collapsed, the checkbox and markdown emphasis stripped, cut at a word boundary to 200
+      characters with an ellipsis), and at most 5 are attached to a row as
+      `open_question_texts` while `open_questions` stays whole, so a reader can say "+n more".
+      `docs/state-contract.md` states the key, its bounds and its absent-rather-than-null rule,
+      and turns the old "about 120 bytes per idea" estimate into a stated ~1 KiB per-row bound.
+      `tests/test_state_contract.py`: 24 → **32 tests**, covering a wrapped question, emphasis
+      versus identifiers (`IDEAS_REPO_PATH` survives, `**bold**` does not), an over-long
+      question, more questions than the cap, a ticked/unticked mixture, a question ending at the
+      next heading, and a case asserting the count and the texts come from one reader.
+      Checked against the repo's real `PLAN.md` files: `vacas`'s one open question folds to 197
+      characters, cut at a word boundary.
+- [ ] U2 — `state.js` parses the new key, hostilely.
+- [ ] U3 — the questions in the menu, under the idea they belong to.
+- [ ] U4 — the bulbs: the SVG family, the loader, `ICONS` repointed.
+- [ ] U5 — the `allBlocked` state and its visibility clause.
+- [ ] U6 — the compositor: smoke assertions and screenshots.
+- [ ] U7 — the bump to 0.3 and the docs.
 
-Next: nothing — every unit is done. See **What 0.2 covers** below.
+Next: U2 — parsing the new key.
+
+### Answered questions, as read
+
+- The button **appears whenever every idea is blocked**, cycle or no cycle ("Yes, should appear
+  always").
+- **The task bar icon is a bulb; the other icons stay as they are.** The answer picked the
+  question's alternative, so the *queue* states wear bulbs and the three states that are about
+  the connection — `unreachable`, `unavailable`, `unconfigured` — keep their stock symbolic
+  glyphs, where a network-offline or warning sign says more than a bulb could.
+- Long questions: **follow the plan** — folded to one line, at most two lines in the menu, at
+  most three questions per idea with `+n more`.
 
 ## What 0.2 covers
 
