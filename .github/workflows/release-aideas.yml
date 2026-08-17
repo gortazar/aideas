@@ -7,23 +7,35 @@
 #
 # **The workflow creates its own tag.** It has to: the orchestrator pushes with a plain
 # `git push`, which does not carry tags, so a tag made in an agent's worktree would never reach
-# GitHub and a tag-triggered release would never fire. Instead this runs on every push to main
-# that touches the idea, reads the version out of ideas/aideas/STATUS.md, and publishes only
-# when that idea says `status: done` and the tag does not exist yet. So a release goes out once,
-# when the work is declared finished, and re-running is harmless.
+# GitHub and a tag-triggered release would never fire. Nothing here needs a secret; the
+# automatic GITHUB_TOKEN can tag, release and upload in the repository the workflow lives in.
 #
-# Nothing here needs a secret: the automatic GITHUB_TOKEN can tag, release and upload assets in
-# the repository the workflow lives in.
+# What went wrong the first time, and what stops it recurring:
+#
+#   * the job apt-installed `zip` and `libglib2.0-bin` and ran `make pack`, which depends on
+#     `check-bundle`, which runs `gjs` — absent from a stock runner. It failed with
+#     `make: gjs: No such file or directory` and every later step was skipped. The artefact is
+#     now built with `nix build`, the same derivation `nix flake check` validates, so any tool
+#     the build needs is one the flake already declares.
+#   * nobody was told. An agent cannot push this repo, so the first real run happens after a
+#     merge no agent sees the result of. `ideas/aideas/tools/check-release.sh` is the one
+#     command that says, afterwards, whether the release is really there.
 name: Release - aideas
 
 on:
   push:
     branches: [main]
+    # The shipped inputs, not the paperwork: a change to STATUS.md, PLAN.md, plans/, docs/,
+    # screenshots/ or the tests does not produce a release. install.sh is deliberately absent —
+    # it is fetched raw from main, so a change to it is live immediately and needs no release.
     paths:
-      - "ideas/aideas/**"
+      - "ideas/aideas/src/**"
+      - "ideas/aideas/Makefile"
+      - "ideas/aideas/flake.nix"
+      - "ideas/aideas/flake.lock"
+      - "ideas/aideas/tools/check-bundle.js"
+      - "ideas/aideas/ci/release-plan.sh"
       - ".github/workflows/release-aideas.yml"
-  # So a release can also be published by hand — from the Actions tab — if it is ever wanted
-  # before the version changes, or if a run failed.
   workflow_dispatch:
     inputs:
       force:
@@ -32,88 +44,126 @@ on:
         default: false
 
 permissions:
-  contents: write # create the tag and the release, and upload the asset
+  contents: write # create the tag and the release, and upload the assets
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ideas/aideas
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # tags, so the "already released" check is honest
+          fetch-depth: 0 # tags, so "has this been released already" is honest
 
-      - name: Read the version and status from STATUS.md
-        id: idea
-        run: |
-          set -euo pipefail
-          status=$(sed -n 's/^status:[[:space:]]*//p' ideas/aideas/STATUS.md | head -1)
-          version=$(sed -n 's/^version:[[:space:]]*//p' ideas/aideas/STATUS.md | head -1)
-          [ -n "$version" ] || { echo "no version: in ideas/aideas/STATUS.md" >&2; exit 1; }
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=aideas-shell-v$version" >> "$GITHUB_OUTPUT"
-          echo "aideas is $status at version $version"
-
-      - name: Decide whether to publish
-        id: decide
+      # A cheap gate before anything expensive. ci/release-plan.sh enforces this rule too — that
+      # is where it is tested — but there is no reason to run a Nix build and a full test suite
+      # on every push to main only to be told the entry is not finished.
+      - name: Is this a finished entry?
+        id: gate
         env:
-          STATUS: ${{ steps.idea.outputs.status }}
-          TAG: ${{ steps.idea.outputs.tag }}
           FORCE: ${{ inputs.force }}
         run: |
           set -euo pipefail
-          publish=yes
-          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
-            echo "$TAG already exists — nothing to publish."
-            publish=no
-          elif [ "$STATUS" != "done" ] && [ "$FORCE" != "true" ]; then
-            echo "aideas is '$STATUS', not 'done' — not publishing $TAG yet."
-            publish=no
+          status=$(sed -n 's/^status:[[:space:]]*//p' STATUS.md | head -1)
+          version=$(sed -n 's/^version:[[:space:]]*//p' STATUS.md | head -1)
+          [ -n "$version" ] || { echo "no version: in STATUS.md" >&2; exit 1; }
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$status" = "done" ] || [ "$FORCE" = "true" ]; then
+            echo "proceed=yes" >> "$GITHUB_OUTPUT"
+            echo "aideas is $status at version $version — checking whether to publish"
+          else
+            echo "proceed=no" >> "$GITHUB_OUTPUT"
+            echo "aideas is '$status', not 'done' — nothing to publish."
           fi
-          echo "publish=$publish" >> "$GITHUB_OUTPUT"
 
-      - name: Install what packing needs
-        if: steps.decide.outputs.publish == 'yes'
-        # Just zip and glib-compile-schemas: `make pack` zips the bundle `make build` assembles,
-        # rather than asking gnome-extensions to assemble it again, so the whole gnome-shell
-        # closure stays out of this job.
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq zip libglib2.0-bin
+      - uses: cachix/install-nix-action@v27
+        if: steps.gate.outputs.proceed == 'yes'
+        with:
+          extra_nix_config: "experimental-features = nix-command flakes"
 
-      - name: Pack the extension
-        if: steps.decide.outputs.publish == 'yes'
-        working-directory: ideas/aideas
-        run: |
-          set -euo pipefail
-          make pack
-          cd build
-          sha256sum aideas-shell@patxi.gortazar.shell-extension.zip \
-            > aideas-shell@patxi.gortazar.shell-extension.zip.sha256
-          cat aideas-shell@patxi.gortazar.shell-extension.zip.sha256
-
-      - name: Check the artefact is the version it claims
-        if: steps.decide.outputs.publish == 'yes'
-        working-directory: ideas/aideas
+      # One version, in three places. A release whose tag, manifest and flake disagree cannot be
+      # diagnosed afterwards, so this fails the run rather than publishing it.
+      - name: The version is the same everywhere
+        if: steps.gate.outputs.proceed == 'yes'
         env:
-          VERSION: ${{ steps.idea.outputs.version }}
+          VERSION: ${{ steps.gate.outputs.version }}
         run: |
           set -euo pipefail
-          unzip -p "build/aideas-shell@patxi.gortazar.shell-extension.zip" metadata.json |
-            tee /dev/stderr | grep -q "\"version-name\": \"$VERSION\"" || {
-              echo "metadata.json version-name does not match STATUS.md ($VERSION)" >&2
-              exit 1
-            }
+          metadata=$(sed -n 's/.*"version-name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+            src/extension/metadata.json | head -1)
+          flake=$(nix eval --raw ".#packages.x86_64-linux.default.version")
+          echo "STATUS.md=$VERSION  metadata.json=$metadata  flake.nix=$flake"
+          [ "$metadata" = "$VERSION" ] ||
+            { echo "metadata.json says $metadata, STATUS.md says $VERSION" >&2; exit 1; }
+          [ "$flake" = "$VERSION" ] ||
+            { echo "flake.nix says $flake, STATUS.md says $VERSION" >&2; exit 1; }
 
-      - name: Create the release
-        if: steps.decide.outputs.publish == 'yes'
+      # A release that fails its own suite is worse than no release. These are the checks
+      # ci-aideas.yml runs — lint, the headless gjs suite, the real-libsoup http suite, the
+      # assembled bundle — plus the /state contract, which lives outside the flake's root.
+      - name: The tests it is releasing
+        if: steps.gate.outputs.proceed == 'yes'
+        run: nix flake check
+
+      - name: The /state contract
+        if: steps.gate.outputs.proceed == 'yes'
+        working-directory: .
+        run: python3 -m unittest discover -s ideas/aideas/tests -v
+
+      # The same derivation `nix flake check` just validated, so the zip that gets uploaded is
+      # by construction the zip CI checked — and the failure mode of v0.1, a build tool missing
+      # from the runner, cannot recur for anything the flake declares.
+      - name: Build the artefact
+        if: steps.gate.outputs.proceed == 'yes'
+        run: |
+          set -euo pipefail
+          nix build --print-build-logs --out-link result
+          mkdir -p dist
+          cp "result/aideas-shell@patxi.gortazar.shell-extension.zip" dist/
+          chmod u+w "dist/aideas-shell@patxi.gortazar.shell-extension.zip"
+          cd dist
+          # Both checksum layouts, on every release: `<asset>.sha256` is what install.sh asks
+          # for first, and SHA256SUMS is what the other ideas in this repo publish and what the
+          # hand-made v0.1 release carried.
+          sha256sum "aideas-shell@patxi.gortazar.shell-extension.zip" \
+            > "aideas-shell@patxi.gortazar.shell-extension.zip.sha256"
+          cp "aideas-shell@patxi.gortazar.shell-extension.zip.sha256" SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Decide whether to publish, and under which tag
+        if: steps.gate.outputs.proceed == 'yes'
+        id: plan
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.idea.outputs.tag }}
-          VERSION: ${{ steps.idea.outputs.version }}
-        working-directory: ideas/aideas
+          VERSION: ${{ steps.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=50" > releases.json
+          metadata=$(sed -n 's/.*"version-name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+            src/extension/metadata.json | head -1)
+          # --status done: the gate above has already decided this run should publish, including
+          # the dispatched --force case, and release-plan.sh's own gate would otherwise veto it.
+          ci/release-plan.sh \
+            --version "$VERSION" \
+            --status done \
+            --metadata-version "$metadata" \
+            --releases releases.json \
+            --artefact "dist/aideas-shell@patxi.gortazar.shell-extension.zip" \
+            | tee -a "$GITHUB_OUTPUT"
+
+      - name: Publish
+        if: steps.plan.outputs.publish == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          VERSION: ${{ steps.gate.outputs.version }}
         # --target pins the tag to this commit; gh creates the tag as part of the release, which
         # is why nothing has to push one. The notes go via a file rather than an inline heredoc,
-        # which inside a YAML block scalar is one indentation mistake away from silently
-        # swallowing the rest of the script.
+        # which inside a YAML block scalar is one indentation mistake away from swallowing the
+        # rest of the script.
         run: |
           set -euo pipefail
           {
@@ -132,12 +182,28 @@ jobs:
             echo "installing and the installer fills it in for you."
             echo
             echo "GNOME Shell 46-50. Reads \`GET /state\` over plain HTTP and sends nothing."
+            echo
+            echo "The download can be checked against \`SHA256SUMS\` or the \`.sha256\` beside"
+            echo "it; install.sh does that for you."
           } > release-notes.md
 
           gh release create "$TAG" \
             --target "$GITHUB_SHA" \
             --title "aideas $VERSION - the orchestrator's state in the GNOME top bar" \
             --notes-file release-notes.md \
-            "build/aideas-shell@patxi.gortazar.shell-extension.zip" \
-            "build/aideas-shell@patxi.gortazar.shell-extension.zip.sha256"
+            "dist/aideas-shell@patxi.gortazar.shell-extension.zip" \
+            "dist/aideas-shell@patxi.gortazar.shell-extension.zip.sha256" \
+            "dist/SHA256SUMS"
           echo "published $TAG"
+
+      - name: Say what happened
+        if: steps.gate.outputs.proceed == 'yes'
+        env:
+          PUBLISH: ${{ steps.plan.outputs.publish }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          REASON: ${{ steps.plan.outputs.reason }}
+        run: |
+          echo "decision: $PUBLISH — $REASON"
+          if [ "$PUBLISH" = "yes" ]; then
+            echo "published $TAG — confirm it with ideas/aideas/tools/check-release.sh"
+          fi

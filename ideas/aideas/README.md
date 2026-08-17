@@ -97,7 +97,9 @@ nix flake check       # the same four checks in the sandbox
 | `make test-contract` | 24 tests: `/state` driven over fixture repositories | stock python3 |
 | `make check-bundle` | the assembled extension loads: metadata, imports, compiled schema | gjs, glib |
 | `make smoke` | 39 checks in a nested headless GNOME Shell, plus screenshots | a GNOME machine |
-| `make test-install` | 27 checks: `install.sh` run for real, from a clean directory | dbus, zip |
+| `make test-install` | 39 checks: `install.sh` run for real, from a clean directory | dbus, zip |
+| `make test-pack` | the artefact is a function of the source alone, and `nix build` agrees | zip, nix |
+| `make test-release` | 19 checks: the release decision, over fixture releases lists | python3 |
 
 `make smoke` and `make test-install` both isolate `XDG_CONFIG_HOME` and run on a private
 session bus. That is not decoration: dconf writes are performed by a service that reads *its
@@ -106,12 +108,50 @@ own* environment, so without it a test session rewrites the real desktop's setti
 ```
 src/lib/          pure, Shell-free, tested headlessly — state, menu, scheduler, transport
 src/extension/    what runs inside gnome-shell: indicator, prefs, idle watcher
-ci/               the smoke test, its probe extension, the installer test
+ci/               the smoke test, its probe extension, and the pack, installer
+                  and release-decision tests
 docs/             the /state contract
-tools/            probe-state.js, check-bundle.js
+tools/            probe-state.js, check-bundle.js, check-release.sh
 ```
 
+## Releases
+
 The release is a tag on this repository, `aideas-shell-v<version>`, published by
-[`.github/workflows/release-aideas.yml`](../../.github/workflows/release-aideas.yml) when
-`STATUS.md` says the idea is done. The workflow creates its own tag, because a tag made in a
-worktree would never survive the orchestrator's plain `git push`.
+[`.github/workflows/release-aideas.yml`](../../.github/workflows/release-aideas.yml). The
+workflow creates its own tag, because a tag made in a worktree would never survive the
+orchestrator's plain `git push`.
+
+**What triggers one.** A push to `main` that changes something *shipped* — `src/`, `Makefile`,
+`flake.nix`, `flake.lock`, `tools/check-bundle.js` or the release machinery itself. Editing
+`STATUS.md`, `PLAN.md`, `docs/`, `screenshots/` or the tests does not. `install.sh` is
+deliberately outside that list: it is fetched raw from `main`, so a change to it is live at
+once and needs no release.
+
+**What it does before publishing.** Asserts one version across `STATUS.md`, `metadata.json` and
+`flake.nix`; runs `nix flake check` and the `/state` contract test; builds the artefact with
+`nix build` — the same derivation the checks just validated, so a tool missing from the runner
+cannot break the release the way it did for v0.1; then asks
+[`ci/release-plan.sh`](ci/release-plan.sh) whether to publish at all. It publishes only when
+`STATUS.md` says `status: done`, and never publishes bytes identical to the newest release —
+the artefact is reproducible (fixed epoch, sorted entries, fixed modes, `TZ=UTC`), so
+"unchanged" is a fact about content rather than about timestamps.
+
+**What a release contains.** The packed extension, `<asset>.sha256`, and `SHA256SUMS` — both
+checksum layouts, because `install.sh` asks for the first and the rest of this repo publishes
+the second.
+
+**Tags.** `aideas-shell-v0.2` for the first artefact at a version, then `aideas-shell-v0.2-2`,
+`-3` for later ones, so every published artefact keeps its own immutable tag and `install.sh`'s
+"newest first" rule still finds the latest.
+
+**Publishing by hand, and checking afterwards.** Run the workflow from the Actions tab
+(*Run workflow*, optionally ticking *force* to publish something not marked done). Afterwards:
+
+```sh
+make check-release      # tools/check-release.sh
+```
+
+which asks GitHub whether the newest release exists, downloads it, and checks its digest,
+its checksums and the version inside the artefact against this tree. That is how "the release
+is really there" gets confirmed — an agent cannot push this repo, so nobody sees the run that
+publishes.

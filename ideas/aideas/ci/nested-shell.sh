@@ -54,6 +54,21 @@ die() { echo "$*" >&2; exit 1; }
 start() {
     [[ -e "$BUS_PATH" ]] && die "already running (or stale state): $STATE — run 'stop' first"
 
+    # A nested shell from an earlier run whose state directory has since been cleaned still
+    # holds $XDG_RUNTIME_DIR/$WAYLAND_NAME, and mutter then dies with "unable to lock lockfile
+    # … maybe another compositor is running". Only ours can be on this display name, so clear
+    # it. The match is deliberately narrow — never the session's own gnome-shell.
+    local stale
+    stale=$(pgrep -f "gnome-shell --headless .*--wayland-display $WAYLAND_NAME" || true)
+    if [[ -n "$stale" ]]; then
+        echo "clearing a leftover nested shell on $WAYLAND_NAME (pid $stale)"
+        kill $stale 2>/dev/null || true
+        sleep 2
+        kill -9 $stale 2>/dev/null || true
+        rm -f "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$WAYLAND_NAME" \
+            "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$WAYLAND_NAME.lock"
+    fi
+
     # Remembered before the environment is switched over, so the leak check below can look at
     # the developer's real dconf database.
     REAL_XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"

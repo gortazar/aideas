@@ -6,8 +6,30 @@
 // under plain gjs — no compositor — because libsoup does not need one.
 
 import GLib from 'gi://GLib';
+import Gio from 'gi://Gio';
 
 import { suite, test, assert, assertEquals, assertMatch } from '../harness.js';
+
+/**
+ * Every phrase soupTransport.js can produce.
+ *
+ * Written out here rather than imported: it is the contract the menu renders, and a test that
+ * imported the list from the module under test could only ever agree with itself.
+ */
+const KNOWN_REASONS = [
+    'connection refused',
+    'host not found',
+    'host unreachable',
+    'network unreachable',
+    'the connection timed out',
+    'the connection was closed',
+    'the proxy refused',
+    'the address could not be used',
+    'the name could not be resolved yet',
+    'the resolver failed',
+    'the TLS handshake failed',
+    'the request failed',
+];
 import { SoupTransport, reasonFor } from '../../src/lib/soupTransport.js';
 import { StateClient } from '../../src/lib/stateClient.js';
 import { Status } from '../../src/lib/state.js';
@@ -93,11 +115,18 @@ suite('failures, in the words the menu will use', () => {
         });
     });
 
-    test('a name that does not resolve is "host not found"', async () => {
+    test('a name that does not resolve gives a fixed English phrase, not a GLib message', async () => {
         const reason = await withTransport(transport =>
             reasonOf(transport.send('http://aideas-no-such-host.invalid:8787/state', 10)));
 
-        assertEquals(reason, 'host not found');
+        // Which resolver error arrives depends on the machine: a laptop with a resolver says
+        // NOT_FOUND, and a build sandbox with no /etc/resolv.conf at all says something else —
+        // which is why demanding "host not found" here failed every CI run on a runner while
+        // passing locally. What matters is the property this module exists for: the phrase is
+        // one of ours, in English, whatever the locale and whatever the resolver did. The exact
+        // code-to-phrase mapping is pinned hermetically in the suite below.
+        assert(KNOWN_REASONS.includes(reason), `"${reason}" is not one of the mapped phrases`);
+        assertMatch(reason, /^[\x20-\x7e]+$/, 'a reason must be plain ASCII English');
     });
 
     test('a server that never answers is abandoned at the deadline', async () => {
@@ -138,6 +167,47 @@ suite('failures, in the words the menu will use', () => {
     test('reasonFor never returns an empty phrase', () => {
         for (const error of [null, undefined, {}, new Error('x'), { domain: 'nope', code: 999 }])
             assertMatch(reasonFor(error), /\S/, `for ${JSON.stringify(error)}`);
+    });
+});
+
+// The mapping itself, without needing the network to produce each failure. This is what makes
+// the live cases above able to be tolerant: every code that matters is pinned exactly here,
+// against a GError constructed by hand.
+suite('reasonFor, code by code', () => {
+    const cases = [
+        [Gio.IOErrorEnum, Gio.IOErrorEnum.CONNECTION_REFUSED, 'connection refused'],
+        [Gio.IOErrorEnum, Gio.IOErrorEnum.HOST_NOT_FOUND, 'host not found'],
+        [Gio.IOErrorEnum, Gio.IOErrorEnum.HOST_UNREACHABLE, 'host unreachable'],
+        [Gio.IOErrorEnum, Gio.IOErrorEnum.NETWORK_UNREACHABLE, 'network unreachable'],
+        [Gio.IOErrorEnum, Gio.IOErrorEnum.TIMED_OUT, 'the connection timed out'],
+        [Gio.IOErrorEnum, Gio.IOErrorEnum.CONNECTION_CLOSED, 'the connection was closed'],
+        [Gio.IOErrorEnum, Gio.IOErrorEnum.PROXY_FAILED, 'the proxy refused'],
+        [Gio.IOErrorEnum, Gio.IOErrorEnum.INVALID_ARGUMENT, 'the address could not be used'],
+        [Gio.ResolverError, Gio.ResolverError.NOT_FOUND, 'host not found'],
+        [Gio.ResolverError, Gio.ResolverError.TEMPORARY_FAILURE,
+            'the name could not be resolved yet'],
+        [Gio.ResolverError, Gio.ResolverError.INTERNAL, 'the resolver failed'],
+    ];
+
+    for (const [domain, code, expected] of cases) {
+        test(`code ${code} of that domain reads "${expected}"`, () => {
+            // The message is deliberately something no mapping could be reading.
+            const error = new GLib.Error(domain, code, 'Conexión rehusada');
+            assertEquals(reasonFor(error), expected);
+        });
+    }
+
+    test('an unmapped error is named, not guessed at', () => {
+        const error = new GLib.Error(Gio.IOErrorEnum, Gio.IOErrorEnum.PERMISSION_DENIED, 'x');
+
+        assertEquals(reasonFor(error), 'the request failed');
+    });
+
+    test('every mapped phrase is one the menu can show', () => {
+        for (const [domain, code] of cases) {
+            const reason = reasonFor(new GLib.Error(domain, code, 'x'));
+            assert(KNOWN_REASONS.includes(reason), `"${reason}" is not in KNOWN_REASONS`);
+        }
     });
 });
 
