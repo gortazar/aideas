@@ -55,8 +55,6 @@ makes position a safe identity: the active list only ever holds work still to do
    each place contacted, extract the dates, the text and detect when the send button of the contact form has been pushed, to store the info. If the button is not pressed, we
    can't assume the place has been contacted and no info is stored for that place.
 
-2. [aideas](ideas/aideas) - the icon for the gnome extension must be a bulb 💡 but in grey colors, to match gnome shell appearance.  The extension must show the unanswered questions of each idea when it's blocked. When all ideas are blocked, show the bulb in a way it clearly state it. Minor change.
-
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
@@ -140,3 +138,5 @@ makes position a safe identity: the active list only ever holds work still to do
 
 14. [Restore workspaces](ideas/restore-wss) - Support for restoring browsers and the tabs that were open inside them (may require a browser extension). First, an in-depth research (finished 2026-08-17, v0.2)
    must be done to find similar extensions that could be used as-is, and this report is to be written in the idea folder as "browser-extensions-research.md".
+
+15. [aideas](ideas/aideas) - the icon for the gnome extension must be a bulb 💡 but in grey colors, to match gnome shell appearance.  The extension must show the unanswered questions of each idea when it's blocked. When all ideas are blocked, show the bulb in a way it clearly state it. Minor change. (finished 2026-08-18, v0.3)
