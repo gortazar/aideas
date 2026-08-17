@@ -25,6 +25,34 @@ commands with one rule.
 | Clone path on box | `IDEAS_REPO_PATH` | Absolute; `/opt/idea-agent` in the examples below |
 | Service username on box | `User=` in both units, and the `PATH=` line | The user whose `~/.claude` holds the auth token |
 
+## Installing on this laptop
+
+One command installs the orchestrator as *user* systemd services and then the GNOME Shell
+extension, pointed at the address it just configured:
+
+```bash
+./orchestrator/install.sh                       # this clone
+./orchestrator/install.sh --repo ~/aideas-sandbox/repo   # or a different one
+```
+
+User units rather than system ones: the orchestrator runs as you, because it needs your
+`~/.claude` token to invoke agents and your SSH key to push. Options: `--port`, `--bind`,
+`--no-extension`, `--enable-timer`, `--uninstall`.
+
+**The timer is installed but not enabled.** Enabling it means cycles run every five
+minutes on their own, and spend money on their own — so it is an explicit choice:
+
+```bash
+systemctl --user start idea-orchestrator.service          # one cycle now
+systemctl --user enable --now idea-orchestrator.timer     # every 5 minutes, unattended
+```
+
+Two things it cannot do for you: on Wayland the Shell must be restarted (log out and back
+in) before it will load new extension code, and user services stop when you log out unless
+you run `sudo loginctl enable-linger $USER`.
+
+The section below is the other deployment — a separate always-on box, with system units.
+
 ## Orchestrator box
 
 ```bash
