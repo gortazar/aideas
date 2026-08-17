@@ -36,14 +36,21 @@ symbolic icons) can only be confirmed in a real compositor.
       next heading, and a case asserting the count and the texts come from one reader.
       Checked against the repo's real `PLAN.md` files: `vacas`'s one open question folds to 197
       characters, cut at a word boundary.
-- [ ] U2 — `state.js` parses the new key, hostilely.
+- [x] **U2 — parsing it, hostilely.** `state.js` reads the key into `row.openQuestionTexts`,
+      always an array so a caller never has to ask first. Every wrong shape the wire could hold
+      becomes an empty list rather than a throw — absent (an old box against a new extension),
+      null, a string instead of an array, an object, non-string members, blank members — and the
+      server's own bounds are applied again here: newlines collapsed (a newline in a menu row
+      breaks the row), 300 characters per question, 5 questions per row. Not distrust of the box
+      so much as of the *pairing*: laptop and box are updated at different times. 8 tests; 213
+      gjs tests green.
 - [ ] U3 — the questions in the menu, under the idea they belong to.
 - [ ] U4 — the bulbs: the SVG family, the loader, `ICONS` repointed.
 - [ ] U5 — the `allBlocked` state and its visibility clause.
 - [ ] U6 — the compositor: smoke assertions and screenshots.
 - [ ] U7 — the bump to 0.3 and the docs.
 
-Next: U2 — parsing the new key.
+Next: U3 — the questions in the menu.
 
 ### Answered questions, as read
 
