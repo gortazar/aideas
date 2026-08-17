@@ -1,178 +1,204 @@
-# Plan: aideas — a release workflow that actually publishes the extension
+# Plan: aideas — a grey bulb, and the questions behind "blocked"
 
-Difficulty estimate: medium — the change itself is small (one workflow, one installer branch, a
-version bump), but the thing being built can only be fully exercised by a push to `main`, which is
-precisely how the current workflow shipped broken and stayed broken unnoticed for two days.
+Difficulty estimate: medium — each piece is small, but the change crosses three boundaries at
+once (the `/state` contract, the orchestrator that serves it, the extension that renders it) and
+it ships the extension's first image asset, whose one hard requirement — that GNOME recolours it
+like a stock symbolic icon — can only be confirmed in a real compositor.
 
 ## Context
 
-This entry exists because the release path built in v0.1 does not work. Four facts, all checked
-against the repository and the GitHub API rather than assumed:
+The entry asks for three things, and they are less independent than they look:
 
-1. **The workflow has run exactly once, and it failed.** `.github/workflows/release-aideas.yml`
-   ran on the push to `main` that merged v0.1 (2026-08-14T14:43Z) and failed at the **"Pack the
-   extension"** step; every step after it was skipped. It has not run since — the path filter is
-   `ideas/aideas/**`, and nothing in the folder has changed on `main` since that merge.
-2. **The cause is in the workflow, not in the extension.** The job installs only `zip` and
-   `libglib2.0-bin` and then runs `make pack`, but `pack` depends on `check-bundle`, which runs
-   `gjs -m tools/check-bundle.js` (Makefile:65-76). `gjs` is not on a stock `ubuntu-latest`
-   runner. The comment above that step — "the whole gnome-shell closure stays out of this job" —
-   is right about `gnome-shell` and wrong about `gjs`. `flake.nix` already has a
-   `packages.default` that builds the identical zip *with* gjs, which is the fix.
-3. **So the v0.1 release was made by hand**, on 2026-08-16T20:41Z by `gortazar`, and it does not
-   look like what the workflow would have produced: different title, different notes, and its
-   checksum asset is `SHA256SUMS`, not `<zip>.sha256`. That matters, because `install.sh:118`
-   fetches `"$URL.sha256"`, gets a 404, and — by design, since an absent checksum is not an
-   error — installs **without verifying anything**. The one release that exists is the one shape
-   the installer cannot check.
-4. **Nobody was told.** An agent cannot push this repo, so the workflow's first real run happens
-   after a merge that no agent sees the result of. A red X on the Actions tab is the only signal,
-   and it was missed. Anything this plan builds has to be verifiable *before* the merge, from a
-   worktree, or it will fail the same way.
+1. **The icon must be a bulb 💡, in grey, matching GNOME Shell.** Today `ICONS` in
+   `src/lib/indicatorModel.js:26-33` maps the six panel states to six *different* stock
+   freedesktop icons — `system-run-symbolic`, `dialog-question-symbolic`,
+   `media-playback-pause-symbolic`, and so on — so the button has no identity of its own: it
+   looks like a gear, then a question mark, then a pause sign. A bulb is the idea's mark and
+   should stay a bulb whatever the state is.
+   "In grey colors" is what a **symbolic** icon already gives: GNOME recolours symbolic icons to
+   the panel foreground, so the bulb matches the theme, follows light/dark, and dims with the
+   rest of the top bar. The thing being ruled out is the coloured emoji. That also means **the
+   state cannot be carried by colour** — the shell will paint every variant the same grey — so
+   each state has to differ in *shape*.
+   This reverses one v0.1 decision, deliberately: the comment above `ICONS` says the extension
+   "ships no image assets, so there is nothing to theme wrongly". There is no bulb in the stock
+   Adwaita symbolic set, so the bulb has to be shipped. `make build` already copies all of
+   `src/extension/.` into the bundle (`Makefile:62`), so an `icons/` folder there travels into
+   the zip with no build change.
+
+2. **Show the unanswered questions of each blocked idea.** The extension cannot do this today,
+   and not because of the menu: `/state` does not carry the text. A blocked row has
+   `open_questions` — a *count* (`docs/state-contract.md:104`, written by
+   `orchestrator.py:1441-1447`) — and the menu renders that count, or the note that says the
+   same thing, at `menuModel.js:91-97`. The question text exists only in `PLAN.md` on the box, so
+   the count has to become the count *and* the text, which is an additive contract change of
+   exactly the kind `docs/state-contract.md:148-152` says to expect. `count_open_questions()`
+   already knows how to find the lines (`orchestrator.py:392-404`); it has to return them too.
+   Note that not every blocked row has questions: `STATUS.md says blocked` is also `blocked`
+   (`orchestrator.py:1448-1449`) and carries no `open_questions` at all. Those rows keep reading
+   exactly as they do now.
+
+3. **When all ideas are blocked, say so unmistakably.** There is no such state today: with no
+   cycle running, one blocked idea and ten blocked ideas produce the same `blocked` icon and a
+   number. "Everything is stuck waiting for me" is a different fact from "some things are
+   waiting" — it is the only queue state where nothing will move until a person acts — and it
+   deserves its own bulb.
+   This collides with the visibility rule from v0.1, whose answered question made the button
+   visible **only while a cycle is running**. An all-blocked queue is by definition not running,
+   so under today's rule the new bulb would be invisible to anyone without "always show" on, and
+   the feature would ship unseeable. The first open question below settles that; the plan assumes
+   the button appears.
 
 Assumptions, stated rather than asked:
 
-- **"Every time changes are made" means every change that alters the packed artefact.** A change
-  to `STATUS.md`, `PLAN.md`, `plans/`, `docs/`, `screenshots/` or the test suite does not produce
-  a release; a change to `src/`, `schemas/`, `metadata.json`, or the build rules that assemble
-  them does. Otherwise every status update publishes a byte-identical zip under a new tag.
-- **`install.sh` itself is not part of the artefact.** It is fetched raw from `main`, so a change
-  to it is live immediately and needs no release. It stays outside the trigger paths.
-- **This work may edit `.github/workflows/release-aideas.yml` and `install.sh`.** The second
-  answered question of `plans/01-2026-08-17.md` grants this idea, and only this idea, work outside
-  the idea folder; the release workflow was built under that grant and is where the bug is.
-- **The version goes to 0.2** (the entry says minor), in `STATUS.md`, in
-  `src/extension/metadata.json` (`version-name`) and in `flake.nix`'s `packages.default.version`,
-  which is still hardcoded `"0.1"`.
-- **Tags are never moved or deleted.** A published release is a fact; the workflow only ever adds.
-- **One box, one channel.** Releases stay in this repo under the `aideas-shell-v*` prefix, as the
-  third answered question of the v0.1 plan settled. Nothing here goes to extensions.gnome.org.
+- **This is version 0.3**, a minor entry: `STATUS.md`, `src/extension/metadata.json`
+  (`version-name`) and `flake.nix` (`packages.default.version`), which the release workflow
+  asserts are one string.
+- **This work may edit `orchestrator/heartbeat_server.py`, `orchestrator/orchestrator.py` and
+  `docs/state-contract.md`**, under the grant recorded in `plans/01-2026-08-17.md` and used again
+  in 0.2. Everything else stays inside `ideas/aideas/`. The root `README.md` is the queue and is
+  never touched.
+- **The contract only grows.** `open_questions` keeps its meaning and its type; the text arrives
+  as a new key. An extension that does not see it, or a box that does not send it, must both
+  behave exactly as they do today — the laptop and the box are updated at different times.
+- **Question text is untrusted, unbounded input.** It comes from a markdown file an agent wrote:
+  multi-line, `**bold**`, hundreds of characters, occasionally the whole rationale of a decision.
+  The server bounds it and the menu wraps it; neither trusts it.
+- **Rows stay read-only.** Answering a question means editing `PLAN.md` on the box. Showing the
+  questions does not make the menu a place to answer them.
 
 ## Features
 
-- **A release job that can actually build the artefact.** The pack step becomes `nix build` — the
-  same `packages.default` derivation `nix flake check` already validates — instead of apt-installed
-  `zip` plus a `make pack` that silently needs `gjs`. The zip that gets uploaded is then, by
-  construction, the zip CI checked, and the failure mode of v0.1 (a build tool missing from the
-  runner) cannot recur for any tool the flake declares.
-- **The release runs the tests it is releasing.** `nix flake check` (lint, unit, http, bundle) and
-  the `/state` contract test run in the same job, before anything is published. A release that
-  fails its own suite is worse than no release, and with releases now firing on ordinary pushes
-  this is the only thing standing between a bad commit and an installable bad extension.
-- **Triggered by changes to the extension, not to its paperwork.** The `push` filter narrows from
-  `ideas/aideas/**` to the shipped inputs — `src/**`, `Makefile`, `flake.nix`,
-  `tools/check-bundle.js`, and the workflow file itself — on `main` only, with `workflow_dispatch`
-  kept for publishing by hand.
-- **A guard that turns "changed" into a fact about content.** Before publishing, the job compares
-  the freshly built artefact against the asset of the newest existing `aideas-shell-v*` release; if
-  the contents are identical it publishes nothing and says so. A re-run, a merge that touches a
-  shipped file without changing it, or a manual dispatch is therefore harmless rather than a
-  duplicate release.
-- **A reproducible zip, so that comparison means something.** `make pack` normalises entry order
-  and timestamps (`SOURCE_DATE_EPOCH`, `zip -X`), and a test packs twice and asserts one SHA-256.
-  Today the "byte-identical to `nix build`" claim in `STATUS.md` holds only because both builds
-  happened to see the same mtimes; a content check that compares zip bytes would otherwise report
-  a change on every run and release forever.
-- **A tag scheme where "newest wins" stays true.** The first release of a version is
-  `aideas-shell-v<version>`; a later artefact change at the same version becomes
-  `aideas-shell-v<version>-2`, `-3`, and so on. `install.sh` takes the first
-  `.shell-extension.zip` under an `aideas-shell-v` tag from the releases list, newest first, so
-  every one of these is reachable and the latest is what a fresh install gets.
-- **Assets the install script can verify.** Every release carries three files: the zip,
-  `<zip>.sha256` — the exact name `install.sh` asks for — and `SHA256SUMS`, which is what the
-  hand-made v0.1 release and the other ideas in this repo publish. `install.sh` gains a fallback
-  to `SHA256SUMS`, so the checksum is verified rather than silently skipped, including against the
-  release that already exists. A checksum that is present and wrong still refuses to install; a
-  release with neither file is still installable, because the structural uuid check remains.
-- **The decision is a tested script, not YAML.** `ci/release-plan.sh` decides — from the version
-  files, the releases list and the built artefact — whether to publish and under which tag, and
-  prints its reasoning. `ci/release-test.sh` drives it against a stubbed releases API over fixture
-  version files: first release of a version, second change at the same version, an unchanged
-  artefact, a version that disagrees with `metadata.json`, an empty releases list, and a releases
-  list containing another idea's tags. This is the part the v0.1 workflow got wrong and could not
-  test, and it is what makes the fix checkable from a worktree.
-- **Version consistency enforced, not documented.** One step asserts `STATUS.md`'s `version:`,
-  `metadata.json`'s `version-name` and `flake.nix`'s `packages.default.version` are the same
-  string, and fails the run when they are not. The existing "check the artefact is the version it
-  claims" step stays and now compares against that agreed value.
-- **The installer verified against a release-shaped source.** `ci/install-test.sh` (27 checks
-  today) gains cases for the `SHA256SUMS` fallback, for a `SHA256SUMS` whose digest is wrong, and
-  for a stub releases list carrying the suffixed tags, so the installer is exercised against
-  exactly the asset layout the workflow now produces.
-- **A post-merge check anyone can run in one command.** `tools/check-release.sh` asks the GitHub
-  API for the newest `aideas-shell-v*` release and asserts it has the three assets, that the
-  version matches `STATUS.md`, and that the zip's checksum matches its published digest. It is how
-  "the release is really there" gets confirmed after the merge — by a person, by the next cycle, or
-  by whoever reads `STATUS.md` — without anyone having to remember to open the Actions tab.
-- **v0.2 published, and the README saying how.** The release this entry is about, produced by the
-  workflow from the merge commit, plus a short section in `ideas/aideas/README.md` on what triggers
-  a release, what it contains, and how to re-run it by hand.
+- **A bulb, in every state.** `src/extension/icons/` gains a small family of symbolic SVGs drawn
+  on the 16px grid to the Adwaita conventions (single path, `fill="currentColor"`, no embedded
+  colour, `-symbolic.svg` suffix so the shell recolours rather than blits them). The panel wears
+  a bulb whatever is happening; what changes between states is the *drawing*, never the colour:
+  a lit bulb with rays while a cycle runs, a plain bulb when idle, an unlit bulb for all-blocked,
+  and the bulb with a small badge glyph for the states that are about the connection rather than
+  the queue. `ICONS` keeps its shape — a state-to-icon map, one lookup, still a pure function —
+  so every existing indicator test keeps applying and only the expected names change.
+- **The icon is grey because it is symbolic, not because it is painted grey.** The extension
+  loads the SVGs as symbolic icons so GNOME applies the panel foreground colour itself: the bulb
+  matches the shell in light and dark themes, in high contrast, and while the top bar dims. A
+  unit test asserts every shipped SVG carries no hard-coded fill colour, and the smoke test
+  asserts the panel icon really resolved (not a missing-image placeholder) and is drawn in the
+  panel's own colour.
+- **An "everything is blocked" bulb that reads as a stop, not a state.** A new `allBlocked`
+  panel state, entered when the reading is good, no cycle is running, there is at least one
+  blocked idea and **no row the orchestrator could pick up** — no `ready`, no `running`, no
+  `to be planned`. (`queued` rows do not count: a duplicate entry behind a blocked one is stuck
+  too.) It gets the unlit bulb, the count of blocked ideas as its badge, and an accessible name
+  that says the whole thing in one line: `aideas: every idea is blocked, 3 waiting for an
+  answer`. `blocked` — some blocked, something else could still run — keeps its own lit-but-
+  waiting bulb, so the two are told apart at a glance.
+- **The panel appears when the queue stops.** Visibility grows one clause: the button is shown
+  while a cycle is running, while "always show" is on, **and while every idea is blocked** — the
+  one state whose entire purpose is to be noticed by a person. Subject to the first open
+  question; if that is answered the other way, the state and its icon stay and only the extra
+  visibility clause goes.
+- **`/state` carries the questions, not just how many.** A blocked row gains
+  `open_question_texts`: an array of one-line strings, one per unticked `- [ ]` in the
+  `## Open Questions` section, in file order — the same lines `count_open_questions()` already
+  counts, so the count and the texts can never disagree. Present only when `open_questions` is,
+  absent (never null) otherwise, per the contract's convention for conditional keys.
+- **The server bounds what it sends.** A question is folded to one line (continuation lines
+  joined, whitespace collapsed), trimmed of its checkbox and of markdown emphasis, cut to a fixed
+  length with an ellipsis, and at most a fixed number of questions per idea are sent. The
+  contract's "about 120 bytes per idea" becomes a stated per-row bound instead of an estimate a
+  chatty `PLAN.md` could blow past — `/state` is read every few seconds by a panel.
+- **Questions in the menu, under the idea they belong to.** Each blocked row is followed by its
+  questions as read-only child lines, indented and dimmed, keyed off the row's `position` (the
+  only unique field). The row keeps its own detail line ("3 unanswered questions") as the summary
+  above them. Long questions wrap over at most two lines rather than being cut mid-word, and a
+  row with more questions than are shown ends with `+2 more`, so the menu never grows without
+  bound. All of it is decided in `menuModel.js` / `menuItems.js` as data, and asserted headlessly.
+- **Nothing changes for the rows that have no questions.** `STATUS.md says blocked` renders as it
+  does today. So does a blocked row from a box that has not been updated, and a row whose
+  `open_question_texts` is missing, empty, not an array, or full of non-strings — each of those
+  is a shape `state.js` already has to be hostile about, and each gets a test.
+- **The Blocked section works while a cycle runs, too.** Showing questions is a property of a
+  blocked row, not of the panel state, so the questions are there whenever the section is —
+  including behind a running cycle, and including in a stale last-good reading, where they are
+  dimmed with everything else.
+- **The contract says all of this.** `docs/state-contract.md` gains `open_question_texts` in the
+  row table with its bounds and its absent-rather-than-null rule, and
+  `tests/test_state_contract.py` asserts it against fixture repositories — a blocked idea with
+  questions, one blocked by `STATUS.md` with none, a question longer than the cap, a `PLAN.md`
+  with more questions than the cap, and a ticked-then-unticked mixture — so the two halves cannot
+  drift.
+- **Screenshots that show what was built.** The smoke test captures the three new looks — running,
+  some blocked, all blocked — plus the menu with questions expanded, since "clearly states it" is
+  a claim about appearance and the only honest evidence for it is a picture.
 
 ## Approach
 
 Units, each one commit, tests first:
 
-1. **U1 — reproducible pack.** Normalise `make pack`; a test that packs twice and compares
-   SHA-256, and that `nix build` agrees. Nothing downstream is trustworthy until the artefact is a
-   function of the source alone.
-2. **U2 — `ci/release-plan.sh` and its test**, against a stubbed releases API. Pure decision
-   logic: publish or not, and the tag. No GitHub, no network.
-3. **U3 — the checksum fallback in `install.sh`**, with the `SHA256SUMS` cases added to
-   `ci/install-test.sh`. Verified against the v0.1 asset layout that is live right now.
-4. **U4 — the workflow rewritten** around `nix build`, the flake checks, the narrowed paths, the
-   consistency check and `release-plan.sh`. Reviewed against the failed run's step list so every
-   step that failed or was skipped has a reason to pass now.
-5. **U5 — `tools/check-release.sh`**, run against the *existing* v0.1 release to prove it reports
-   truthfully before it is ever pointed at v0.2.
-6. **U6 — the bump and the docs.** `version: 0.2` in `STATUS.md`, `version-name` in
-   `metadata.json`, the flake's version, the README section, and `status: done` only once the
-   evidence in `STATUS.md` says which of these ran and what they printed.
+1. **U1 — the server side.** `count_open_questions()` grows a sibling that returns the lines;
+   `queue_rows()` attaches `open_question_texts` with its folding and its caps; the contract
+   document and `tests/test_state_contract.py` follow in the same commit. Nothing in the
+   extension yet — the endpoint must be right before anything renders it.
+2. **U2 — parsing it, hostilely.** `state.js` reads the new key into `row.openQuestionTexts`,
+   defaulting to `[]` for every wrong shape, with unit tests for absent, null, not-an-array,
+   non-string members, empty strings and an over-long array.
+3. **U3 — the menu.** `menuModel.js` emits question lines under blocked rows; `menuItems.js`
+   flattens them; `indicator.js` gains one widget case, dimmed and non-reactive. Unit tests
+   compare whole menus, including the stale and cycle-running cases.
+4. **U4 — the bulbs.** The SVG family, the loader, `ICONS` repointed, the no-hard-coded-colour
+   test, and a `check-bundle.js` check that every name `ICONS` uses is a file that shipped —
+   because a missing icon in a panel is a silent blank square, not an error.
+5. **U5 — `allBlocked`.** The new state and the visibility clause in `indicatorModel.js`, with
+   tests for the boundaries: one ready row among blocked ones is not all-blocked, a `queued`
+   duplicate does not rescue it, an empty queue is not all-blocked, and a running cycle never is.
+6. **U6 — the compositor.** Smoke-test assertions that the icon resolved and is recoloured, that
+   the all-blocked panel appears without "always show", and that the menu renders questions;
+   screenshots for each. This is the unit that can fail in a way no other can.
+7. **U7 — the bump and the docs.** 0.3 in the three files, `README.md` on what the bulb states
+   mean, and `STATUS.md` recording what was run and what it printed.
 
 ## Risks / things to verify early
 
-- **The first real run still happens after the merge.** Everything above is arranged so that the
-  only untested thing left is GitHub's own behaviour: `nix build` in Actions, and `gh release
-  create` with three assets. `ci/release-plan.sh` and `ci/install-test.sh` cover the logic; if the
-  run still fails, `tools/check-release.sh` is what says so out loud.
-- **A push to `main` mid-build publishes work in progress.** The orchestrator merges an agent's
-  branch every cycle, so "release on every change" will fire while a later entry is half-built.
-  The tests-must-pass gate keeps it *working*, not *finished*. The first open question decides
-  whether that is wanted.
-- **`nix build` on a cold runner is slow** — several minutes, no cache. Acceptable for a job that
-  runs on extension changes only; if it is not, the fallback is apt plus `gjs` explicitly
-  installed, which is the same fix with a worse guarantee.
-- **The v0.1 release cannot be repaired from here.** No agent can add a `.zip.sha256` to it, which
-  is why the fix belongs in `install.sh` as a fallback rather than in a re-upload.
-- **Do not widen the trigger back out.** With `ideas/aideas/**` as the path filter, the commit that
-  sets `status: done` in `STATUS.md` would itself trigger a release build — harmless with the
-  content guard, but it makes every status edit run a Nix build for nothing.
-- **Never touch `README.md` at the repo root** — it is the queue — and keep everything else inside
-  `ideas/aideas/`, plus the two files named in the assumptions above.
+- **A file icon may not be recoloured.** GNOME recolours symbolic icons, but whether a
+  `Gio.FileIcon` pointing into the extension directory gets that treatment — as opposed to an
+  icon-theme name — depends on the `-symbolic.svg` suffix being honoured by the texture cache.
+  If it is not, the fallback is to add the extension's `icons/` to the icon theme search path and
+  keep using `icon_name`. Worth settling in U4, before three SVGs are drawn to the wrong plan.
+- **Grey means state cannot be colour.** Every bulb variant will be painted the same. If two
+  states are not distinguishable in a 16px monochrome silhouette, they are not distinguishable at
+  all — the smoke-test screenshots are the check, and the badge carries the number regardless.
+- **`/state` gets bigger, and it is polled.** Ten blocked ideas with five questions each is a
+  much larger body than the contract's "about 120 bytes per idea". The caps are what keep the
+  panel's polling cheap; they are part of the feature, not a detail.
+- **Box and laptop are updated separately.** A new extension against an old server, and an old
+  extension against a new server, must both work. Both directions get a test.
+- **The bulb is what an installed user sees.** The icon change lands on the laptop through a
+  release, which 0.2 made work; `make check-release` after the merge is still how anyone knows it
+  published.
+- **Do not touch the root `README.md`,** and keep the orchestrator edits to the two files named
+  above.
 
 ## Open Questions
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [x] **Should a change merged while the idea is still `in_progress` publish a release?** The entry
-      says "every time changes are made", and the plan assumes yes: any push to `main` that changes
-      the packed artefact and passes the full suite publishes, so the newest release is always the
-      newest working extension. The alternative is to keep the v0.1 gate — publish only when
-      `STATUS.md` says `status: done` — which means the release is always a finished entry, at the
-      cost of "every change" not being literally true, since the orchestrator merges mid-build work
-      to `main` every cycle. Ticking this line as-is chooses publishing on every green change. No, releases
-      are made when the task is done.
-- [x] **When the artefact changes but the version does not, what should the release be called?**
-      The plan assumes a suffixed tag — `aideas-shell-v0.2-2`, `-3` — so every published artefact
-      keeps its own immutable tag and the installer's "newest first" rule picks the right one. The
-      alternatives are (b) replace the assets on the existing `aideas-shell-v0.2` release in place,
-      which keeps one release per version but makes a tag mean two different zips over time, or
-      (c) publish nothing until the version is bumped, which makes releases per-entry again.
-      Ticking this line as-is chooses the suffixed tag. Suffixed tag.
-- [x] **What counts as proof that the release exists, given no agent can publish one?** AGENTS.md
-      requires downloading the published asset and running the installer from a clean directory
-      before an entry is done, but the release is created by the workflow *after* the merge, which
-      is after the last cycle ends. The plan assumes: `ci/install-test.sh` against the locally built
-      artefact through a stubbed releases API is the pre-merge proof, `tools/check-release.sh`
-      is the post-merge one, and `STATUS.md` records both plus what to do if the run went red.
-      Ticking this line as-is accepts that; the alternative is that this entry stays `in_progress`
-      until someone confirms `aideas-shell-v0.2` is downloadable.
+- [ ] **Should the panel button appear when every idea is blocked, even though no cycle is
+      running?** The v0.1 answered question fixed visibility to "only while a cycle is running",
+      and an all-blocked queue is never running — so under that rule the new bulb would exist but
+      never be seen without turning "always show" on, which makes the third part of this entry
+      pointless. The plan assumes the button appears in that one extra case, on the grounds that
+      it is the only state whose meaning is "a person is now the bottleneck". Ticking this line
+      as-is chooses that. The alternative is to keep the rule strictly and let the all-blocked
+      bulb only ever be seen by people who already keep the button on.
+- [ ] **Should the bulb replace *all six* state icons, or only the queue ones?** The entry says
+      "the icon must be a bulb", and the plan assumes the whole family becomes bulbs, so the
+      button always looks like the same thing and the state is read from its shape and badge. The
+      alternative is to keep stock icons for the three states that are about the *connection*
+      rather than the queue — `unreachable`, `unavailable`, `unconfigured` — where a
+      network-offline or warning glyph says more, at the cost of the panel sometimes not looking
+      like this extension at all.
+- [ ] **How much of a long question should the menu show?** The plan assumes each question is
+      folded to one line, wrapped over at most two lines in the menu, cut with an ellipsis after
+      that, and at most three questions shown per idea with `+n more` for the rest — a menu is a
+      glance, and the full text is in `PLAN.md`. The alternatives are to show every question in
+      full however long the menu becomes, or to show only the first question per idea as a taste
+      of what is waiting.
