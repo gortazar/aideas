@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Every idea is blocked: nothing will move until a person answers something. A solid bulb
-     struck through, which is the one silhouette here with a straight bar crossing it and reads
-     as a stop at a glance — louder than an unlit bulb, which at 16px is only a hollow one and
-     would be confusable with idle. The badge beside it carries how many are waiting. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Every idea is blocked: nothing moves until a person answers something. The same bulb,
+       struck through by a bar heavy enough to be unmistakable at 16px — the one silhouette here
+       with a straight diagonal across it. The badge beside it carries how many are waiting. -->
   <g fill="currentColor">
-    <path d="M8 1.4a4.6 4.6 0 0 0-2.3 8.58v0.72h4.6V9.98A4.6 4.6 0 0 0 8 1.4z"/>
-    <path d="M6.25 11.4h3.5v1.2h-3.5z"/>
-    <path d="M6.7 13.1h2.6v1.2H6.7z"/>
-    <path d="M2.9 2.62l0.9-0.85 9.6 10.2-0.9 0.85z"/>
+    <path fill-rule="evenodd" d="M8 1.2a4.3 4.3 0 0 0-2.35 7.9v1.05h4.7V9.1A4.3 4.3 0 0 0 8 1.2zm0 1.4a2.9 2.9 0 0 1 1.58 5.33l-0.63 0.41v0.41H7.05v-0.41L6.42 7.93A2.9 2.9 0 0 1 8 2.6z"/>
+    <path d="M5.9 11.1h4.2v1.3H5.9z"/>
+    <path d="M6.6 13.1h2.8v1.3H6.6z"/>
+    <path d="M1.35 13.2L13.2 1.35l1.45 1.45L2.8 14.65z"/>
   </g>
 </svg>

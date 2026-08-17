@@ -5,6 +5,7 @@
 // proved without a compositor — the smoke test does it — but everything it *depends on* can be
 // checked here: the `-symbolic` name, one colour, and that colour being `currentColor`.
 
+import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
@@ -68,6 +69,38 @@ suite('the shipped icons', () => {
             assert(svg.includes('viewBox="0 0 16 16"'), `${name} is not on a 16x16 viewBox`);
             assert(svg.includes('width="16"') && svg.includes('height="16"'),
                 `${name} does not declare a 16px size`);
+        }
+    });
+
+    test('nothing stands between the top of the file and <svg>', () => {
+        // gdk-pixbuf recognises an SVG by sniffing the start of the file. A comment before the
+        // <svg> element pushes it past that window, and the loader then refuses the file
+        // entirely: the shell silently substitutes a fallback icon, the panel shows a glyph
+        // that is not ours, and nothing is logged. That is exactly what happened here — the
+        // tests above all passed while the bulb was never once rendered. Comments live inside
+        // the element now.
+        for (const name of files) {
+            const svg = read(name);
+            const beforeSvg = svg.slice(0, svg.indexOf('<svg'));
+            assert(!beforeSvg.includes('<!--'),
+                `${name} has a comment before <svg>, which stops it being recognised at all`);
+            assertEquals(beforeSvg.trim(), '<?xml version="1.0" encoding="UTF-8"?>',
+                `${name} has something other than the XML declaration before <svg>`);
+        }
+    });
+
+    test('every one actually rasterises', () => {
+        // The check the structural rule above is a proxy for: ask the same loader the shell
+        // uses whether this file is an image at all.
+        for (const name of files) {
+            const path = GLib.build_filenamev([iconsDir(), name]);
+            let pixbuf = null;
+            try {
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 16, 16, true);
+            } catch (error) {
+                assert(false, `${name} could not be loaded as an image: ${error.message}`);
+            }
+            assertEquals(pixbuf.get_width(), 16, `${name} did not rasterise at 16px`);
         }
     });
 

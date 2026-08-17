@@ -90,10 +90,29 @@ symbolic icons) can only be confirmed in a real compositor.
       The menu header still says `Idle` for such a queue — accurate, and the Blocked section
       right beneath it lists every idea and its questions. Changing that wording was not part of
       this entry.
-- [ ] U6 — the compositor: smoke assertions and screenshots.
+- [x] **U6 — the compositor, where this entry's real risk lived.** The smoke test grew from 39
+      checks to **56**, all green: the panel wears the shipped bulb and *resolved to the file*;
+      its pixels are drawn, light and grey — proving the SVG is recoloured to the panel
+      foreground rather than blitted; the questions appear under their blocked idea; the
+      all-blocked bulb appears **without a cycle running and without "always show"**, badged 3,
+      with `+2 more` under the idea that has five questions and `STATUS.md says blocked`
+      unchanged under the one that has none. Screenshots for each.
+      **The screenshots did their job twice.** First: at 16px the original solid bulbs read as a
+      cog, and running and all-blocked were indistinguishable — so all four were redrawn as
+      outline bulbs, where the hollow interior carries the mark. Second, and worse: after the
+      redraw the panel looked *exactly the same*, which is how it came out that the shell had
+      never rendered these files at all. A leading `<!-- -->` comment pushes `<svg>` past
+      gdk-pixbuf's format sniffing, the loader refuses the file, and the shell silently
+      substitutes a fallback icon with nothing logged. Every unit test above passed throughout.
+      Now: the comments live inside the element; two unit tests catch it (nothing may stand
+      between the top of the file and `<svg>`, and every icon must actually rasterise through
+      the same loader the shell uses, for which the flake's `unit` check gained gdk-pixbuf and
+      librsvg); and the smoke test compares the icon's pixels between two states, because a
+      fallback icon is drawn, light and grey too — the one thing it cannot be is *different*
+      between states.
 - [ ] U7 — the bump to 0.3 and the docs.
 
-Next: U6 — the compositor.
+Next: U7 — the bump to 0.3 and the docs.
 
 ### Answered questions, as read
 

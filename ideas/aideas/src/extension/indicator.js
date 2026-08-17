@@ -225,8 +225,10 @@ class AideasIndicator extends PanelMenu.Button {
                     this.menu.addMenuItem(questionItem(item));
                     break;
                 case 'question-more':
-                    this.menu.addMenuItem(infoItem(item.text, null,
-                        { dim: true, styleClass: 'aideas-question' }));
+                    // The same indented, dimmed line as a question: it belongs to the same
+                    // idea, and aligning it with the section titles instead would read as if
+                    // it were about the whole queue.
+                    this.menu.addMenuItem(questionItem(item));
                     break;
                 case 'footer':
                     this.menu.addMenuItem(infoItem(item.text, null, { dim: true }));

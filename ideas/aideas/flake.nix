@@ -85,12 +85,20 @@
         unit = pkgs.runCommand "aideas-unit"
           {
             src = sourceFor pkgs;
-            nativeBuildInputs = [ pkgs.gjs ];
+            # gdk-pixbuf and librsvg are here for one test: that each shipped SVG can actually
+            # be loaded as an image. A comment before the <svg> element makes gdk-pixbuf refuse
+            # the file, the shell substitutes a fallback icon, and nothing is logged — so this
+            # is checked with the same loader the shell uses rather than by reading the XML.
+            nativeBuildInputs = [ pkgs.gjs pkgs.gdk-pixbuf pkgs.librsvg ];
           } ''
           cd $src
           export HOME=$TMPDIR
           export XDG_DATA_HOME=$TMPDIR/data
           export XDG_CONFIG_HOME=$TMPDIR/config
+          # The typelib is what `import GdkPixbuf from 'gi://GdkPixbuf'` needs; the module file
+          # is what makes that loader able to read an SVG at all.
+          export GI_TYPELIB_PATH=${pkgs.gdk-pixbuf}/lib/girepository-1.0
+          export GDK_PIXBUF_MODULE_FILE=${pkgs.librsvg}/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
           gjs -m tests/run.js tests/unit | tee $TMPDIR/log
           mkdir -p $out
           cp $TMPDIR/log $out/unit.log
