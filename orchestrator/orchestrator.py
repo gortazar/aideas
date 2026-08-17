@@ -48,8 +48,9 @@ from pathlib import Path
 
 # The orchestrator's own version, bumped by hand — unrelated to the per-idea versions it
 # manages. 1.0 is the Python rewrite with parallel agents, graceful stop, a renewing lock,
-# repeat entries and versioning.
-ORCHESTRATOR_VERSION = "1.0"
+# repeat entries and versioning. 1.1 merges and retries a push that lost a race instead of
+# leaving the work for the next cycle.
+ORCHESTRATOR_VERSION = "1.1"
 
 UNLIMITED = {"unlimited", "none", "off"}
 
@@ -710,8 +711,11 @@ class Orchestrator:
             # did less than it wanted to, which otherwise looks like a quiet cycle.
             log(f"WARNING: {denials} tool call(s) denied — widen --allowed-tools if this repeats.")
 
-    def pull(self) -> None:
+    def pull(self) -> bool:
         """Fast-forward if possible; merge if the remote has moved on.
+
+        Returns True when this clone now contains the remote's history, False when the two
+        conflict and a person has to resolve it.
 
         `--ff-only` on its own wedges the clone whenever someone pushes while a cycle is
         running — a normal thing to do, since editing README.md is how you steer this. The
@@ -723,30 +727,51 @@ class Orchestrator:
         says so loudly rather than failing quietly.
         """
         if git("pull", "--quiet", "--ff-only", cwd=self.repo).returncode == 0:
-            return
+            return True
         log("Fast-forward pull failed — the remote has moved on. Trying a merge.")
         if git("pull", "--no-rebase", "--no-edit", "--quiet", cwd=self.repo).returncode == 0:
             log("Merged the remote changes.")
-            return
+            return True
         git("merge", "--abort", cwd=self.repo)
         log("WARNING: the remote and this clone have conflicting edits and cannot be "
             "merged automatically. Continuing on the local tree — but nothing will push "
             "until someone resolves it by hand.")
+        return False
 
-    def push_if_ahead(self, context: str = "") -> None:
-        """Push whatever is committed but unsent.
+    def push_if_ahead(self, context: str = "", attempts: int = 3) -> None:
+        """Push whatever is committed but unsent, absorbing a push that lost a race.
 
         Called from `finally`, because several paths return before the build phase — most
         commonly 'no idea is currently buildable' — and each of those still leaves the
         planning pass's commits behind. Pushing only at the end of a full cycle stranded
         them until the *next* cycle's start-of-run retry, which on a disposable clone can
         mean losing them entirely.
+
+        A rejected push nearly always means someone pushed while the cycle ran, which is
+        the normal way to steer this repo. `pull()` already knows how to absorb that, so
+        deferring to the next cycle only postpones the same merge — and with the timer
+        disabled, "the next cycle" can be days away, or never. Merge and retry here
+        instead, while the lock is still held. Bounded, so that someone pushing repeatedly
+        cannot turn this into a spin, and abandoned immediately on a real conflict, which
+        no number of retries would fix.
         """
-        ahead = git("rev-list", "--count", "@{u}..HEAD", cwd=self.repo).stdout.strip()
-        if not (ahead.isdigit() and int(ahead) > 0):
-            return
-        if git("push", "--quiet", cwd=self.repo).returncode != 0:
-            log(f"push failed ({ahead} commit(s) pending{context}) — will retry next cycle")
+        pending = "0"
+        for attempt in range(1, attempts + 1):
+            pending = git("rev-list", "--count", "@{u}..HEAD", cwd=self.repo).stdout.strip()
+            if not (pending.isdigit() and int(pending) > 0):
+                return
+            if git("push", "--quiet", cwd=self.repo).returncode == 0:
+                if attempt > 1:
+                    log(f"push succeeded after merging the remote ({pending} commit(s)"
+                        f"{context}).")
+                return
+            if attempt == attempts:
+                break
+            log(f"push rejected ({pending} commit(s) pending{context}) — someone pushed "
+                f"while this cycle ran; merging and retrying ({attempt}/{attempts - 1}).")
+            if not self.pull():
+                break
+        log(f"push failed ({pending} commit(s) pending{context}) — will retry next cycle")
 
     def claude_budget_args(self, key: str) -> list[str]:
         value = self.config.get(key, "")

@@ -113,9 +113,10 @@ answered with a tick and no prose.
 
 ## Things that will otherwise surprise you
 
-- **Do not push to the ideas repo while a cycle is running.** Its push will be rejected.
-  Nothing is lost — the next cycle merges the divergence automatically — but the work sits
-  unpushed until then. Push before or after, not during.
+- **Pushing while a cycle runs is fine.** The cycle's own push is rejected, but it then
+  merges your commits and pushes again, still holding the lock. Only a genuine conflict —
+  the same lines edited on both sides — stops it, and it says so loudly and keeps its work
+  locally for a person to resolve.
 - **Agents cannot run `rm -rf` headlessly.** Claude Code refuses destructive filesystem
   commands regardless of `--allowed-tools`. Denials naming `rm`/`rmdir` are that, not a
   misconfiguration; agents work around them and finish.
