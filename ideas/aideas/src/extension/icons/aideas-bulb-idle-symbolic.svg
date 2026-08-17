@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- A plain bulb: nothing running, nothing waiting on anybody.
+       All four bulbs share this outline. Outline rather than solid, because at 16px a filled
+       circle on a stem reads as a cog, not a bulb — the hollow interior is what makes the shape
+       legible, and it is also where the marks that tell the states apart go. -->
+  <g fill="currentColor">
+    <!-- the glass: a ring, so the shape is read from its contour -->
+    <path fill-rule="evenodd" d="M8 1.2a4.3 4.3 0 0 0-2.35 7.9v1.05h4.7V9.1A4.3 4.3 0 0 0 8 1.2zm0 1.4a2.9 2.9 0 0 1 1.58 5.33l-0.63 0.41v0.41H7.05v-0.41L6.42 7.93A2.9 2.9 0 0 1 8 2.6z"/>
+    <!-- the screw base: two bands, clearly narrower than the glass -->
+    <path d="M5.9 11.1h4.2v1.3H5.9z"/>
+    <path d="M6.6 13.1h2.8v1.3H6.6z"/>
+  </g>
+</svg>

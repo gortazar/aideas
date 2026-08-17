@@ -121,6 +121,8 @@ export default class AideasProbe extends Extension {
         // extension gives them rather than by position.
         const panelLabels = labelsOf(indicator).filter(text => text !== '');
 
+        const icon = this._iconActor(indicator);
+
         return JSON.stringify({
             present: true,
             // More than one means an enable/disable round left a button behind.
@@ -128,6 +130,11 @@ export default class AideasProbe extends Extension {
                 .filter(key => key.startsWith('aideas-shell@')).length,
             visible: indicator.visible === true,
             icon: this._iconName(indicator),
+            // What the icon actually resolved to, and where it is on the stage. The smoke test
+            // needs both: the first says the shipped bulb was picked rather than a theme name,
+            // the second says which pixels to look at to see whether it was recoloured.
+            iconFile: icon?.gicon?.get_file?.()?.get_path?.() ?? null,
+            iconGeometry: icon ? this._geometryOf(icon) : null,
             badge: panelLabels.length > 0 ? panelLabels[0] : null,
             accessibleName: indicator.accessible_name ?? null,
             menuOpen: menu?.isOpen === true,
@@ -135,12 +142,13 @@ export default class AideasProbe extends Extension {
         });
     }
 
-    _iconName(actor) {
+    /** The St.Icon inside the panel button, whatever it is wrapped in. */
+    _iconActor(actor) {
         const walk = node => {
             if (node === null || node === undefined)
                 return null;
-            if (typeof node.icon_name === 'string' && node.icon_name !== '')
-                return node.icon_name;
+            if (node.constructor?.$gtype?.name === 'StIcon')
+                return node;
             for (const child of node.get_children?.() ?? []) {
                 const found = walk(child);
                 if (found !== null)
@@ -149,6 +157,33 @@ export default class AideasProbe extends Extension {
             return null;
         };
         return walk(actor);
+    }
+
+    _geometryOf(actor) {
+        const [x, y] = actor.get_transformed_position();
+        const [width, height] = actor.get_transformed_size();
+        return {
+            x: Math.round(x), y: Math.round(y),
+            width: Math.round(width), height: Math.round(height),
+        };
+    }
+
+    /**
+     * What the icon is, however it was set.
+     *
+     * A stock icon has an `icon_name`; one of this extension's own bulbs is a Gio.FileIcon and
+     * has none, so its file's base name stands in — which is the same string ICONS holds, and
+     * therefore the string a test can assert against either way.
+     */
+    _iconName(actor) {
+        const icon = this._iconActor(actor);
+        if (icon === null)
+            return null;
+        if (typeof icon.icon_name === 'string' && icon.icon_name !== '')
+            return icon.icon_name;
+
+        const path = icon.gicon?.get_file?.()?.get_path?.();
+        return path ? GLib.path_get_basename(path).replace(/\.svg$/, '') : null;
     }
 
     OpenMenu() {

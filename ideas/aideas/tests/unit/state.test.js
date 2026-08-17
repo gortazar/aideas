@@ -134,6 +134,84 @@ suite('parseState › rows', () => {
         assertEquals(parsed.targetVersion, null);
     });
 
+    test('a blocked row keeps the questions themselves', () => {
+        const [parsed] = parseState(body({ ideas: [row({
+            state: 'blocked', note: '2 unanswered questions', open_questions: 2,
+            open_question_texts: ['Should the bulb be grey?', 'Which port does the box use?'],
+        })] })).rows;
+
+        assertDeepEquals(parsed.openQuestionTexts,
+            ['Should the bulb be grey?', 'Which port does the box use?']);
+    });
+
+    test('a row from a box that has never heard of them has none', () => {
+        // An old server against a new extension: the key simply is not there.
+        const [parsed] = parseState(body({ ideas: [row({
+            state: 'blocked', open_questions: 3,
+        })] })).rows;
+
+        assertDeepEquals(parsed.openQuestionTexts, [],
+            'always an array, so a caller can list it without asking first');
+    });
+
+    test('every wrong shape becomes an empty list rather than a throw', () => {
+        for (const value of [null, undefined, 'a question', 42, true, {}, { 0: 'a' }]) {
+            const [parsed] = parseState(body({ ideas: [row({
+                state: 'blocked', open_questions: 1, open_question_texts: value,
+            })] })).rows;
+            assertDeepEquals(parsed.openQuestionTexts, [], `for ${JSON.stringify(value)}`);
+        }
+    });
+
+    test('members that are not usable strings are dropped, and the rest kept', () => {
+        const [parsed] = parseState(body({ ideas: [row({
+            state: 'blocked', open_questions: 5,
+            open_question_texts: ['first', '', '   ', null, 42, {}, [], ' second '],
+        })] })).rows;
+
+        assertDeepEquals(parsed.openQuestionTexts, ['first', 'second']);
+    });
+
+    test('a question the server did not fold is folded here', () => {
+        const [parsed] = parseState(body({ ideas: [row({
+            state: 'blocked', open_questions: 1,
+            open_question_texts: ['a question\nwrapped over\n\ttwo lines'],
+        })] })).rows;
+
+        assertDeepEquals(parsed.openQuestionTexts, ['a question wrapped over two lines'],
+            'a newline in a menu row breaks the row');
+    });
+
+    test('an over-long question is cut, whatever the server sent', () => {
+        const [parsed] = parseState(body({ ideas: [row({
+            state: 'blocked', open_questions: 1,
+            open_question_texts: ['x'.repeat(5000)],
+        })] })).rows;
+
+        const [question] = parsed.openQuestionTexts;
+        assert(question.length <= 300, `${question.length} characters reached the menu`);
+        assert(question.endsWith('…'), 'and it says it was cut');
+    });
+
+    test('an absurd number of questions is capped', () => {
+        const many = Array.from({ length: 200 }, (_, index) => `question ${index + 1}`);
+        const [parsed] = parseState(body({ ideas: [row({
+            state: 'blocked', open_questions: 200, open_question_texts: many,
+        })] })).rows;
+
+        assertEquals(parsed.openQuestionTexts.length, 5);
+        assertEquals(parsed.openQuestionTexts[0], 'question 1', 'the first ones, in order');
+    });
+
+    test('texts on a row that is not blocked are still parsed, not second-guessed', () => {
+        // state.js normalises shapes; it does not decide which rows are allowed what.
+        const [parsed] = parseState(body({ ideas: [row({
+            state: 'ready', open_question_texts: ['stray'],
+        })] })).rows;
+
+        assertDeepEquals(parsed.openQuestionTexts, ['stray']);
+    });
+
     test('every word of the documented vocabulary is known', () => {
         for (const state of KNOWN_STATES) {
             const [parsed] = parseState(body({ ideas: [row({ state })] })).rows;

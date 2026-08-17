@@ -27,10 +27,11 @@ KEEP=0
 
 RUNNING_PID=""
 IDLE_PID=""
+ALL_BLOCKED_PID=""
 
 cleanup() {
     local status=$?
-    for pid in "$RUNNING_PID" "$IDLE_PID"; do
+    for pid in "$RUNNING_PID" "$IDLE_PID" "$ALL_BLOCKED_PID"; do
         [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || true
     done
     if [[ $KEEP -eq 0 ]]; then
@@ -71,7 +72,10 @@ RUNNING_PID=$(start_stub running)
 RUNNING_PORT=$(head -1 "$STATE/running.port")
 IDLE_PID=$(start_stub idle)
 IDLE_PORT=$(head -1 "$STATE/idle.port")
-echo "   running cycle on 127.0.0.1:$RUNNING_PORT, idle box on 127.0.0.1:$IDLE_PORT"
+ALL_BLOCKED_PID=$(start_stub all-blocked)
+ALL_BLOCKED_PORT=$(head -1 "$STATE/all-blocked.port")
+echo "   running cycle on 127.0.0.1:$RUNNING_PORT, idle box on 127.0.0.1:$IDLE_PORT,"
+echo "   a queue with every idea blocked on 127.0.0.1:$ALL_BLOCKED_PORT"
 
 # A port nothing listens on, for the unreachable case. Chosen by binding and releasing one, so
 # it is free right now and almost certainly still free in a moment.
@@ -113,6 +117,7 @@ set +e
 python3 ci/smoke-assertions.py \
     --running-port "$RUNNING_PORT" \
     --idle-port "$IDLE_PORT" \
+    --all-blocked-port "$ALL_BLOCKED_PORT" \
     --dead-port "$DEAD_PORT" \
     --schemadir "$SCHEMADIR" \
     --screenshots "$SCREENSHOTS" \

@@ -20,7 +20,9 @@ it does not gain a judgement.
   reported *inside* the body via `available: false`, never as a status code. A non-200 is
   therefore a bug or a different server, and the extension treats it as unreachable.
 - No caching headers, no compression, no streaming. The body is small: about 120 bytes per
-  idea.
+  idea, and bounded rather than estimated — a blocked idea additionally carries its questions,
+  capped at 5 × 200 characters, so no row exceeds roughly 1 KiB however long a `PLAN.md`
+  question is. See [`open_question_texts`](#open_question_texts).
 
 ## Body
 
@@ -102,7 +104,35 @@ Conditionally present, and **absent rather than null** when they do not apply:
 | key              | present when       | meaning                                       |
 |------------------|--------------------|-----------------------------------------------|
 | `open_questions` | `state == blocked` because `PLAN.md` has unticked questions | how many. ≥1 |
+| `open_question_texts` | exactly when `open_questions` is | the questions themselves — see below |
 | `target_version` | `state == ready`   | the version this entry is meant to deliver     |
+
+### `open_question_texts`
+
+An array of one-line strings: the unanswered questions of that idea's `## Open Questions`
+section, in file order. Present exactly when `open_questions` is — a row blocked because its
+`STATUS.md` says so carries neither.
+
+Both come from one reader (`open_question_lines()`, of which `count_open_questions()` returns
+the length), so the count and the texts can never disagree about what is being waited on.
+
+Each string is **already folded and bounded by the server**, because a `PLAN.md` question is
+unbounded prose and `/state` is polled every few seconds:
+
+- the `- [ ]` and any leading whitespace are gone;
+- lines the question was wrapped across are joined into one, whitespace collapsed;
+- markdown emphasis (`*`, `**`, backticks) is stripped, since it renders as literal characters
+  in a menu. Underscores are **not** stripped — they are usually part of an identifier;
+- anything longer than **200 characters** is cut at a word boundary and ends with `…`;
+- at most **5** questions are sent per idea, however many `open_questions` reports. A reader
+  showing fewer than the count can say "+n more" from the difference.
+
+So a blocked row is bounded at roughly 1 KiB, which is the per-row bound that replaces this
+document's older "about 120 bytes per idea" estimate.
+
+A consumer must still not trust the array: it comes from a file an agent wrote. Treat a missing
+key, a null, a non-array, a non-string member and an empty string as "no texts", and do not
+assume `length == open_questions`.
 
 `state` is a closed vocabulary of five words:
 

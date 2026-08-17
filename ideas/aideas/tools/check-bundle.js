@@ -127,6 +127,39 @@ for (const path of files) {
     }
 }
 
+// --- icons ------------------------------------------------------------------------------------
+//
+// A name in ICONS that did not ship is not an error at runtime: St draws a blank square, the
+// panel silently loses its bulb, and nothing appears in the journal. So the bundle is asked
+// whether every icon it intends to wear is actually inside it.
+
+const indicatorModel = GLib.build_filenamev([bundle, 'lib', 'indicatorModel.js']);
+
+if (!GLib.file_test(indicatorModel, GLib.FileTest.EXISTS)) {
+    problems.push('no lib/indicatorModel.js in the bundle — the panel has no icons to check');
+} else {
+    try {
+        const { ICONS, isShippedIcon } = await import(GLib.filename_to_uri(indicatorModel, null));
+
+        for (const [state, name] of Object.entries(ICONS)) {
+            if (!name.endsWith('-symbolic')) {
+                problems.push(`ICONS.${state} is "${name}", which is not a symbolic name — ` +
+                    'it would be blitted rather than recoloured to the panel foreground');
+            }
+            if (!isShippedIcon(name))
+                continue;
+
+            const file = GLib.build_filenamev([bundle, 'icons', `${name}.svg`]);
+            if (!GLib.file_test(file, GLib.FileTest.EXISTS)) {
+                problems.push(`ICONS.${state} wants icons/${name}.svg, which is not in the ` +
+                    'bundle — the panel would show a blank square and say nothing');
+            }
+        }
+    } catch (error) {
+        problems.push(`could not read the icon map: ${error.message}`);
+    }
+}
+
 // --- verdict ----------------------------------------------------------------------------------
 
 if (problems.length > 0) {

@@ -27,7 +27,7 @@ import orchestrator  # noqa: E402
 
 VOCABULARY = {"running", "ready", "blocked", "queued", "to be planned"}
 ALWAYS = {"position", "slug", "version", "state", "note", "will_run_next"}
-CONDITIONAL = {"open_questions", "target_version"}
+CONDITIONAL = {"open_questions", "open_question_texts", "target_version"}
 
 CONFIG = "parallel_agents: 2\nmax_cycle_minutes: 45\n"
 
@@ -142,6 +142,21 @@ class ContractTestCase(unittest.TestCase):
             self.assertEqual(row["state"], "blocked")
             self.assertIsInstance(row["open_questions"], int)
             self.assertGreaterEqual(row["open_questions"], 1)
+            # The texts travel with the count, always both or neither.
+            self.assertIn("open_question_texts", row)
+            texts = row["open_question_texts"]
+            self.assertIsInstance(texts, list)
+            self.assertLessEqual(len(texts), orchestrator.OPEN_QUESTION_MAX_SENT)
+            self.assertLessEqual(len(texts), row["open_questions"])
+            for text in texts:
+                self.assertIsInstance(text, str)
+                self.assertTrue(text.strip(), "a question is never blank")
+                self.assertLessEqual(len(text), orchestrator.OPEN_QUESTION_MAX_CHARS)
+                self.assertNotIn("\n", text, "a question is folded to one line")
+                self.assertFalse(text.startswith("- ["), "the checkbox is stripped")
+        else:
+            self.assertNotIn("open_question_texts", row,
+                             "texts without a count would be a shape nobody agreed to")
         if "target_version" in row:
             self.assertEqual(row["state"], "ready")
             self.assertRegex(row["target_version"], r"^\d+\.\d+$")
@@ -199,6 +214,117 @@ class QueueRowsTest(ContractTestCase):
 
         self.assertEqual(rows[0]["open_questions"], 1)
         self.assertEqual(rows[0]["note"], "1 unanswered question")
+
+    def test_a_blocked_idea_carries_the_questions_themselves(self):
+        rows = self.fixture([("alpha", "an idea")]).idea(
+            "alpha", status="in_progress", version="0.2", questions=2).rows()
+
+        self.assertRowShape(rows[0])
+        self.assertEqual(rows[0]["open_question_texts"], ["question 1", "question 2"],
+                         "in file order, checkbox stripped")
+
+    def test_a_question_wrapped_over_several_lines_is_folded_into_one(self):
+        # How the questions in this repo's PLAN.md files are actually written.
+        plan = (
+            "# Plan: alpha\n\n## Open Questions\n"
+            "- [ ] **Should the panel button appear when every idea is blocked**, even\n"
+            "      though no cycle is running? The alternative is to keep the rule\n"
+            "      strictly.\n"
+        )
+        rows = self.fixture([("alpha", "an idea")]).idea(
+            "alpha", status="in_progress", version="0.2", plan=plan).rows()
+
+        self.assertEqual(rows[0]["open_questions"], 1)
+        self.assertEqual(rows[0]["open_question_texts"], [
+            "Should the panel button appear when every idea is blocked, even though no cycle "
+            "is running? The alternative is to keep the rule strictly.",
+        ])
+
+    def test_markdown_emphasis_goes_but_identifiers_survive(self):
+        plan = (
+            "# Plan: alpha\n\n## Open Questions\n"
+            "- [ ] Does the unit have `IDEAS_REPO_PATH` in its *environment*, or is\n"
+            "      **HEARTBEAT_BIND_IP** the one that matters?\n"
+        )
+        rows = self.fixture([("alpha", "an idea")]).idea(
+            "alpha", status="in_progress", version="0.2", plan=plan).rows()
+
+        self.assertEqual(rows[0]["open_question_texts"], [
+            "Does the unit have IDEAS_REPO_PATH in its environment, or is "
+            "HEARTBEAT_BIND_IP the one that matters?",
+        ], "asterisks and backticks are markup for a file; underscores are part of a name")
+
+    def test_a_question_longer_than_the_cap_is_cut_with_an_ellipsis(self):
+        long_question = " ".join(["word"] * 200)
+        plan = f"# Plan: alpha\n\n## Open Questions\n- [ ] {long_question}\n"
+        rows = self.fixture([("alpha", "an idea")]).idea(
+            "alpha", status="in_progress", version="0.2", plan=plan).rows()
+
+        [text] = rows[0]["open_question_texts"]
+        self.assertLessEqual(len(text), orchestrator.OPEN_QUESTION_MAX_CHARS)
+        self.assertTrue(text.endswith("…"))
+        self.assertFalse(text.endswith("wor…"), "cut at a word boundary, not mid-word")
+
+    def test_more_questions_than_the_cap_are_counted_but_not_all_sent(self):
+        rows = self.fixture([("alpha", "an idea")]).idea(
+            "alpha", status="in_progress", version="0.2",
+            questions=orchestrator.OPEN_QUESTION_MAX_SENT + 3).rows()
+
+        self.assertRowShape(rows[0])
+        self.assertEqual(rows[0]["open_questions"], orchestrator.OPEN_QUESTION_MAX_SENT + 3,
+                         "the count is whole, so a UI can say how many are not shown")
+        self.assertEqual(len(rows[0]["open_question_texts"]),
+                         orchestrator.OPEN_QUESTION_MAX_SENT)
+        self.assertEqual(rows[0]["open_question_texts"][0], "question 1",
+                         "the first questions are the ones sent")
+
+    def test_ticked_and_unticked_questions_mixed(self):
+        plan = (
+            "# Plan: alpha\n\n## Open Questions\n"
+            "- [x] This one was answered, and its answer runs on\n"
+            "      to a second line.\n"
+            "- [ ] This one is still open.\n"
+            "- [x] Answered as well.\n"
+            "- [ ] So is this one.\n"
+        )
+        rows = self.fixture([("alpha", "an idea")]).idea(
+            "alpha", status="in_progress", version="0.2", plan=plan).rows()
+
+        self.assertEqual(rows[0]["open_questions"], 2)
+        self.assertEqual(rows[0]["open_question_texts"],
+                         ["This one is still open.", "So is this one."],
+                         "an answered question's prose never leaks into an open one")
+
+    def test_questions_end_at_the_next_heading(self):
+        plan = (
+            "# Plan: alpha\n\n## Open Questions\n"
+            "- [ ] The open one.\n\n"
+            "## Current status\n"
+            "- [ ] not a question at all, just a checklist somewhere else\n"
+        )
+        rows = self.fixture([("alpha", "an idea")]).idea(
+            "alpha", status="in_progress", version="0.2", plan=plan).rows()
+
+        self.assertEqual(rows[0]["open_questions"], 1)
+        self.assertEqual(rows[0]["open_question_texts"], ["The open one."])
+
+    def test_the_count_and_the_texts_come_from_one_reader(self):
+        """Whatever the file looks like, the count is the length of the unbounded list."""
+        plans = [
+            "# Plan\n\n## Open Questions\n",
+            "# Plan\n\n## Open Questions\n- [ ] one\n",
+            "# Plan\n\n## Open Questions\n- [ ] one\n- [x] two\n- [ ] three\n",
+            "# Plan\n\n## Open Questions\n- [ ]\n- [ ] real\n",
+            "# Plan\n\n## Open Questions\n- [ ] a\n  continued\n\n- [ ] b\n",
+        ]
+        for body in plans:
+            fixture = self.fixture([("alpha", "an idea")])
+            fixture.idea("alpha", status="in_progress", version="0.2", plan=body)
+            plan_path = fixture.root / "ideas" / "alpha" / "PLAN.md"
+
+            lines = orchestrator.open_question_lines(plan_path)
+            self.assertEqual(orchestrator.count_open_questions(plan_path), len(lines),
+                             f"disagreement for {body!r}")
 
     def test_status_blocked_is_blocked_without_a_question_count(self):
         rows = self.fixture([("alpha", "an idea")]).idea(

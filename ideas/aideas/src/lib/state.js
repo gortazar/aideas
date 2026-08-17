@@ -34,6 +34,37 @@ const MAX_ROWS = 200;
 
 const VERSION_PATTERN = /^\d+\.\d+$/;
 
+// The server folds and caps the questions it sends (docs/state-contract.md), and these caps are
+// applied again here anyway. Not distrust of the box so much as of the *pairing*: a laptop and a
+// box are updated at different times, and an unbounded string reaching an St.Label is a broken
+// menu rather than an error message.
+const MAX_QUESTION_TEXTS = 5;
+const MAX_QUESTION_CHARS = 300;
+
+/**
+ * The questions of a blocked row: a list of one-line strings, or empty.
+ *
+ * Every wrong shape the wire could hold — absent, null, a string instead of an array, members
+ * that are not strings, blank members, a hundred of them, one holding a newline — becomes a
+ * usable list rather than a throw, because this is a file an agent wrote about a file an agent
+ * wrote.
+ */
+function questionTexts(value) {
+    if (!Array.isArray(value))
+        return [];
+
+    return value
+        .map(item => text(item))
+        .filter(item => item !== null)
+        // Collapsed, not just trimmed: a newline inside a menu row's label breaks the row's
+        // layout, and nothing upstream guarantees the folding happened.
+        .map(item => item.replace(/\s+/g, ' '))
+        .slice(0, MAX_QUESTION_TEXTS)
+        .map(item => item.length > MAX_QUESTION_CHARS
+            ? `${item.slice(0, MAX_QUESTION_CHARS - 1).trimEnd()}…`
+            : item);
+}
+
 function isObject(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -83,6 +114,8 @@ function normaliseRow(raw, index) {
         note: text(row.note) ?? '',
         willRunNext: row.will_run_next === true,
         openQuestions: counted(row.open_questions, 1),
+        // Always an array, never null: a caller listing them should not have to ask first.
+        openQuestionTexts: questionTexts(row.open_question_texts),
         targetVersion: (() => {
             const target = text(row.target_version);
             return target !== null && VERSION_PATTERN.test(target) ? target : null;

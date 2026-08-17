@@ -20,6 +20,13 @@ const SECTIONS = [
     { id: 'other', title: 'Also in the queue', states: null },
 ];
 
+// How many of a blocked idea's questions the menu lists, and how long each may be. A menu is a
+// glance: the full text is in PLAN.md, and the answered open question settled on three lines of
+// at most two rendered lines each. The character cap is what makes "two lines" true without the
+// model knowing the menu's width — the widget wraps and ellipsizes whatever it is given.
+const MENU_QUESTIONS_SHOWN = 3;
+const MENU_QUESTION_MAX_CHARS = 120;
+
 /** Join the parts of a detail line, dropping the ones that are not known. */
 function detail(...parts) {
     const kept = parts.filter(part => typeof part === 'string' && part !== '');
@@ -73,6 +80,27 @@ function readingDetail(reading, now, fetchedAt, { stale = false } = {}) {
     return detail(updated, lockAge === null ? null : `lock renewed ${lockAge} ago`);
 }
 
+/**
+ * The questions to list under a blocked row, and how many are left over.
+ *
+ * Only blocked rows: a question is a thing somebody has to answer before that idea moves, and a
+ * ready row carrying stray texts is not the menu's business. `openQuestions` is the whole count
+ * even when fewer texts were sent, so "+n more" counts everything not shown, not just what the
+ * server withheld.
+ */
+function questionsFor(row, sectionId) {
+    if (sectionId !== 'blocked' || row.openQuestionTexts.length === 0)
+        return { questions: [], notShown: 0 };
+
+    const shown = row.openQuestionTexts.slice(0, MENU_QUESTIONS_SHOWN).map(question =>
+        question.length > MENU_QUESTION_MAX_CHARS
+            ? `${question.slice(0, MENU_QUESTION_MAX_CHARS - 1).replace(/\s+\S*$/, '')}…`
+            : question);
+
+    const total = row.openQuestions ?? row.openQuestionTexts.length;
+    return { questions: shown, notShown: Math.max(0, total - shown.length) };
+}
+
 /** One menu row's text. Keyed by position, which the contract makes the only unique field. */
 function describeRow(row, sectionId, reading, now) {
     const version = row.version === null ? null : `v${row.version}`;
@@ -107,6 +135,8 @@ function describeRow(row, sectionId, reading, now) {
             break;
     }
 
+    const { questions, notShown } = questionsFor(row, sectionId);
+
     return {
         key: `${row.position}:${row.slug}`,
         position: row.position,
@@ -117,6 +147,10 @@ function describeRow(row, sectionId, reading, now) {
             : detail(version, rest),
         // What the next cycle would pick up. Only ready rows ever carry it.
         marker: row.willRunNext ? 'next' : null,
+        // What this idea is actually waiting to be told, listed under it. The row's own detail
+        // line ("3 unanswered questions") stays as the summary above them.
+        questions,
+        questionsNotShown: notShown,
     };
 }
 

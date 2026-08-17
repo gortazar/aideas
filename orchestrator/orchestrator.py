@@ -390,19 +390,88 @@ def git(*args: str, cwd: Path, check: bool = False) -> subprocess.CompletedProce
 # ------------------------------------------------------------------- idea state I/O
 
 
-def count_open_questions(plan: Path) -> int:
+# A question's text is folded to one line and cut, and only so many are sent per idea. Both
+# bounds exist because /state is polled every few seconds by a panel indicator while PLAN.md
+# prose is unbounded — an agent may write a whole paragraph of rationale into one question.
+OPEN_QUESTION_MAX_CHARS = 200
+OPEN_QUESTION_MAX_SENT = 5
+
+# An unticked checkbox starts a question; any other checkbox ends the previous one's text
+# without starting a new one. Deliberately as strict as the template documents: one space.
+_UNTICKED_RE = re.compile(r"^\s*-\s*\[\s\]\s*(.*)$")
+_ANY_CHECKBOX_RE = re.compile(r"^\s*-\s*\[[^\]]*\]")
+
+
+def _fold_question(parts: list[str]) -> str:
+    """One line, out of however many the question was written across.
+
+    Emphasis goes because it is markup for a file, not for a menu: `**bold**` renders as
+    literal asterisks in an St.Label. Underscores are left alone — they are far more often part
+    of an identifier like IDEAS_REPO_PATH than emphasis.
+    """
+    text = " ".join(parts)
+    text = re.sub(r"[*`]+", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+
+    if len(text) <= OPEN_QUESTION_MAX_CHARS:
+        return text
+    # Cut at a word boundary when there is one nearby, so the ellipsis does not land mid-word.
+    cut = text[:OPEN_QUESTION_MAX_CHARS - 1]
+    spaced = cut.rsplit(" ", 1)[0]
+    return (spaced if len(spaced) > OPEN_QUESTION_MAX_CHARS - 40 else cut).rstrip() + "…"
+
+
+def open_question_lines(plan: Path) -> list[str]:
+    """Every unanswered question in `## Open Questions`, one folded line each, in file order.
+
+    This is the single reader of that section: count_open_questions() returns the length of what
+    this returns, so the count a UI shows and the texts it lists can never disagree.
+
+    A question owns the lines that follow it until the next checkbox, a blank line or the next
+    heading — which is how the questions in this repo's PLAN.md files are actually written,
+    wrapped across two or three indented lines.
+    """
     if not plan.is_file():
-        return 0
-    total, in_section = 0, False
+        return []
+
+    questions: list[str] = []
+    current: list[str] | None = None
+    in_section = False
+
+    def close() -> None:
+        nonlocal current
+        if current is not None:
+            folded = _fold_question(current)
+            if folded:
+                questions.append(folded)
+            current = None
+
     for line in plan.read_text().splitlines():
         if line.startswith("## Open Questions"):
             in_section = True
             continue
         if line.startswith("## "):
+            close()
             in_section = False
-        if in_section and re.match(r"^\s*-\s*\[\s\]", line):
-            total += 1
-    return total
+        if not in_section:
+            continue
+
+        unticked = _UNTICKED_RE.match(line)
+        if unticked:
+            close()
+            current = [unticked.group(1)]
+        elif _ANY_CHECKBOX_RE.match(line) or not line.strip():
+            # A ticked question, or a blank line: whatever was being read has ended.
+            close()
+        elif current is not None:
+            current.append(line.strip())
+
+    close()
+    return questions
+
+
+def count_open_questions(plan: Path) -> int:
+    return len(open_question_lines(plan))
 
 
 def has_unanswered_questions(plan: Path) -> bool:
@@ -1463,13 +1532,17 @@ def queue_rows(repo: Path, running: tuple[str, ...] = ()) -> list[dict]:
             row["state"], row["note"] = "queued", f"behind #{first}"
         else:
             raw = (status_value(status_file, "status") or "not_started").lower()
-            questions = count_open_questions(idea_dir / "PLAN.md")
+            question_lines = open_question_lines(idea_dir / "PLAN.md")
+            questions = len(question_lines)
             if not (idea_dir / "PLAN.md").is_file():
                 row["state"], row["note"] = "to be planned", "no PLAN.md yet"
             elif questions:
                 row["state"] = "blocked"
                 row["note"] = f"{questions} unanswered question{'s' if questions > 1 else ''}"
                 row["open_questions"] = questions
+                # The texts as well as the count, so a reader can show what is actually being
+                # waited on. Capped: the count above stays whole, so a UI can say "+2 more".
+                row["open_question_texts"] = question_lines[:OPEN_QUESTION_MAX_SENT]
             elif raw == "blocked":
                 row["state"], row["note"] = "blocked", "STATUS.md says blocked"
             elif raw in ("done", "complete", "completed"):

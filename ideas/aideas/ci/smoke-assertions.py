@@ -120,10 +120,26 @@ def shoot(path):
     time.sleep(2)
 
 
+def icon_pixels(png, geometry):
+    """The pixels of the panel icon, as (r, g, b) triples.
+
+    Cropped to the St.Icon itself rather than the whole button, so the badge label beside it
+    cannot be mistaken for the icon having drawn something.
+    """
+    from PIL import Image
+
+    with Image.open(png) as image:
+        rgb = image.convert("RGB")
+        box = (geometry["x"], geometry["y"],
+               geometry["x"] + geometry["width"], geometry["y"] + geometry["height"])
+        return list(rgb.crop(box).getdata())
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--running-port", type=int, required=True)
     parser.add_argument("--idle-port", type=int, required=True)
+    parser.add_argument("--all-blocked-port", type=int, required=True)
     parser.add_argument("--dead-port", type=int, required=True,
                         help="a port with nothing listening on it")
     parser.add_argument("--schemadir", required=True)
@@ -148,12 +164,56 @@ def main():
           json.dumps(panel)[:400])
     check(panel.get("instances") == 1, "exactly one button",
           f"instances={panel.get('instances')}")
-    check(panel.get("icon") == "system-run-symbolic", "it wears the running icon",
+    check(panel.get("icon") == "aideas-bulb-running-symbolic", "it wears the running bulb",
           f"icon={panel.get('icon')}")
     check(panel.get("badge") == "1", "the badge counts the one agent the stub reports",
           f"badge={panel.get('badge')}")
     check(panel.get("accessibleName") == "aideas: cycle running, 1 agent",
           "the accessible name says what is happening", f"{panel.get('accessibleName')}")
+
+    # --- the bulb --------------------------------------------------------------------------
+    #
+    # The one thing no headless test can check: that a shipped SVG is *recoloured* to the panel
+    # foreground rather than blitted as a picture. A currentColor SVG that the shell does not
+    # treat as symbolic renders black, which on a dark panel is an invisible button — so this
+    # looks at the actual pixels.
+    print("\nthe bulb")
+    check(panel.get("icon") == "aideas-bulb-running-symbolic",
+          "the panel wears this idea's own bulb, not a stock glyph",
+          f"icon={panel.get('icon')}")
+    icon_file = panel.get("iconFile") or ""
+    check(icon_file.endswith("icons/aideas-bulb-running-symbolic.svg"),
+          "resolved to the shipped file, so the loader found it",
+          f"iconFile={icon_file}")
+
+    geometry = panel.get("iconGeometry") or {}
+    check(geometry.get("width", 0) >= 8 and geometry.get("height", 0) >= 8,
+          "and it has a real size on the stage",
+          f"geometry={geometry}")
+
+    shoot(f"{options.screenshots}/panel-running.png")
+    if geometry:
+        pixels = icon_pixels(f"{options.screenshots}/panel-running.png", geometry)
+        # A missing icon draws nothing: every pixel is the panel's background.
+        distinct = len(set(pixels))
+        check(distinct > 1, "something is actually drawn where the icon is",
+              f"{distinct} distinct colours in the icon's rectangle")
+
+        brightest = max(sum(p) / 3 for p in pixels)
+        darkest = min(sum(p) / 3 for p in pixels)
+        check(brightest > 140,
+              "it is drawn in a light colour, as the panel's foreground is",
+              f"brightest pixel {brightest:.0f}/255 — a black bulb means it was blitted, "
+              f"not recoloured (darkest {darkest:.0f})")
+
+        # Symbolic means one colour: grey, whatever the theme. A coloured pixel would mean the
+        # SVG's own paint survived.
+        worst = max(max(p) - min(p) for p in pixels)
+        check(worst <= 24, "and in grey, not in a colour of its own",
+              f"most saturated pixel spans {worst} between channels")
+        running_pixels = pixels
+    else:
+        running_pixels = None
 
     # --- the menu --------------------------------------------------------------------------
     print("\nthe menu")
@@ -171,6 +231,10 @@ def main():
     check("restore-wss" in labels, "the blocked idea is listed", joined)
     check("2 unanswered questions" in labels,
           "the blocked idea says how many questions, in the orchestrator's words", joined)
+    check(any("does that include their tabs" in text for text in labels),
+          "and the questions themselves are listed under it", joined)
+    check(any("closed by hand come back" in text for text in labels),
+          "both of them", joined)
     check("vacas" in labels, "the ready idea is listed", joined)
     # The quiet section joins the version to the note, so the row reads "v0.4 · behind #3".
     check(any("behind #3" in text for text in labels),
@@ -187,6 +251,53 @@ def main():
     time.sleep(3)
     probe("CloseMenu")
 
+    # --- every idea blocked ------------------------------------------------------------------
+    #
+    # The state whose whole purpose is to be noticed by a person: no cycle is running, so the
+    # button would not be there at all under the old visibility rule.
+    print("\nevery idea blocked")
+    settings.set("always-show", "false")
+    settings.point_at(options.all_blocked_port)
+    shown = wait_until(lambda: describe().get("icon") == "aideas-bulb-all-blocked-symbolic", 40,
+                       what="the all-blocked bulb")
+    panel = describe()
+    check(shown is not None, "the bulb changes to the struck-through one",
+          f"icon={panel.get('icon')}")
+    check(panel.get("visible") is True,
+          "and the button is there without a cycle running and without 'always show'",
+          json.dumps(panel)[:300])
+    check(panel.get("badge") == "3", "badging the three blocked ideas",
+          f"badge={panel.get('badge')}")
+    check(panel.get("accessibleName") == "aideas: every idea is blocked, 3 waiting for an answer",
+          "and saying so in one line", f"{panel.get('accessibleName')}")
+
+    # The pixels, not just the name: a fallback icon would satisfy every check above — it is
+    # drawn, light and grey too. What a fallback cannot do is *differ between states*, which is
+    # how the earlier version of these bulbs was caught rendering as somebody else's glyph.
+    probe("CloseMenu")
+    shoot(f"{options.screenshots}/panel-all-blocked.png")
+    all_blocked_geometry = describe().get("iconGeometry") or {}
+    if running_pixels and all_blocked_geometry:
+        blocked_pixels = icon_pixels(
+            f"{options.screenshots}/panel-all-blocked.png", all_blocked_geometry)
+        check(blocked_pixels != running_pixels,
+              "and it is a different drawing from the running bulb, pixel for pixel",
+              "identical pixels mean the shell is drawing a fallback icon for both")
+
+    probe("ShootMenu", f"{options.screenshots}/menu-all-blocked.png")
+    time.sleep(3)
+    labels = menu_labels(describe())
+    joined = " | ".join(labels)
+    check(sum(1 for text in labels if "unanswered question" in text) >= 1,
+          "the menu lists the blocked ideas", joined)
+    check(any("+2 more" == text for text in labels),
+          "an idea with more questions than fit says how many are not shown", joined)
+    check(any("AMO API key" in text for text in labels),
+          "another idea's single question is listed in full", joined)
+    check(any("STATUS.md says blocked" == text for text in labels),
+          "and an idea blocked without questions reads exactly as it always did", joined)
+    probe("CloseMenu")
+
     # --- the button follows the cycle ------------------------------------------------------
     print("\nthe button follows the cycle (the answered open question)")
     settings.point_at(options.idle_port)
@@ -201,8 +312,8 @@ def main():
                        what="the button under always-show")
     panel = describe()
     check(shown is not None, "the preference brings it back while idle", json.dumps(panel)[:300])
-    check(panel.get("icon") == "dialog-question-symbolic",
-          "and it wears the blocked icon, because an idea is waiting on an answer",
+    check(panel.get("icon") == "aideas-bulb-blocked-symbolic",
+          "and it wears the blocked bulb, because an idea is waiting on an answer",
           f"icon={panel.get('icon')}")
     check(panel.get("badge") == "1", "with the count of blocked ideas",
           f"badge={panel.get('badge')}")
@@ -238,7 +349,7 @@ def main():
 
     settings.set("always-show", "false")
     settings.point_at(options.running_port)
-    back = wait_until(lambda: describe().get("icon") == "system-run-symbolic", 40,
+    back = wait_until(lambda: describe().get("icon") == "aideas-bulb-running-symbolic", 40,
                       what="recovery")
     check(back is not None, "and it recovers when the box comes back",
           json.dumps(describe())[:300])

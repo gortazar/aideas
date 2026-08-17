@@ -35,7 +35,10 @@ RUNNING = {
         {"position": 1, "slug": "aideas", "version": "0.1", "state": "running",
          "note": "an agent is working on it now", "will_run_next": False},
         {"position": 2, "slug": "restore-wss", "version": "0.1", "state": "blocked",
-         "note": "2 unanswered questions", "will_run_next": False, "open_questions": 2},
+         "note": "2 unanswered questions", "will_run_next": False, "open_questions": 2,
+         "open_question_texts": [
+             "Which browsers must be restored, and does that include their tabs?",
+             "Should a window that was closed by hand come back on the next restore?"]},
         {"position": 3, "slug": "vacas", "version": "0.1", "state": "ready",
          "note": "not started", "will_run_next": False, "target_version": "0.1"},
         {"position": 4, "slug": "recap", "version": "0.4", "state": "queued",
@@ -53,7 +56,35 @@ IDLE = {
         {"position": 1, "slug": "aideas", "version": "0.1", "state": "ready",
          "note": "minor update -> v0.2", "will_run_next": True, "target_version": "0.2"},
         {"position": 2, "slug": "restore-wss", "version": "0.1", "state": "blocked",
-         "note": "1 unanswered question", "will_run_next": False, "open_questions": 1},
+         "note": "1 unanswered question", "will_run_next": False, "open_questions": 1,
+         "open_question_texts": [
+             "Which browsers must be restored, and does that include their tabs?"]},
+    ],
+}
+
+
+ALL_BLOCKED = {
+    "available": True,
+    "running": False,
+    "agents": [],
+    "cycle_started_at": None,
+    "lock_age_seconds": 5000,
+    "ideas": [
+        {"position": 1, "slug": "restore-wss", "version": "0.1", "state": "blocked",
+         "note": "5 unanswered questions", "will_run_next": False, "open_questions": 5,
+         "open_question_texts": [
+             "Which browsers must be restored, and does that include their tabs?",
+             "Should a window that was closed by hand come back on the next restore?",
+             "Is a browser profile enough to identify a window, or is the title needed too?",
+             "What happens to a workspace that no longer exists on this machine?",
+             "Should the extension restore anything at all without being asked?"]},
+        {"position": 2, "slug": "restore-wss", "version": "0.1", "state": "queued",
+         "note": "behind #1", "will_run_next": False},
+        {"position": 3, "slug": "vacas", "version": "0.1", "state": "blocked",
+         "note": "1 unanswered question", "will_run_next": False, "open_questions": 1,
+         "open_question_texts": ["The AMO API key, please - it is the only thing left."]},
+        {"position": 4, "slug": "recap", "version": "0.4", "state": "blocked",
+         "note": "STATUS.md says blocked", "will_run_next": False},
     ],
 }
 
@@ -88,6 +119,9 @@ def make_handler(options):
                     return
                 if options.mode == "idle":
                     self._send(200, json.dumps(IDLE))
+                    return
+                if options.mode == "all-blocked":
+                    self._send(200, json.dumps(ALL_BLOCKED))
                     return
                 running = dict(RUNNING, cycle_started_at=time.time() - 720)
                 self._send(200, json.dumps(running))
@@ -124,9 +158,11 @@ def main():
                         help="exact body to return from /state")
     parser.add_argument("--slow", type=float, default=30.0,
                         help="seconds /state-slow waits before answering")
-    parser.add_argument("--mode", choices=("running", "idle"), default="running",
-                        help="what /state reports: a running cycle, or an idle box with a "
-                             "blocked idea. Two servers in the two modes are how the smoke "
+    parser.add_argument("--mode", choices=("running", "idle", "all-blocked"),
+                        default="running",
+                        help="what /state reports: a running cycle, an idle box with a blocked "
+                             "idea, or a queue where every idea is blocked and nothing can "
+                             "move without a person. Servers in these modes are how the smoke "
                              "test moves the extension between states.")
     options = parser.parse_args()
 

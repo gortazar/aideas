@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- A lit bulb: the same outline, with rays. A cycle is running.
+       The rays are set well clear of the glass and there are only three of them: crowded closer,
+       or in fours, they fuse with the ring at 16px and the whole icon reads as a cog. -->
+  <g fill="currentColor">
+    <path fill-rule="evenodd" d="M8 2.6a3.6 3.6 0 0 0-1.95 6.63v0.87h3.9v-0.87A3.6 3.6 0 0 0 8 2.6zm0 1.35a2.25 2.25 0 0 1 1.22 4.14l-0.52 0.34v0.32H7.3v-0.32l-0.52-0.34A2.25 2.25 0 0 1 8 3.95z"/>
+    <path d="M5.9 11.1h4.2v1.3H5.9z"/>
+    <path d="M6.6 13.1h2.8v1.3H6.6z"/>
+    <!-- three rays: top, upper-left, upper-right, each clear of the glass -->
+    <path d="M7.3 0h1.4v1.9H7.3z"/>
+    <path d="M0.85 2.1l0.99-0.99 1.5 1.5-0.99 0.99z"/>
+    <path d="M12.66 2.61l1.5-1.5 0.99 0.99-1.5 1.5z"/>
+  </g>
+</svg>

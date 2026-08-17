@@ -43,6 +43,8 @@ export default class AideasExtension extends Extension {
             onOpenPreferences: () => this.openPreferences(),
             onMenuOpenChanged: open => this._scheduler?.setMenuOpen(open),
             clock: nowSeconds,
+            // The bulbs ship inside the extension, so only the extension knows where they are.
+            iconsPath: `${this.path}/icons`,
         });
         Main.panel.addToStatusArea(this.uuid, this._indicator);
 

@@ -216,6 +216,82 @@ suite('row wording', () => {
         assertEquals(section(built, 'blocked').rows[0].detail, null);
     });
 
+    test('a blocked row carries its questions, and nothing left over', () => {
+        const built = menu({ reading: reading({}, [
+            idea({ slug: 'asker', state: 'blocked', note: '2 unanswered questions',
+                open_questions: 2,
+                open_question_texts: ['Should the bulb be grey?', 'Which port?'] }),
+        ]) });
+
+        const [row] = section(built, 'blocked').rows;
+        assertDeepEquals(row.questions, ['Should the bulb be grey?', 'Which port?']);
+        assertEquals(row.questionsNotShown, 0);
+        assertEquals(row.detail, '2 unanswered questions', 'the summary line is unchanged');
+    });
+
+    test('at most three are listed, and the rest are counted', () => {
+        const built = menu({ reading: reading({}, [
+            idea({ slug: 'asker', state: 'blocked', note: '7 unanswered questions',
+                open_questions: 7,
+                open_question_texts: ['one', 'two', 'three', 'four', 'five'] }),
+        ]) });
+
+        const [row] = section(built, 'blocked').rows;
+        assertDeepEquals(row.questions, ['one', 'two', 'three']);
+        assertEquals(row.questionsNotShown, 4,
+            'counted against the whole count, not just what the server sent');
+    });
+
+    test('a question too long for two lines is cut at a word boundary', () => {
+        const long = `${'word '.repeat(40)}end`;
+        const built = menu({ reading: reading({}, [
+            idea({ slug: 'asker', state: 'blocked', open_questions: 1,
+                open_question_texts: [long] }),
+        ]) });
+
+        const [question] = section(built, 'blocked').rows[0].questions;
+        assert(question.length <= 120, `${question.length} characters in a menu row`);
+        assert(question.endsWith('…'), 'and it says it was cut');
+        assert(!/\bwor…$/.test(question), 'not mid-word');
+    });
+
+    test('a blocked row with no questions has none — nothing changes for it', () => {
+        const built = menu({ reading: reading({}, [
+            idea({ slug: 'asker', state: 'blocked', note: 'STATUS.md says blocked' }),
+        ]) });
+
+        const [row] = section(built, 'blocked').rows;
+        assertDeepEquals(row.questions, []);
+        assertEquals(row.questionsNotShown, 0);
+        assertEquals(row.detail, 'STATUS.md says blocked');
+    });
+
+    test('a row that is not blocked never lists questions', () => {
+        const built = menu({ reading: reading({}, [
+            idea({ position: 1, slug: 'fresh', state: 'ready',
+                open_question_texts: ['stray'] }),
+            idea({ position: 2, slug: 'later', state: 'queued', note: 'behind #1',
+                open_question_texts: ['stray'] }),
+        ]) });
+
+        for (const row of section(built, 'ready').rows.concat(section(built, 'other').rows))
+            assertDeepEquals(row.questions, [], `${row.label} should list nothing`);
+    });
+
+    test('questions are there behind a running cycle too', () => {
+        const built = menu({ reading: reading(
+            { running: true, agents: ['alpha'], cycle_started_at: NOW - 60 },
+            [
+                idea({ position: 1, slug: 'alpha', state: 'running' }),
+                idea({ position: 2, slug: 'asker', state: 'blocked', open_questions: 1,
+                    open_question_texts: ['Still waiting on this?'] }),
+            ]) });
+
+        assertDeepEquals(section(built, 'blocked').rows[0].questions,
+            ['Still waiting on this?'],
+            'a blocked idea is blocked whether or not something else is running');
+    });
+
     test('a ready row shows the note as served', () => {
         const built = menu({ reading: reading({}, [
             idea({ slug: 'aideas', state: 'ready', note: 'minor update -> v0.3', will_run_next: true }),

@@ -2,10 +2,15 @@
 // badge counts. A pure function of the same reading the menu is built from, so "what does the
 // panel look like right now" is a value a test can assert.
 //
-// The visibility rule is settled by an answered open question in PLAN.md: **the button is
-// visible only while a cycle is running**, with an "always show" preference for people who
-// would rather keep it. Blocked ideas do not summon it, which is why the Blocked section only
-// appears to someone who has the button for another reason.
+// The visibility rule comes from two answered open questions. The first: **the button is
+// visible while a cycle is running**, with an "always show" preference for people who would
+// rather keep it. Some blocked ideas do not summon it — the queue is still moving, and the
+// Blocked section is there for whoever has the button for another reason.
+//
+// The second added one clause: **when every idea is blocked, the button appears anyway**. That
+// state is never "running" by definition, so under the first rule alone it could never be seen;
+// and it is the one state whose entire meaning is that a person is now the only thing that can
+// move the queue.
 //
 // One nuance that rule does not cover: what to do when an attempt fails while a cycle was
 // running a moment ago. Hiding the button on a single dropped poll would make the panel blink
@@ -19,21 +24,64 @@ import { Status } from './state.js';
 /** How long a good reading keeps speaking for the panel after contact is lost. */
 export const DEFAULT_STALE_AFTER_SECONDS = 300;
 
+/** Icons this extension ships are named with this prefix; everything else is a stock name. */
+export const SHIPPED_ICON_PREFIX = 'aideas-';
+
 /**
- * Symbolic icons, all stock freedesktop names — the extension ships no image assets, so
- * there is nothing to theme wrongly and nothing for EGO to object to.
+ * One icon per state.
+ *
+ * The *queue* states wear this idea's own bulb, so the button has an identity of its own
+ * instead of looking like a gear, then a question mark, then a pause sign. They are shipped
+ * SVGs drawn on the 16px grid with `fill="currentColor"` and a `-symbolic` name, which is what
+ * makes GNOME recolour them to the panel foreground: grey with the rest of the top bar, in
+ * light themes and dark, dimming when the panel dims. Nothing is *painted* grey — it is grey
+ * because it is symbolic, and the state is therefore carried by the drawing, never by colour.
+ *
+ * The three states that are about the *connection* rather than the queue keep their stock
+ * freedesktop glyphs. That is the answered open question: a network-offline or a warning sign
+ * says more about a box that cannot be reached than any bulb could.
  */
 export const ICONS = {
-    running: 'system-run-symbolic',
-    blocked: 'dialog-question-symbolic',
-    idle: 'media-playback-pause-symbolic',
+    running: `${SHIPPED_ICON_PREFIX}bulb-running-symbolic`,
+    blocked: `${SHIPPED_ICON_PREFIX}bulb-blocked-symbolic`,
+    idle: `${SHIPPED_ICON_PREFIX}bulb-idle-symbolic`,
+    allBlocked: `${SHIPPED_ICON_PREFIX}bulb-all-blocked-symbolic`,
     unreachable: 'network-offline-symbolic',
     unavailable: 'dialog-warning-symbolic',
     unconfigured: 'preferences-system-symbolic',
 };
 
+/** Is this name a file this extension ships, rather than one the icon theme knows? */
+export function isShippedIcon(name) {
+    return typeof name === 'string' && name.startsWith(SHIPPED_ICON_PREFIX);
+}
+
 function countBlocked(reading) {
     return reading.rows.filter(row => row.state === 'blocked').length;
+}
+
+/**
+ * States the orchestrator could pick up, so that a queue holding one of them is not stuck.
+ *
+ * `queued` is deliberately not here: a duplicate entry sitting behind a blocked one is stuck
+ * too, and counting it as work would hide exactly the situation this state exists to show.
+ */
+const PICKABLE_STATES = ['ready', 'running', 'to be planned'];
+
+/**
+ * Is every idea blocked — is a person now the only thing that can move the queue?
+ *
+ * Stricter than "some rows are blocked": there must be at least one blocked idea and nothing at
+ * all the orchestrator could otherwise start. A row whose state this version of the extension
+ * does not recognise counts as pickable, because claiming the whole queue is stuck on the
+ * strength of a word we do not understand would be worse than saying nothing.
+ */
+function everyIdeaBlocked(reading) {
+    if (reading.rows.length === 0)
+        return false; // an empty queue is not blocked, it is empty
+    if (!reading.rows.some(row => row.state === 'blocked'))
+        return false;
+    return !reading.rows.some(row => PICKABLE_STATES.includes(row.state) || !row.known);
 }
 
 /** The last good reading, if there is one and it is recent enough to still mean something. */
@@ -63,8 +111,14 @@ export function buildIndicator({
     const blocked = ok ? countBlocked(reading) : 0;
 
     let state;
-    if (ok)
-        state = reading.running ? 'running' : (blocked > 0 ? 'blocked' : 'idle');
+    if (ok) {
+        if (reading.running)
+            state = 'running';
+        else if (everyIdeaBlocked(reading))
+            state = 'allBlocked';
+        else
+            state = blocked > 0 ? 'blocked' : 'idle';
+    }
     else if (reading.status === Status.UNCONFIGURED)
         state = 'unconfigured';
     else if (reading.status === Status.UNAVAILABLE)
@@ -79,12 +133,17 @@ export function buildIndicator({
         : null;
     const rememberedRunning = remembered !== null && remembered.running;
 
-    const visible = alwaysShow || (ok && reading.running) || rememberedRunning;
+    // The one extra clause, from the answered open question: an all-blocked queue is never
+    // running, so under the plain "only while a cycle is running" rule this state could never
+    // be seen — and it is the only state whose entire meaning is that a person is the
+    // bottleneck. So it summons the button by itself.
+    const visible = alwaysShow || (ok && reading.running) || rememberedRunning ||
+        state === 'allBlocked';
 
     let badge = null;
     if (state === 'running' && reading.agents.length > 0)
         badge = String(reading.agents.length);
-    else if (state === 'blocked')
+    else if (state === 'blocked' || state === 'allBlocked')
         badge = String(blocked);
     else if (rememberedRunning && remembered.agents.length > 0)
         badge = String(remembered.agents.length);
@@ -108,6 +167,9 @@ function accessibleName(state, reading, blocked, remembered) {
                 : 'aideas: cycle running';
         case 'blocked':
             return `aideas: idle, ${blocked} blocked ${blocked === 1 ? 'idea' : 'ideas'}`;
+        case 'allBlocked':
+            // The whole thing in one line, because for a screen reader this *is* the panel.
+            return `aideas: every idea is blocked, ${blocked} waiting for an answer`;
         case 'idle':
             return 'aideas: idle';
         case 'unavailable':

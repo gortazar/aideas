@@ -37,15 +37,38 @@ cannot drift apart while they live in one repo.
 | `Cycle running for 12 min, 2 agents` / `Idle` | `running`, `agents`, `cycle_started_at` |
 | `updated 8 s ago · lock renewed 42 s ago` | when the reading was taken, and `lock_age_seconds` |
 | **Running** — slug, version, how long the cycle has run | rows with `state: running` |
-| **Blocked** — slug, `2 unanswered questions` | rows with `state: blocked` |
+| **Blocked** — slug, `2 unanswered questions`, then the questions themselves | rows with `state: blocked`, and their `open_question_texts` |
 | **Ready** — slug, `minor update -> v0.3`, with the next one marked | rows with `state: ready` |
 | **Also in the queue** — `behind #1`, `no PLAN.md yet` | `queued`, `to be planned`, anything new |
+
+Under each blocked idea, the menu lists **what it is actually waiting to be told** — up to
+three of its unanswered questions, wrapped over two lines, with `+2 more` when there are others.
+The orchestrator folds each question out of `PLAN.md` and bounds it; the extension wraps it.
 
 Rows are read-only: answering a blocked idea means editing its `PLAN.md` on the box, which is
 not something a panel menu should do.
 
-The button is visible **only while a cycle is running**. Turn on *always show the button* if
-you would rather see blocked ideas without a cycle running. If contact is lost while a cycle
+## The bulb
+
+The button is a light bulb, and it is **grey because it is symbolic** — a shipped
+`-symbolic.svg` painted with `currentColor`, which GNOME recolours to the panel foreground.
+So it matches the top bar in light themes and dark, and dims with it. Which also means the
+state cannot be carried by colour, and is carried by the drawing instead:
+
+| The bulb | What it means |
+| --- | --- |
+| lit, with rays | a cycle is running; the badge counts the agents |
+| a bulb with a question inside | an idea is waiting on an answer, but the queue can still move |
+| a plain bulb | idle: nothing running, nothing waiting |
+| a bulb struck through | **every** idea is blocked — nothing moves until you answer something; the badge counts them |
+
+The three states that are about the *connection* rather than the queue keep their stock glyphs,
+where a network-offline or warning sign says more than a bulb could.
+
+The button is visible **while a cycle is running**, and also **whenever every idea is
+blocked** — the one state whose whole meaning is that a person is now the only thing that can
+move the queue. Turn on *always show the button* if you would rather see it the rest of the
+time too. If contact is lost while a cycle
 was running, the button stays for five minutes wearing an "unreachable" icon, with the last
 good reading dated beneath it — one dropped poll on a VPN should not blink the panel out.
 
@@ -92,11 +115,11 @@ nix flake check       # the same four checks in the sandbox
 
 | Test | What it covers | Needs |
 | --- | --- | --- |
-| `make test-unit` | 205 tests: parsing, grouping, wording, visibility, badge, backoff, scheduler | plain gjs |
+| `make test-unit` | 251 tests: parsing, grouping, wording, visibility, badge, icons, backoff, scheduler | gjs, gdk-pixbuf |
 | `make test-http` | 16 tests: the real libsoup transport against a stub server on loopback | gjs, python3 |
-| `make test-contract` | 24 tests: `/state` driven over fixture repositories | stock python3 |
+| `make test-contract` | 32 tests: `/state` driven over fixture repositories | stock python3 |
 | `make check-bundle` | the assembled extension loads: metadata, imports, compiled schema | gjs, glib |
-| `make smoke` | 39 checks in a nested headless GNOME Shell, plus screenshots | a GNOME machine |
+| `make smoke` | 56 checks in a nested headless GNOME Shell, plus screenshots | a GNOME machine |
 | `make test-install` | 39 checks: `install.sh` run for real, from a clean directory | dbus, zip |
 | `make test-pack` | the artefact is a function of the source alone, and `nix build` agrees | zip, nix |
 | `make test-release` | 19 checks: the release decision, over fixture releases lists | python3 |
@@ -107,7 +130,7 @@ own* environment, so without it a test session rewrites the real desktop's setti
 
 ```
 src/lib/          pure, Shell-free, tested headlessly — state, menu, scheduler, transport
-src/extension/    what runs inside gnome-shell: indicator, prefs, idle watcher
+src/extension/    what runs inside gnome-shell: indicator, prefs, idle watcher, icons/
 ci/               the smoke test, its probe extension, and the pack, installer
                   and release-decision tests
 docs/             the /state contract

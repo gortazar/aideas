@@ -128,6 +128,107 @@ suite('visibility when contact is lost', () => {
     });
 });
 
+suite('every idea blocked', () => {
+    /** A queue where nothing can move without a person. */
+    const allBlocked = reading({}, [
+        idea({ position: 1, slug: 'asker', state: 'blocked', note: '2 unanswered questions',
+            open_questions: 2 }),
+        idea({ position: 2, slug: 'other', state: 'blocked', note: 'STATUS.md says blocked' }),
+    ]);
+
+    test('is its own state, told apart from "some are blocked"', () => {
+        assertEquals(indicator({ reading: allBlocked }).state, 'allBlocked');
+        assertEquals(indicator({ reading: blockedIdle }).state, 'blocked',
+            'a queue with a ready idea is still moving');
+    });
+
+    test('summons the button by itself — the answered question', () => {
+        const built = indicator({ reading: allBlocked });
+
+        assertEquals(built.visible, true,
+            'no cycle is running, and that is exactly the point');
+        assertEquals(built.icon, ICONS.allBlocked);
+        assertEquals(built.badge, '2', 'how many are waiting');
+    });
+
+    test('says the whole thing in one line', () => {
+        assertEquals(indicator({ reading: allBlocked }).accessibleName,
+            'aideas: every idea is blocked, 2 waiting for an answer');
+    });
+
+    test('one ready idea among blocked ones is not all-blocked', () => {
+        const built = indicator({ reading: reading({}, [
+            idea({ position: 1, slug: 'asker', state: 'blocked', open_questions: 1 }),
+            idea({ position: 2, slug: 'fresh', state: 'ready', note: 'not started' }),
+        ]) });
+
+        assertEquals(built.state, 'blocked');
+        assertEquals(built.visible, false, 'the queue can still move on its own');
+    });
+
+    test('a queued duplicate does not rescue it', () => {
+        // A second entry behind a blocked one is stuck too, so it must not count as work.
+        const built = indicator({ reading: reading({}, [
+            idea({ position: 1, slug: 'asker', state: 'blocked', open_questions: 1 }),
+            idea({ position: 2, slug: 'asker', state: 'queued', note: 'behind #1' }),
+        ]) });
+
+        assertEquals(built.state, 'allBlocked');
+        assertEquals(built.visible, true);
+        assertEquals(built.badge, '1', 'the queued duplicate is not a blocked idea');
+    });
+
+    test('an idea still to be planned is work the orchestrator could pick up', () => {
+        const built = indicator({ reading: reading({}, [
+            idea({ position: 1, slug: 'asker', state: 'blocked', open_questions: 1 }),
+            idea({ position: 2, slug: 'unplanned', state: 'to be planned',
+                note: 'no PLAN.md yet' }),
+        ]) });
+
+        assertEquals(built.state, 'blocked');
+    });
+
+    test('an empty queue is empty, not blocked', () => {
+        const built = indicator({ reading: reading() });
+
+        assertEquals(built.state, 'idle');
+        assertEquals(built.visible, false);
+    });
+
+    test('a running cycle is never all-blocked, whatever the rows say', () => {
+        const built = indicator({ reading: reading(
+            { running: true, agents: ['alpha'], cycle_started_at: NOW - 60 },
+            [
+                idea({ position: 1, slug: 'asker', state: 'blocked', open_questions: 1 }),
+                idea({ position: 2, slug: 'other', state: 'blocked' }),
+            ]) });
+
+        assertEquals(built.state, 'running');
+        assertEquals(built.badge, '1', 'the agent count, as for any running cycle');
+    });
+
+    test('a state this version does not recognise counts as work, not as stuck', () => {
+        const built = indicator({ reading: reading({}, [
+            idea({ position: 1, slug: 'asker', state: 'blocked', open_questions: 1 }),
+            idea({ position: 2, slug: 'odd', state: 'hibernating' }),
+        ]) });
+
+        assertEquals(built.state, 'blocked',
+            'claiming the queue is stuck on the strength of a word we do not know is worse');
+    });
+
+    test('a box that cannot be reached is not all-blocked either', () => {
+        const built = indicator({
+            reading: unreachableReading('connection refused'),
+            lastGood: { reading: allBlocked, fetchedAt: NOW - 30 },
+        });
+
+        assertEquals(built.state, 'unreachable');
+        assertEquals(built.visible, false,
+            'nothing was running, so there is nothing to keep the button up for');
+    });
+});
+
 suite('the icon', () => {
     test('one per state, all stock symbolic names', () => {
         assertEquals(indicator({ reading: running }).icon, ICONS.running);

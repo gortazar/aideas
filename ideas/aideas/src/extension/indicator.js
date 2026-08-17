@@ -18,13 +18,15 @@
 // and is why `tools/check-bundle.js` verifies every relative import against a built bundle.
 
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
-import { buildIndicator } from './lib/indicatorModel.js';
+import { buildIndicator, isShippedIcon } from './lib/indicatorModel.js';
 import { buildMenu } from './lib/menuModel.js';
 import { menuItems } from './lib/menuItems.js';
 import { unconfiguredReading } from './lib/state.js';
@@ -77,6 +79,34 @@ function rowItem(descriptor) {
     return item;
 }
 
+/**
+ * One unanswered question, indented under the idea it belongs to and dimmed.
+ *
+ * Wrapping rather than truncating: the model has already cut the text to something that fits
+ * about two lines, and the label wraps at word boundaries and ellipsizes if a theme's font makes
+ * it longer than that. Non-reactive, like every row — answering a question means editing
+ * PLAN.md on the box.
+ */
+function questionItem(descriptor) {
+    const item = new PopupMenu.PopupBaseMenuItem({
+        reactive: false,
+        can_focus: false,
+        style_class: 'popup-menu-item aideas-question',
+    });
+
+    const label = new St.Label({
+        text: descriptor.text,
+        style_class: descriptor.stale ? 'aideas-question-text aideas-dim' : 'aideas-question-text',
+        x_expand: true,
+    });
+    label.clutter_text.line_wrap = true;
+    label.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+    label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+
+    item.add_child(label);
+    return item;
+}
+
 export const AideasIndicator = GObject.registerClass(
 class AideasIndicator extends PanelMenu.Button {
     /**
@@ -86,13 +116,16 @@ class AideasIndicator extends PanelMenu.Button {
      *     closes, so the scheduler can poll faster while somebody is reading it
      * @param {function():number} [options.clock]  unix seconds; injected so a test or the
      *     smoke test can hold time still
+     * @param {?string} [options.iconsPath]  where this extension's own icons live. Without it
+     *     a bulb cannot be found, and the button falls back to asking the icon theme.
      */
-    _init({ onOpenPreferences, onMenuOpenChanged = null, clock = null } = {}) {
+    _init({ onOpenPreferences, onMenuOpenChanged = null, clock = null, iconsPath = null } = {}) {
         super._init(0.5, 'aideas', false);
 
         this._onOpenPreferences = onOpenPreferences;
         this._onMenuOpenChanged = onMenuOpenChanged;
         this._clock = clock ?? (() => Date.now() / 1000);
+        this._iconsPath = iconsPath;
 
         this._icon = new St.Icon({ style_class: 'system-status-icon' });
         this._badge = new St.Label({
@@ -132,12 +165,31 @@ class AideasIndicator extends PanelMenu.Button {
 
         const panel = buildIndicator({ reading, now, lastGood, alwaysShow });
         this.visible = panel.visible;
-        this._icon.icon_name = panel.icon;
+        this._setIcon(panel.icon);
         this._badge.text = panel.badge ?? '';
         this._badge.visible = panel.badge !== null;
         this.accessible_name = panel.accessibleName;
 
         this._rebuildMenu(buildMenu({ reading, now, fetchedAt, lastGood, host }));
+    }
+
+    /**
+     * Wear an icon: one of this extension's own bulbs, or a stock name from the icon theme.
+     *
+     * A shipped bulb is loaded as a Gio.FileIcon, and is recoloured rather than blitted because
+     * its file name ends in `-symbolic.svg` — that suffix is what the shell's texture cache
+     * looks for before applying the panel's foreground colour. Which is why the files are named
+     * as they are, and why the smoke test checks the panel icon really is recoloured rather
+     * than trusting this comment.
+     */
+    _setIcon(name) {
+        if (isShippedIcon(name) && this._iconsPath) {
+            this._icon.gicon = Gio.icon_new_for_string(`${this._iconsPath}/${name}.svg`);
+            return;
+        }
+        // A stock name, or a bulb we were never told where to find: let the theme resolve it.
+        this._icon.gicon = null;
+        this._icon.icon_name = name;
     }
 
     /** Rebuild every item. The menu is small and rebuilt at most once per reading. */
@@ -168,6 +220,15 @@ class AideasIndicator extends PanelMenu.Button {
                 }
                 case 'row':
                     this.menu.addMenuItem(rowItem(item));
+                    break;
+                case 'question':
+                    this.menu.addMenuItem(questionItem(item));
+                    break;
+                case 'question-more':
+                    // The same indented, dimmed line as a question: it belongs to the same
+                    // idea, and aligning it with the section titles instead would read as if
+                    // it were about the whole queue.
+                    this.menu.addMenuItem(questionItem(item));
                     break;
                 case 'footer':
                     this.menu.addMenuItem(infoItem(item.text, null, { dim: true }));
