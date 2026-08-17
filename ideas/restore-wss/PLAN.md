@@ -171,21 +171,21 @@ unit that can be committed on its own.
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] Which browsers must be supported? Firefox only (what is installed here, as a snap), or also
+- [x] Which browsers must be supported? Firefox only (what is installed here, as a snap), or also
       the Chromium family (Chrome/Chromium/Brave/Edge)? One `background.js` can serve both, but each
-      browser adds its own host-manifest path, packaging, install instructions and manual testing.
-- [ ] How is the browser extension distributed? Options: (a) publish signed to addons.mozilla.org
+      browser adds its own host-manifest path, packaging, install instructions and manual testing. Just Firefox 
+- [x] How is the browser extension distributed? Options: (a) publish signed to addons.mozilla.org
       and the Chrome Web Store — the only way an add-on survives a restart in release Firefox, but
       it needs developer accounts, a one-off Chrome Web Store fee and review latency; (b) unsigned,
       loaded locally, as `gnome-tasks` chose — which conflicts with this repo's "installs without
       compiling" rule and, in Firefox, with add-on persistence; (c) ship a signed `.xpi` as a
-      release asset via AMO's self-distribution signing, and unpacked for Chrome. Which?
-- [ ] If the research finds an existing third-party extension that does the job (e.g. `brotab`), is
+      release asset via AMO's self-distribution signing, and unpacked for Chrome. Which? c
+- [x] If the research finds an existing third-party extension that does the job (e.g. `brotab`), is
       depending on it acceptable — the user installs and trusts an add-on with the `tabs` permission
       that this project does not control and cannot fix — or should `restore-wss` own the extension
-      code even where an off-the-shelf one would work?
-- [ ] Should the browser's own "restore previous session" stay on, with `restore-wss` only placing
+      code even where an off-the-shelf one would work? every extension needs to be reviewed first by me before adding it as a dependency.
+- [x] Should the browser's own "restore previous session" stay on, with `restore-wss` only placing
       windows and reconciling differences, or should `restore-wss` turn it off and own tab
       restoration entirely? Leaving it on preserves per-tab history and scroll position that no
       extension can restore, but makes duplicate-tab avoidance a race; taking it over is
-      deterministic but loses that state.
+      deterministic but loses that state. on
