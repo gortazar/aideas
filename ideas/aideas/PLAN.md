@@ -181,24 +181,24 @@ Units, each one commit, tests first:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **Should the panel button appear when every idea is blocked, even though no cycle is
+- [x] **Should the panel button appear when every idea is blocked, even though no cycle is
       running?** The v0.1 answered question fixed visibility to "only while a cycle is running",
       and an all-blocked queue is never running — so under that rule the new bulb would exist but
       never be seen without turning "always show" on, which makes the third part of this entry
       pointless. The plan assumes the button appears in that one extra case, on the grounds that
       it is the only state whose meaning is "a person is now the bottleneck". Ticking this line
       as-is chooses that. The alternative is to keep the rule strictly and let the all-blocked
-      bulb only ever be seen by people who already keep the button on.
-- [ ] **Should the bulb replace *all six* state icons, or only the queue ones?** The entry says
+      bulb only ever be seen by people who already keep the button on. Yes, should appear always.
+- [x] **Should the bulb replace *all six* state icons, or only the queue ones?** The entry says
       "the icon must be a bulb", and the plan assumes the whole family becomes bulbs, so the
       button always looks like the same thing and the state is read from its shape and badge. The
       alternative is to keep stock icons for the three states that are about the *connection*
       rather than the queue — `unreachable`, `unavailable`, `unconfigured` — where a
       network-offline or warning glyph says more, at the cost of the panel sometimes not looking
-      like this extension at all.
-- [ ] **How much of a long question should the menu show?** The plan assumes each question is
+      like this extension at all. The icon on the task bar must be a bulb. Keep the per-idea icons as-is.
+- [x] **How much of a long question should the menu show?** The plan assumes each question is
       folded to one line, wrapped over at most two lines in the menu, cut with an ellipsis after
       that, and at most three questions shown per idea with `+n more` for the rest — a menu is a
       glance, and the full text is in `PLAN.md`. The alternatives are to show every question in
       full however long the menu becomes, or to show only the first question per idea as a taste
-      of what is waiting.
+      of what is waiting. Follow the plan.
