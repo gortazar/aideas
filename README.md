@@ -58,6 +58,8 @@ makes position a safe identity: the active list only ever holds work still to do
    each place contacted, extract the dates, the text and detect when the send button of the contact form has been pushed, to store the info. If the button is not pressed, we
    can't assume the place has been contacted and no info is stored for that place.
 
+3. [aideas](ideas/aideas) - the icon for the gnome extension must be a bulb 💡 but in grey colors, to match gnome shell appearance.  The extension must show the unanswered questions of each idea when it's blocked. When all ideas are blocked, show the bulb in a way it clearly state it. Minor.
+
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
