@@ -1,5 +1,5 @@
-status: in_progress
-version: 0.2
+status: done
+version: 0.3
 started_at: 2026-08-14T15:31:00+02:00
 last_session_id: 35386b06-271b-4df6-8da8-1c51dd289449
 last_run: 2026-08-17T01:52:57+02:00
@@ -110,9 +110,46 @@ symbolic icons) can only be confirmed in a real compositor.
       librsvg); and the smoke test compares the icon's pixels between two states, because a
       fallback icon is drawn, light and grey too — the one thing it cannot be is *different*
       between states.
-- [ ] U7 — the bump to 0.3 and the docs.
+- [x] **U7 — the bump and the docs.** `version: 0.3` here, in `metadata.json` and in
+      `flake.nix` — the three the release workflow asserts agree. `README.md` gains a **The
+      bulb** section (what each drawing means, and why it is grey), says that the menu lists
+      what a blocked idea is waiting to be told, and records the widened visibility rule and the
+      new test counts.
 
-Next: U7 — the bump to 0.3 and the docs.
+Next: nothing — every unit is done. See **What 0.3 covers** below.
+
+## What 0.3 covers
+
+The three things the entry asked for, and all suites green at 0.3:
+
+| Suite | Covers | Result |
+| --- | --- | --- |
+| `make test-unit` | the pure logic, now including the icons | **251 pass** |
+| `make test-http` | libsoup against a stub server | **29 pass** |
+| `make test-contract` | `/state` over fixture repositories | **32 pass** |
+| `make smoke` | the extension in a nested headless GNOME Shell | **56 pass** |
+| `make test-pack` / `test-release` / `test-install` | the release path, unchanged this entry | **7 / 19 / 39 pass** |
+| `nix flake check` | lint, unit, http, bundle | **4 green** |
+
+| What the entry asked for | Where it landed |
+| --- | --- |
+| A bulb, in every queue state | `src/extension/icons/` — four outline bulbs on the 16px grid; `ICONS` keeps its shape |
+| Grey because symbolic, not painted grey | `currentColor` + `-symbolic.svg`, recolouring **verified against the panel's own pixels** |
+| The state in the drawing, never in colour | rays / a question inside / plain / struck through — each checked at 16px, and against each other pixel for pixel |
+| The unanswered questions of each blocked idea | `open_question_texts` in `/state`, listed under the row in the menu |
+| Bounded, because `/state` is polled | folded to one line, 200 chars, 5 per idea server-side; 3 shown with `+n more` |
+| Nothing changes for rows without questions | a `STATUS.md`-blocked row and an old box's row both render exactly as before |
+| An unmistakable "everything is blocked" | the `allBlocked` state, its struck-through bulb, its badge and its one-line accessible name |
+| The panel appears when the queue stops | the widened visibility rule, verified in the compositor without "always show" |
+| The contract says all of it | `docs/state-contract.md` + `tests/test_state_contract.py` |
+| Screenshots that show what was built | `screenshots/menu-running.png`, `menu-all-blocked.png`, `panel-all-blocked.png` |
+
+**What was verified where.** The bulb's recolouring, the all-blocked button appearing without a
+cycle, and the questions in the menu are all asserted in a real GNOME Shell, because none of
+them can be proved headlessly. The folding was also run against this repo's real `PLAN.md`
+files. What cannot be verified from here is unchanged: the release publishes on merge, and
+`make check-release` is how to confirm it — as it did for 0.2, which this session checked first
+and found published cleanly, 7 checks, all three assets.
 
 ### Answered questions, as read
 
