@@ -1,5 +1,5 @@
-status: not_started
-version: 0.1
+status: done
+version: 0.2
 started_at: 2026-08-16
 last_session_id: ebf1ecd2-6691-4213-9815-2f9920396ad5
 last_run: 2026-08-17T01:17:09+02:00
@@ -10,7 +10,77 @@ last_cycle_cost_usd: 9.534980500000001
 - 2026-08-16T22:39:18+02:00 — in_progress ($20.323337000000002)
 
 
-## Units
+## Units — v0.2 (browsers and the tabs inside them)
+- [x] B0 — `docs/browser-extensions-research.md`: eleven candidates read from source plus two probes
+      of this machine; go/no-go written; conclusions below
+
+- [x] B1 — the `browser` block: family, version, profile, the browser's own window id, an ordered
+      tab list, the source it came from and the correlation's confidence; a v0.1 snapshot reads and
+      restores unchanged, tested in both directions
+- [x] B2 — capture from two sources: the add-on through a native-messaging **file drop** (not D-Bus,
+      per B0), and Firefox's `recovery.jsonlz4` through a 40-line pure-Python mozlz4 reader
+- [x] B3 — correlation: title-first with a confidence, geometry only as a tiebreak, and a refusal
+      ("a browser window, tabs unknown") when two windows look alike but hold different tabs
+- [x] B4 — restore as **reconciliation**: a window Firefox already brought back is left alone even
+      if it has since gained tabs, a missing one is created whole, tabs are never appended
+- [x] B5 — installer for the browser half (verified into a fake home), the packaged `.xpi` with a
+      secret-gated AMO signing step, the review window's browser switch, four docs updated, and a
+      new screenshot
+
+**Green:** `nix flake check` — 247 unit tests, 9 D-Bus tests, ruff, extension + add-on manifest
+checks. Green in GitHub Actions on the `v0.2` tag (CI and Release both `success`).
+
+**Released as v0.2**, and the published installer was run from a clean directory: checksum verified,
+the Firefox bridge written to `~/snap/firefox/common/.mozilla/native-messaging-hosts/` with the right
+absolute host path and the add-on id pinned, the `.xpi` delivered, `restore-wss --version` → `0.2`,
+and the *installed* copy reading the live Firefox profile (6 windows, 28 tabs).
+
+### Verified against real things
+
+- **The whole browser capture path against the live Firefox profile**: 6 windows, 27 tabs, 3 pinned;
+  every window correlated to its own tab set; `restore-wss status` printing tab counts and previews
+  per window.
+- **The shipped native host run as a real process**: framed messages in, `report.json` out, and a
+  restore request picked up while the browser said nothing — the case the `select()` loop exists for.
+- **The installer's browser half**, run into a fake home: manifest written to the snap path with the
+  right absolute host path, host executable, `.xpi` delivered.
+- **The AppArmor and mozlz4 probes** behind B0, both committed as evidence.
+
+### What is built but not verified
+
+- **The add-on has never run in a real Firefox.** Every byte of the protocol is tested — including
+  against the shipped host — but installing it needs a signed `.xpi` (or a temporary add-on loaded by
+  hand in a browser holding the user's live session), and signing needs the user's AMO credentials.
+  The session-file route, which needs no add-on, *is* verified against the real profile.
+- **No screenshot of two browser windows with different tabs on two workspaces.** That needs Firefox
+  inside the nested Shell, and snapd refuses to launch a confined app from an arbitrary cgroup — the
+  same wall v0.1 hit for LibreOffice. The review-window screenshot is real; that one is not possible
+  here.
+- **`tools/smoke-nested.sh` has not been re-run** since v0.1's M3 (a browser cannot take part in it
+  for the reason above).
+
+### What B0 changed in the plan
+
+- **The transport cannot be D-Bus.** This machine's AppArmor profile lets Firefox execute a native
+  host under `~/snap/firefox/` (`ix`), but `ix` inherits the browser's confinement, and the profile's
+  140 session-bus rules are per-name allow-lists with no room for `org.gnome.RestoreWss`. The bridge
+  is a **file drop** under `~/snap/firefox/common/`. Evidence:
+  `docs/probe-data/snap-firefox-apparmor.txt`.
+- **The offline reader is promoted from footnote to a shipped tier.** `recovery.jsonlz4` decodes with
+  a 40-line pure-Python mozlz4 reader and holds 6 windows / 27 tabs with url, title, pinned,
+  selected, groups *and* per-window geometry — with no extension and no permission at all.
+- **No third-party extension is adopted.** The session managers expose no interface (Tab Session
+  Manager has no `nativeMessaging` permission at all); `brotab` does, but via an unauthenticated
+  localhost HTTP service exposing tab text, HTML and screenshots, and it cannot work with snap
+  Firefox as installed. The sibling `gnome-tasks` extension is adapted with attribution; its D-Bus
+  host is replaced.
+- **Correlation stays title-first**: every window on this machine reports `1165x1408 @0,0
+  maximized`, so geometry cannot break ties here.
+- **Signing needs the user's AMO credentials.** CI will run `web-ext sign` only when
+  `AMO_JWT_ISSUER`/`AMO_JWT_SECRET` exist; until then the released `.xpi` is unsigned and the README
+  says so.
+
+## Units — v0.1 (delivered, released as v0.1)
 - [x] Upstream repository created (`gortazar/restore-wss`), pinned here as the `upstream` submodule
 - [x] M0a — `docs/similar-tools.md`: eleven tools read from source, plus `tools/wayland-globals.sh`
       and its committed output proving GNOME 46 here has no session-management Wayland global
