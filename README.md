@@ -55,6 +55,23 @@ makes position a safe identity: the active list only ever holds work still to do
    each place contacted, extract the dates, the text and detect when the send button of the contact form has been pushed, to store the info. If the button is not pressed, we
    can't assume the place has been contacted and no info is stored for that place.
 
+2. [wg](ideas/wg) - wg is a game where each player chooses a country and controls the armed forces of that country. For each country, the following information is available: all armed forces, army budget,
+   percentage of the budget that is dedicated to maintain the army itself (salaries, vehicle maintenance, ...), allies (countries with which alliances exist), population, PIB, % of PIB dedicated to army budget. 
+   Each player (playing as a country), can spend the remaining budget as they see fit to either by new vehicles, ships, planes, or to run operations, even wars. Each player will know where their forces
+   are, and can see them displayed on a map. We will use openstreetmap for this (other options can be suggested). The player can choose to move troops, ships or whatever other army forces from one point
+   to another. The player can as well choose to start a war with another country. When at war, a player chooses which of its forces attack which of the opponent. When there is no player driving
+   the country being attacked, a simulation will run to behave like a player would do: defending and trying to win the fights. The player may choose to attack by sea, air or land. The game will be played
+   by creating a repo from this repo (which will be a template repo). All players need to be added to the repo, because each player will push their movements and decisions to their own branch. Each
+   player will run a referee that will fetch changes from the other branches and integrate them with the player's ones, so that the player has a clear picture of what is going on. Each movement will take some
+   time to being accomplished, so not all players need to be online all the time. Indeed, the game is offline: each player gives orders to its armed forces, and the referee commits them to the player's branch and pushes them. Note that some movements may remain hidden from other players (but not from the referee), such as submarines sailing in secret underwater. We need to think carefully how we get movements out
+   of sight for other players, which can inspect the branch of another player. Movements from other players will only be visible if
+   the country either have satellites to spy on other countries, or the movement is happening at the range of radars or at a distance that is noticeable. 
+   Some details about the UI: for now a TUI is enough, and maps can be rendered as ascii art. As the referee is a process running 
+   on the player's computer, it can later on provide a GUI. Think about the implications of using openstreetmaps in terms of API usage, and recommend alternatives if 
+   you feel that is a problem.
+   This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel. 
+
+
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
