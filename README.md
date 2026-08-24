@@ -71,6 +71,11 @@ makes position a safe identity: the active list only ever holds work still to do
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel. 
 
+3. [recap](ideas/recap/) - If the default 1 day value for --since doesn't produce any result, make it 2d, then 3d, and so on, always specifying in the output the value considered. Minor version.
+
+4. [title-slides](ideas/title-slides/) - Add an optional show-index value for the frontmatter for title-slides that when true, injects an index of the sections of the document
+   before each section, using as title the title of the slides, and highlightning in bold the section that comes next. Minor version.
+
 
 ## Finished
 
