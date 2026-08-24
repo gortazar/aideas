@@ -71,6 +71,10 @@ makes position a safe identity: the active list only ever holds work still to do
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel. 
 
+3. [aideas](ideas/aideas/) - Add two buttons to aideas gnome shell extension: one to re-check the status on demand, and another to run a cycle. Minor version.
+
+4. [title-slides](ideas/title-slides/) - The index is never shown despite the show-index:true variable is set in frontmatter. Patch version (0.3 -> 0.3.1)
+
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
