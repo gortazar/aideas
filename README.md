@@ -73,10 +73,6 @@ makes position a safe identity: the active list only ever holds work still to do
 
 3. [recap](ideas/recap/) - If the default 1 day value for --since doesn't produce any result, make it 2d, then 3d, and so on, always specifying in the output the value considered. Minor version.
 
-4. [title-slides](ideas/title-slides/) - Add an optional show-index value for the frontmatter for title-slides that when true, injects an index of the sections of the document
-   before each section, using as title the title of the slides, and highlightning in bold the section that comes next. Minor version.
-
-
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
@@ -162,3 +158,6 @@ makes position a safe identity: the active list only ever holds work still to do
    must be done to find similar extensions that could be used as-is, and this report is to be written in the idea folder as "browser-extensions-research.md".
 
 15. [aideas](ideas/aideas) - the icon for the gnome extension must be a bulb 💡 but in grey colors, to match gnome shell appearance.  The extension must show the unanswered questions of each idea when it's blocked. When all ideas are blocked, show the bulb in a way it clearly state it. Minor change. (finished 2026-08-18, v0.3)
+
+16. [title-slides](ideas/title-slides/) - Add an optional show-index value for the frontmatter for title-slides that when true, injects an index of the sections of the document (finished 2026-08-24, v0.2)
+   before each section, using as title the title of the slides, and highlightning in bold the section that comes next. Minor version.
