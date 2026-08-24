@@ -50,8 +50,9 @@ from pathlib import Path
 # manages. 1.0 is the Python rewrite with parallel agents, graceful stop, a renewing lock,
 # repeat entries and versioning. 1.1 merges and retries a push that lost a race instead of
 # leaving the work for the next cycle. 1.2 survives a leftover worktree directory and
-# no longer strands an agent when a sibling fails to start.
-ORCHESTRATOR_VERSION = "1.2"
+# no longer strands an agent when a sibling fails to start. 1.3 stops the superproject
+# sweep from reverting submodule pins.
+ORCHESTRATOR_VERSION = "1.3"
 
 UNLIMITED = {"unlimited", "none", "off"}
 
@@ -1257,6 +1258,50 @@ class Orchestrator:
             log(f"{slug}: finished, but a new entry is queued for it; reopening.")
             self.reopen_for_next_entry(slug)
 
+    def all_submodule_paths(self) -> list[str]:
+        """Every submodule path recorded in the superproject's .gitmodules."""
+        listing = git("config", "-f", ".gitmodules", "--get-regexp",
+                      r"^submodule\..*\.path$", cwd=self.repo)
+        return [parts[1] for parts in
+                (line.split(None, 1) for line in listing.stdout.splitlines())
+                if len(parts) == 2]
+
+    def sweep_repo(self, message: str) -> None:
+        """Stage and commit loose files in the superproject, without touching any pin.
+
+        `git add -A` records a submodule's *working tree* HEAD. In this clone that HEAD is
+        routinely behind the index: `git merge` moves a gitlink but never checks the
+        submodule out, so right after merging an agent's branch the index holds the new pin
+        while the checkout still holds the old one. A blanket `add -A` then wrote the old
+        one back, silently reverting the agent's work — every "automated build cycle"
+        commit in this repo's history records the same stale pin, four times over eleven
+        days, while the agents' own commits advance it correctly. Two agents spent build
+        budget re-fixing a pin this function had reverted.
+
+        Restoring each gitlink from HEAD after staging fixes that at the root: an agent
+        advances a pin by committing inside its own worktree, which reaches here through
+        the merge. The superproject sweep exists to catch loose files, and has no business
+        moving pins at all.
+        """
+        git("add", "-A", cwd=self.repo)
+        for path in self.all_submodule_paths():
+            # Index entry back to whatever HEAD says; the working tree is left alone.
+            git("reset", "--quiet", "HEAD", "--", path, cwd=self.repo)
+        git("commit", "-m", message, "--quiet", cwd=self.repo)
+
+    def sync_submodule_checkouts(self, slug: str) -> None:
+        """Check out this idea's submodules at the pin the index now holds.
+
+        Without this the clone's checkout stays permanently behind, which is what made the
+        revert self-perpetuating: every new worktree branched off a stale pin, so the next
+        agent inherited the regression and had to notice it all over again.
+        """
+        for path in self.submodule_paths(self.repo, slug):
+            if git("submodule", "update", "--init", "--", path,
+                   cwd=self.repo).returncode != 0:
+                log(f"WARNING: {slug}: could not check out {path} at its recorded pin; "
+                    "the clone's checkout is behind the index.")
+
     def submodule_paths(self, worktree: Path, slug: str) -> list[str]:
         """Submodules belonging to this idea, from the worktree's own .gitmodules."""
         listing = git("config", "-f", ".gitmodules", "--get-regexp", r"^submodule\..*\.path$",
@@ -1364,6 +1409,9 @@ class Orchestrator:
                 f"{agent.worktree}; skipping.")
             self.record_usage(agent, "build")
             return
+        # The merge moved the gitlink in the index but left the checkout where it was.
+        # Reconcile now, so nothing downstream mistakes the stale checkout for the truth.
+        self.sync_submodule_checkouts(slug)
         git("worktree", "remove", "--force", str(agent.worktree), cwd=self.repo)
         git("branch", "-d", f"agent/{slug}", "--quiet", cwd=self.repo)
 
@@ -1390,9 +1438,8 @@ class Orchestrator:
         if new_status == "done":
             self.advance_queue(slug, version)
 
-        git("add", "-A", cwd=self.repo)
         note = "blocked on new question" if new_status == "blocked" else "progress"
-        git("commit", "-m", f"{slug}: automated build cycle ({note})", "--quiet", cwd=self.repo)
+        self.sweep_repo(f"{slug}: automated build cycle ({note})")
         self.record_usage(agent, "build")
         log(f"Cycle complete for {slug} ({new_status}).")
 
@@ -1435,8 +1482,7 @@ class Orchestrator:
 
             # Commit scaffolding before worktrees branch off HEAD, or agents start from a
             # tree missing their own STATUS.md and the merge trips over local changes.
-            git("add", "-A", cwd=self.repo)
-            git("commit", "-m", "Scaffold idea files", "--quiet", cwd=self.repo)
+            self.sweep_repo("Scaffold idea files")
 
             # Starting agents now would mean launching them with no time to work.
             if self.stop_requested():
