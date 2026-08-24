@@ -1,205 +1,181 @@
-# Plan: title-slides — a real deck that fails to render, turned into a test
+# Plan: title-slides 0.3.1 — `show-index: true` that shows no index
 
-Difficulty estimate: medium — the change is probably small, but the root cause is not yet known: the
-error comes from Quarto's *filter resolution*, before a single line of this extension runs, so the
-first unit is diagnosis rather than code. The fixture also drags real-world baggage in with it (a
-missing logo asset, `embed-resources`, accented duplicate headings, a 0.2 key on what may be a 0.1
-install), and each of those can fail a render for reasons that have nothing to do with the bug.
+Difficulty estimate: medium — the code change is small and local, but it turns on a contract decision
+(what an index means in a deck with no `#` sections) and it rewrites tests that currently pin
+"no sections, no index slide" as *correct* behaviour.
 
 ## Context
 
-A real lecture deck — `ideas/title-slides/tests/T4-funciones.qmd`, 236 lines, CC-licensed, in Spanish
-— fails to preview with:
+The report: **the index is never shown, although `show-index: true` is set in the frontmatter.** No
+error, no warning — the deck renders, and the index simply is not there.
 
-```
-Could not run /…/Material/title-slides as a JSON filter.
-Please make sure the file exists and is executable.
-Did you intend 'title-slides' as a Lua filter in an extension?
-```
+The leading hypothesis is not a defect in the index code at all but the contract it was written to.
+`insert_indexes` calls `sections_of`, which collects headings with `level < slide_level` — `#`
+headings when slides start at `##` — and returns the blocks unchanged when there are none. The deck
+this reporter renders is almost certainly `tests/T4-funciones.qmd`, the same one that drove 0.3: it
+sets `show-index: true` and `title-slides: true` in good faith and contains **fourteen `##` headings
+and not a single `#`**. So it has no sections, no index is inserted, and 0.3 shipped a test asserting
+exactly that:
 
-Read that message carefully, because it says exactly one thing: **Quarto did not recognise
-`title-slides` as an installed extension**, so it fell back to treating the `filters:` entry as a
-path to an executable, resolved it against the document's directory, and failed. The extension's own
-code never ran. Whatever is broken is in *installation, discovery or packaging*, not in
-`title-slides.lua`.
+> **`show-index` on a deck with no sections is pinned** by this fixture: no index slide, no warning,
+> no crash, for a document that sets the key in good faith.
 
-The document's frontmatter is otherwise ordinary:
+That test passes. The user is still looking at a deck with no index. That gap — between a pinned
+"correct" behaviour and a document that asked for a feature and got silence — is the bug this entry
+fixes. The README's troubleshooting already says "if `show-index: true` produces no index slides, the
+deck probably has no sections"; documentation that explains away a silent no-op is not the same as
+the feature working.
 
-```yaml
-filters:
-    - title-slides
-show-index: true
-title-slides: true
-format:
-    revealjs:
-        theme: sky
-        logo: codigus.png
-        slide-number: c/t
-        toc: false
-        embed-resources: true
-```
+Candidate causes, in the order U0 should eliminate them. Only the first is a design question; the
+rest are cheap and would each change the entry's centre of gravity if true:
 
-Three things about the document itself are worth knowing before designing a test around it:
+1. **The deck has no `#` sections**, so the feature is structurally inert. Expected to be the answer,
+   given the fixture already in the suite. Fix is semantic, below.
+2. **A stale install.** `show-index` did not exist before 0.2. A user still on the v0.1 zip — and
+   this reporter's previous issue *was* an installation problem — sees the key ignored with no error
+   whatsoever, which matches the report word for word. `quarto list extensions` prints the installed
+   version; the troubleshooting section must say to check it.
+3. **The key is not where the filter looks.** `show-index` nested under `format: revealjs:` rather
+   than at the top level, or written `show-index:true` with no space after the colon (as the report
+   itself spells it), which YAML does not read as a mapping key at all.
+4. **The index is generated but never reachable.** 0.2 recorded that reveal nests an index slide into
+   the preceding section's vertical stack. Under a non-linear `navigation-mode`, or with the
+   `unlisted` class that every generated heading carries, a slide can exist in the HTML and never be
+   seen. Every test we have inspects the AST or the HTML source; none of them asserts that the slide
+   is on the path a viewer actually walks. If this is the cause, the fix is placement, not semantics.
+5. **All sections hidden.** Every `#` marked `.unlisted` or `visibility="hidden"`, or `slide-level: 1`
+   / `0`, under which the extension defines no sections at all.
 
-- **It has no top-level `---` and no `#`.** Fourteen `##` headings, nothing else. So both features are
-  structurally inert on it: nothing to carry, no sections to index. This deck is a test that the
-  extension *renders cleanly and changes nothing*, which is precisely the case a user hits first.
-- **It repeats headings, including across case.** `## Definición` twice, `## Parámetros por defecto`
-  three times (one with a trailing space), and `## Retorno de Valores` / `## Retorno de valores`
-  differing only in a capital. Quarto derives slide ids from heading text, so this deck already
-  contains duplicate anchors before the extension touches it — exactly the terrain
-  `taken_identifiers` was written for.
-- **It references `codigus.png`, which we do not have**, and asks for `embed-resources: true`.
+The fix this plan assumes, stated rather than asked: **`show-index: true` must never silently produce
+nothing.** Concretely, when a deck has no visible sections, the index falls back to listing the
+deck's *slide-level* headings — the `##`s — as a single index slide at the top of the deck, an
+agenda. Before every slide would double a fourteen-slide deck; before every section is meaningless
+when there are none. A deck that does have sections keeps 0.2's behaviour byte for byte, so the
+fallback is reachable only from the case that today produces silence. Where even that finds nothing
+to list — a deck with no headings at all — the filter warns, naming the key and the reason, through
+the same `quarto.log.warning` path the setext check uses.
 
-Where the repo stands, checked rather than assumed: `STATUS.md` and `plans/02-2026-08-24.md` say 0.2
-shipped `show-index` and that the pin moved here, but the `upstream/` working tree in this checkout is
-at **0.1** — `_extension.yml` reads `0.1.0`, `title-slides.lua` contains no `show-index`, and
-`README.md` still installs `@v0.1`. Either the submodule is not at the pinned commit or the pin never
-moved. This has to be settled first, because it decides which code is being fixed — and because
-"user's document sets a 0.2 key" is itself a candidate explanation for confusion, though not for
-*this* error.
+Further assumptions:
 
-Candidate root causes, in the order they should be eliminated (U0 does this):
-
-1. **Not installed at all in that directory.** The commonest reading of the message. The deck lives in
-   an Insync/OneDrive tree; Quarto walks up from the document looking for `_extensions/`, and if the
-   user ran `quarto add` somewhere else, or in a parent that is not the render root, discovery fails.
-   If this is it, the fix is documentation and a much better troubleshooting section, not code.
-2. **Installed under a name that does not match `title-slides`.** If the attached release zip unpacks
-   with a versioned top-level directory, the extension lands as `_extensions/title-slides-0.2/` and
-   `filters: [title-slides]` cannot resolve it. This produces *precisely* the reported message and is
-   fully our fault. Test by installing from the published v0.2 zip into a clean directory and looking
-   at the resulting path.
-3. **The path.** `OneDrive Biz/Asignaturas/LP/Módulo II - Python/Material` has spaces and non-ASCII in
-   it. Reproduce under a directory with the same shape before ruling it out.
-4. **`_extension.yml` not being read as a contribution** — wrong key, wrong filename, `quarto-required`
-   excluding the user's Quarto. Cheap to check, cheapest to rule out.
-
-Assumptions stated rather than asked:
-
-- **The fixture goes upstream verbatim**, byte-for-byte as it failed, under
-  `tests/fixtures/real-deck/T4-funciones.qmd` with a `README`/`LICENSE` note naming Francisco Gortázar
-  as author and the CC licence. Editing the frontmatter to make it convenient would throw away the
-  only thing that makes it valuable: it is the file that broke.
-- **A placeholder `codigus.png` ships beside it**, a few-hundred-byte image, so the frontmatter can
-  stay untouched and the render still resolves the logo. The alternative — deleting the `logo:` line —
-  edits the evidence.
-- **This is a patch release, 0.2.1**, unless U0 shows the fix changes rendering behaviour, in which
-  case it is 0.3. Additive documentation and a new test do not move a minor version.
-- **The idea's `tests/` copy stays** where it is as the source of record; upstream gets a copy, since
-  the extension's suite must be runnable from a clone of the extension alone.
+- **This is 0.3.1, as the idea asks.** Worth saying plainly once: by semver this is a behaviour
+  change, not a bug fix, since output that was pinned as correct becomes different output. The entry
+  proceeds as a patch on the reporter's instruction, and the release notes describe the new
+  behaviour rather than burying it.
+- **The reporter's deck is the acceptance test.** `tests/fixtures/real-deck/T4-funciones.qmd` is
+  already upstream and already rendered by `nix flake check`. Its expected outline moves from
+  fourteen slides to fifteen, and that diff *is* the proof the bug is fixed.
+- **No new frontmatter key.** An `index-level:` option is the obvious alternative and is left in Open
+  Questions; a key the reporter would have had to know about does not fix a silent no-op.
 
 ## Features
 
-- **The failing deck is a test upstream** — `T4-funciones.qmd` lives in the extension's own repo,
-  attributed and licensed, and `nix flake check` renders it. The bug cannot come back unnoticed.
-- **The test renders it the way a user does** — into a clean temp directory holding `_extensions/`
-  exactly as `quarto add` installs it, with `filters: [title-slides]` resolved by name, not by path.
-  The reported failure was a resolution failure, so a test that bypasses resolution would pass while
-  the user still cannot render.
-- **The render is asserted, not just exit-code-checked** — the produced HTML has the fourteen slides
-  the document has, in order, with their titles (accents intact), and the extension has added and
-  removed nothing, since this deck has no rule to carry across and no section to index.
-- **A no-op deck is proven to be a no-op** — the same document rendered with and without the filter
-  produces the same slide outline. That is the strongest available statement of "the extension works
-  as expected" for a document that asks for both features and structurally needs neither.
-- **Duplicate and case-colliding headings survive** — `Definición` twice, `Parámetros por defecto`
-  three times, `Retorno de Valores` vs `Retorno de valores`: the deck keeps distinct slides with
-  distinct ids and the extension does not make the collisions worse.
-- **The root cause is fixed at its source** — whichever of the four candidates U0 confirms: a packaging
-  fix if the installed directory name is wrong, a discovery fix if the path is at fault, and in every
-  case the install path is verified from a clean directory rather than assumed.
-- **An installation test that would have caught it** — install from the published release artefact
-  into an empty directory, assert the extension lands at a path whose final component is
-  `title-slides`, and render a one-slide deck through it. This is the check that turns "verified once
-  by hand" into something CI repeats.
-- **Troubleshooting in the README** — the exact error text from this report, quoted, with what it
-  means (Quarto did not find the extension, not "the filter is broken"), how to check
-  (`quarto list extensions`, where `_extensions/` must sit relative to the document), and the fix.
-  Whatever the root cause, this message will be someone's first encounter with the extension failing.
-- **`show-index` on a deck with no sections is explicitly pinned** by this fixture — no index slide,
-  no warning, no crash — for a document that sets the key in good faith.
-- **Released and installable** — `_extension.yml` bumped, tag cut upstream with the zip attached and
-  *verified present*, both install paths re-checked from clean directories, then the submodule gitlink
-  and `flake.lock` moved here together with `scripts/check-pin.sh` green.
+- **`show-index: true` always does something visible.** A deck that sets the key gets an index or a
+  warning explaining why it cannot have one. Silence is no longer a possible outcome.
+- **An agenda for a section-less deck** — one index slide at the top, listing every slide-level
+  heading in document order, titled from the deck's own `title:` exactly as today's index is.
+- **The reporter's deck shows its index** — the real-deck fixture's pinned outline gains the slide,
+  with the fourteen accented titles listed on it, and the test fails if the index disappears again.
+- **Decks with sections are untouched** — the 0.2 index behaviour is unchanged, asserted by the
+  existing golden fixtures passing byte-identically rather than by inspection.
+- **Duplicate headings on the agenda stay distinct** — `Definición` twice and `Parámetros por
+  defecto` three times are listed as they are written, and the generated heading's identifier comes
+  from the same `taken_identifiers` table, so it cannot collide with anything in the deck.
+- **The index is asserted to be reachable, not merely present** — the render test checks where the
+  index `<section>` sits in the HTML (top level, not nested inside another slide's vertical stack)
+  and that nothing renders it hidden. This is the assertion that would have caught candidate 4, and
+  the one class of failure our AST-level tests structurally cannot see.
+- **Diagnosis for the causes that are not ours** — README troubleshooting gains: check the installed
+  version with `quarto list extensions` (the key does nothing before 0.2), keep `show-index` at the
+  top level of the frontmatter and not inside `format:`, and the `show-index:true` spacing trap.
+- **Hidden headings stay hidden in the fallback** — `.unlisted` and `visibility="hidden"` slide-level
+  headings are left off the agenda, the same rule the section index already follows.
+- **The degenerate cases are re-pinned deliberately** — no headings at all, one slide, `slide-level: 1`
+  and `slide-level: 0`, and a deck with both features on: each gets an updated expectation written
+  as a decision, not as a test edited until it passed.
+- **Released and installable** — `_extension.yml` at 0.3.1, tag cut upstream with the zip attached
+  and verified present, both install paths re-checked from clean directories by rendering the real
+  deck, then the gitlink and `flake.lock` moved here together with `scripts/check-pin.sh` green.
 
 ## Approach
 
 Units, each one commit, tests first:
 
-1. **U0 — reconcile the pin, then reproduce.** `git submodule update --init`, `scripts/check-pin.sh`,
-   and establish whether `upstream/` is at 0.1 or 0.2 and which commit this repo pins; get the suite
-   green before touching anything. Then reproduce the user's failure deliberately, walking the four
-   candidates above: render `T4-funciones.qmd` with no `_extensions/` present (expect the reported
-   message verbatim — that alone tells us what the message means), with a correct flat install, with
-   an owner-scoped `_extensions/gortazar/title-slides/`, from the published v0.2 zip, and from a
-   directory whose name has spaces and an accent. Write down which combinations fail. **No fix is
-   designed before this unit finishes**; everything after it depends on the answer.
-2. **U1 — the fixture, as a failing test.** Add `T4-funciones.qmd`, the placeholder logo and the
-   attribution/licence note upstream; add a render test that fails today for the reason U0 identified
-   and passes once fixed. If U0 shows the extension itself is blameless and the cause was a missing
-   install, this test still lands — it becomes the regression net for the packaging test in U2.
-3. **U2 — the fix and the installation test.** Whatever U0 found: correct the packaging or discovery,
-   and add the clean-directory install check to the suite so the shape of what `quarto add` produces
-   is asserted rather than trusted.
-4. **U3 — assertions on the render.** Extend `deck-outline.lua` (or add a small reader beside it) to
-   dump this deck's slide sequence and titles; pin it as an expected outline; add the
-   filter-on/filter-off equivalence run. Confirm the new test can fail by perturbing the expectation.
-5. **U4 — docs and release.** README troubleshooting section with the quoted error; note the fixture's
-   provenance and licence; bump `_extension.yml`; cut the tag and confirm the tag and its asset really
-   landed (`git ls-remote --tags`, then look at the release — the orchestrator's push carries no tag);
-   verify both install paths from clean directories; move the gitlink and `flake.lock` here together.
+1. **U0 — pin, baseline, reproduce.** `git submodule update --init`, `scripts/check-pin.sh`, full
+   suite green before any change; the sweep has reverted this gitlink once already. Then reproduce:
+   render the real deck as the user does and confirm no index appears; walk candidates 2–5 above
+   deliberately (a v0.1 install, the key under `format:`, the no-space spelling, a hidden-sections
+   deck, `slide-level: 1`) and write down which produce this exact symptom. **No fix is designed
+   before this unit finishes.** If candidate 4 turns out to be live — the index in the HTML but
+   unreachable — the rest of the plan is placement work and the fallback below is a separate concern.
+2. **U1 — the failing test.** Update the real-deck expected outline to the fifteen slides it *should*
+   have and add the reachability assertions; add unit fixtures for a section-less deck with and
+   without a title. Both fail. Commit them failing is not an option under the suite's own rules, so
+   this unit lands with U2 if that is what keeping CI green requires — but the expectation is written
+   before the implementation either way.
+3. **U2 — the fallback.** `sections_of` returning empty becomes a branch, not an early return:
+   collect slide-level headings by the same visibility rule, build one index slide, insert it before
+   the first block. Keep `insert_indexes` a pure function over top-level blocks so the unit tests can
+   drive it directly. Ordering against the carry matters — the agenda heading sits at the slide level
+   and must be `title-slides-index`-classed so `is_generated` keeps the carry from adopting it; add
+   the test that fails when that class is removed.
+4. **U3 — the warning, and the cases that stay silent.** A deck that sets the key and has no heading
+   to list warns once with the reason. Re-pin every degenerate case listed in Features, and confirm
+   each new test can fail by perturbing its expectation.
+5. **U4 — docs and release.** README: what the index lists in a deck without sections, the agenda
+   example, and the three troubleshooting entries from U0; bump `_extension.yml` to 0.3.1; cut the
+   tag and confirm the tag *and its asset* landed (`git ls-remote --tags`, then look at the release —
+   the orchestrator's push carries no tag, so the workflow has to tag itself); verify both install
+   paths from clean directories against the real deck; move the gitlink and `flake.lock` here
+   together and check the remote CI run, not just the local one.
 
 ## Testing
 
-The three layers already wired into `nix flake check`, plus one new one:
-
-- **Render** (new, `tests/run-real-deck.sh`) — `T4-funciones.qmd` into a temp directory laid out as
-  `quarto add` leaves it, asserting the slide outline, the titles with their accents, and that the
-  filter-on and filter-off outlines agree.
-- **Install** (new, folded into the same script or its own) — install from the release artefact into
-  an empty directory, assert the extension's directory name, render through it. Needs network, so it
-  is guarded: skipped with a clear message when unavailable, never silently passing.
-- **Golden and unit** — unchanged, as the no-regression check. The existing fixtures must still pass
-  byte-identically; a fix to packaging should not touch the AST at all, and if it does, that is a
-  finding.
-- **Smoke** — unchanged.
+- **Real deck** (`tests/run-real-deck.sh`, existing) — the acceptance test. Outline goes to fifteen
+  slides with the agenda first; the filter-off run still gives fourteen, so the equivalence assertion
+  there has to be restated as "the extension adds exactly the index" rather than "adds nothing".
+- **Reachability** (new, folded into the same script) — the index `<section>` is a direct child of
+  the slides container, carries no hiding class or inline `display:none`, and appears before the
+  first content slide. Cheap string/structure assertions on the HTML; no browser.
+- **Unit** — the fallback as a pure transform: section-less deck, no headings, hidden headings only,
+  `slide-level: 1`/`0`, both features on together, and the `is_generated` guard.
+- **Golden** — `index.qmd` and the other three fixtures must pass **byte-identically**; a diff there
+  means the fallback leaked into the sectioned path and is a finding, not a fixture to update.
+- **Smoke and install** — unchanged, both still run; the install test is the one that catches the
+  stale-install cause going forward.
 
 ## Risks / things to verify early
 
-- **The stale `upstream/` checkout.** The tree here is at 0.1 while STATUS claims 0.2 shipped. Building
-  on the wrong base wastes the whole entry — settle it in the first ten minutes of U0.
-- **`embed-resources: true` needs no network, but the nix check sandbox has none.** Confirm this deck
-  renders inside `nix flake check` and not merely in a dev shell; if reveal's assets need fetching,
-  the render test has to be structured like the install test, with an explicit skip rather than a
-  mystery failure.
-- **A missing `logo:` may fail the render on its own**, which would look like the extension's fault.
-  Verify the placeholder actually satisfies it before writing assertions around it.
-- **The document's duplicate headings mean Quarto emits duplicate-id warnings of its own.** Do not
-  chase them as a bug and do not let `set -e` plus a `--strict`-ish flag turn them into a failure that
-  masks the real assertion.
-- **A test that renders by path would pass while the user still fails.** The bug is name resolution;
-  keep every new test going through `filters: [title-slides]` from an installed `_extensions/`.
-- **The fixture is someone's teaching material.** Attribution and licence file land in the same commit
-  as the `.qmd`, not later.
-- **`upstream/` is a detached-HEAD submodule**, so a plain `git push` inside it is a silent no-op —
-  push `HEAD:main` and confirm with `git ls-remote origin main` before calling a unit done.
+- **The pin.** `scripts/check-pin.sh` before anything else; `STATUS.md` claiming 0.3 is not evidence
+  that the gitlink points at it.
+- **Re-pinning a test to make it pass is exactly what a broken fix looks like.** The real-deck outline
+  changes in this entry by design, so every other expectation must be defended: if a golden fixture
+  needs touching, that is a bug in the change, not a chore.
+- **The agenda could be adopted as a carried title.** Same trap 0.2 flagged; it is currently
+  structurally impossible because a section heading always follows an index, and the fallback breaks
+  that — the agenda is followed by an ordinary `##`. The `is_generated` check is now load-bearing.
+  Test that it fails when removed.
+- **A fifteenth slide changes `slide-number: c/t`** and every in-deck link that counts slides. Worth
+  a sentence in the README rather than a surprise.
+- **Candidate 4 would invalidate the fix.** If index slides are generated but unreachable, adding one
+  more generated slide changes nothing the user can see. Settle reachability in U0, on the sectioned
+  example deck, before building the fallback.
+- **`upstream/` is a detached-HEAD submodule** — `git push origin HEAD:main` and confirm with
+  `git ls-remote origin main` before calling a unit done; a plain push prints nothing and does nothing.
+- **The release workflow must create its own tag**; the orchestrator's push carries none.
 
 ## Open Questions
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [x] Which licence does the fixture carry? The idea text says **CC-BY-SA-4.0**; the document's own
-      frontmatter says `license: CC-BY-4.0`. Both permit redistribution with attribution, so the test
-      lands either way — but the `LICENSE` note shipped beside it should say the right one. Ticking
-      this line as-is takes the **document's own frontmatter, CC-BY-4.0**, as authoritative and notes
-      the author's name from it.
-- [x] Was the extension actually installed in that directory when the render failed? Ticking this line
-      as-is assumes **it was** (so there is a packaging or discovery bug to find, and U0 will identify
-      which). If it was not, the entry's centre of gravity moves to the troubleshooting docs and the
-      installation test, and the "fix" is that the extension can no longer be silently half-installed.
-      The extension was installed, and an "_extensions/gortazar/title-slides" folder created with
-      a _extension.yml file, and two lua files: setext.lua and title-slides.lua.
-- [x] Does the fixture render under `pptx` too? The document's frontmatter carries a commented-out
-      `pptx` block with a `reference-doc:`. Ticking this line as-is tests **revealjs only**, matching
-      0.1's answered format question and leaving the commented block as the historical artefact it is.
+- [ ] Where does the agenda go in a section-less deck? Ticking this line as-is puts **one index slide
+      at the very top of the deck**, listing every slide, with nothing emboldened since no single
+      slide is "next". The alternative — an index before *every* slide, mirroring the section rule —
+      turns a fourteen-slide deck into twenty-eight and is rejected unless the reporter wants it.
+- [ ] Should the fallback be automatic, or an opt-in `index-level: 2` key? Ticking this line as-is
+      makes it **automatic**, on the grounds that a key the user would have to discover does not fix
+      a silent no-op. An explicit key is the cleaner semver story and could still be added later as
+      the way to index a level other than the default.
+- [ ] Is the reporter's deck really `T4-funciones.qmd`? Ticking this line as-is **assumes it is** and
+      treats that fixture's outline as the acceptance criterion. If the failing deck does have `#`
+      sections, candidate 4 (generated but unreachable) becomes the likely cause and U0's findings
+      redirect the entry.
