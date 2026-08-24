@@ -1,4 +1,4 @@
-status: not_started
+status: in_progress
 version: 0.2
 started_at: 2026-08-16
 last_session_id: 498f8809-49e3-4e71-b8bb-3905366ad588
@@ -7,6 +7,46 @@ last_cycle_cost_usd: 15.026146999999996
 
 ## Log
 - 2026-08-24T08:17:45+02:00 — done ($15.026146999999996)
+
+### 2026-08-24 — 0.3, U0: the reported failure, diagnosed
+
+**The pin here really was stale, and it was the sweep that did it.** `flake.lock` named the
+0.2 commit `7c60db8` while the `upstream/` gitlink named the 0.1 commit `77e5b51`. The
+culprit is commit `09235d9` "title-slides: automated build cycle (progress)" — the
+orchestrator's end-of-cycle sweep — which reverted the gitlink while leaving `STATUS.md`
+saying 0.2. `scripts/check-pin.sh` caught it, which is exactly what it is for. Restored the
+gitlink to `7c60db8`; both pins agree and the 0.2 suite (89 unit tests, golden, smoke) is
+green before any change.
+
+**Root cause of the user's failure: the extension was not installed in the directory that
+matters.** Reproduced each candidate against the real deck:
+
+| set-up | result |
+| --- | --- |
+| no `_extensions/` at all | **the reported message, verbatim** |
+| `_extensions/gortazar/title-slides/` beside the document | renders fine |
+| the same, from a directory named `…/Módulo II - Python/Material` | renders fine |
+| `_extensions/` in the document's **parent** directory | **the reported message** |
+| the same, with a `_quarto.yml` project root at the parent | **the reported message** |
+| `quarto-required` excluding the running Quarto | a different, clear error |
+
+So **Quarto looks for `_extensions/` next to the document and does not search upwards** —
+not the parent, not even the project root. The user had the folder, just not in the folder
+holding `T4-funciones.qmd`; `quarto add` had been run somewhere else in the OneDrive tree.
+`quarto list extensions`, run in the document's own directory, says
+"No extensions are installed in this directory" and is the diagnostic to document.
+
+Eliminated with evidence, not assumed: the installed directory name is right
+(`_extensions/gortazar/title-slides`, resolved by `filters: [title-slides]`), spaces and
+accents in the path are harmless, and a `quarto-required` mismatch produces its own
+explicit message rather than this one. **The extension's own code is blameless**, so this
+entry is a fixture, an installation test and troubleshooting docs rather than a code fix.
+
+The deck itself renders to its 14 slides with the accents intact, and the extension adds
+and removes nothing: it has no top-level `---` to carry a title across and no `#` section
+to index, so both features are structurally inert on it. The only complaint is the missing
+`codigus.png`, a warning rather than an error.
+
 - 2026-08-16T21:29:26+02:00 — done ($12.985914499999996)
 
 
@@ -186,5 +226,15 @@ Two mechanics worth recording, both feeding later units:
 - [x] U5 — README, screenshots, `_extension.yml` at 0.2.0, v0.2 released, both install
       paths verified from clean directories, pin moved here
 
-Next: nothing — 0.2 is done. 89 unit tests plus 4 golden cases and the smoke test, all
+### 0.3 — the real deck as a test
+- [x] U0 — pin reconciled (the sweep had reverted it), 0.2 baseline green, and the
+      reported failure reproduced and diagnosed: `_extensions/` must sit beside the document
+- [ ] U1 — the fixture upstream, attributed and licensed, with a render test
+- [ ] U2 — the installation test: install into an empty directory and assert what lands
+- [ ] U3 — assertions on the render: the outline, the accents, filter-on vs filter-off
+- [ ] U4 — README troubleshooting, release 0.3, pin moved here
+
+Next: U1 — land `T4-funciones.qmd` upstream with its attribution and a render test.
+
+Previously: 0.2 is done. 89 unit tests plus 4 golden cases and the smoke test, all
 green in `nix flake check` upstream and at the pinned commit here.
