@@ -2,8 +2,20 @@ status: done
 version: 0.5
 started_at: 2026-08-09
 last_session_id: fa22503c-6cd0-436e-b54f-1a557e15f321
-last_run: 2026-08-14T20:02:19+02:00
-last_cycle_cost_usd: 14.976537500000003
+last_run: 2026-08-24T08:17:45+02:00
+last_cycle_cost_usd: 15.6959985
+
+## Log
+- 2026-08-24T08:17:45+02:00 — done ($15.6959985)
+- 2026-08-14T20:02:19+02:00 — done ($14.976537500000003)
+- 2026-08-13T23:28:10+02:00 — done ($24.105846499999995)
+- 2026-08-13T20:00:38+02:00 — done ($14.869310999999998)
+- 2026-08-11T18:50:50+02:00 — in_progress ($11.018076)
+- 2026-08-11T15:05:29+02:00 — in_progress ($0.0)
+- 2026-08-10T15:19:10+02:00 — in_progress ($0.0)
+- 2026-08-10T00:38:35+02:00 — done ($7.578085)
+- 2026-08-09T18:54:00+02:00 — in_progress ($9.104486499999998)
+- 2026-08-09T18:00:54+02:00 — in_progress ($9.662947499999998)
 
 ## Units — 0.5 (widen the window until there is something to say)
 - [x] U0 — restore the submodule pin. Third cycle running: the gitlink was at 9c19569 while
@@ -53,16 +65,6 @@ sessions, not their size.
 The cap is **7d**, not the 30d the plan's own text assumed: the answered question says
 "7 days max". Everything the plan says about 30d reads as 7d.
 
-## Log
-- 2026-08-14T20:02:19+02:00 — done ($14.976537500000003)
-- 2026-08-13T23:28:10+02:00 — done ($24.105846499999995)
-- 2026-08-13T20:00:38+02:00 — done ($14.869310999999998)
-- 2026-08-11T18:50:50+02:00 — in_progress ($11.018076)
-- 2026-08-11T15:05:29+02:00 — in_progress ($0.0)
-- 2026-08-10T15:19:10+02:00 — in_progress ($0.0)
-- 2026-08-10T00:38:35+02:00 — done ($7.578085)
-- 2026-08-09T18:54:00+02:00 — in_progress ($9.104486499999998)
-- 2026-08-09T18:00:54+02:00 — in_progress ($9.662947499999998)
 
 ## Units — 0.4 (`--since 6h`, `--since 7d`)
 - [x] U0 — restore the submodule pin, again: the gitlink was back at the 0.2-era commit
