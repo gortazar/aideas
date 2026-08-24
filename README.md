@@ -71,29 +71,6 @@ makes position a safe identity: the active list only ever holds work still to do
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel. 
 
-3. [title-slides](ideas/title-slides/) The preview of a qmd document with this extension configured in the frontmatter fails with an error. I added the qmd file that failed
-   to the ideas/title-slides/tests folder within this repo. Build a test in the title-slides repo that uses this document (it's license is CC-By-SA-4.0 so it can be shared 
-   in title-slides' own repo) to ensure the extension works as expected. It must render it properly. The error lines are provided below:
-   FATAL (/opt/quarto/share/filters/main.lua:3757) An error occurred:
-   Could not run /home/patxi/Insync/francisco.gortazar@urjc.es/OneDrive Biz/Asignaturas/LP/Módulo II - Python/Material/title-slides as a JSON filter.
-   Please make sure the file exists and is executable.
-   Did you intend 'title-slides' as a Lua filter in an extension?
-   If so, make sure you've spelled the name of the extension correctly.
-   The original Pandoc error follows below.
-   Error running filter /home/patxi/Insync/francisco.gortazar@urjc.es/OneDrive Biz/Asignaturas/LP/Módulo II - Python/Material/title-slides:
-   Could not find executable /home/patxi/Insync/francisco.gortazar@urjc.es/OneDrive Biz/Asignaturas/LP/Módulo II - Python/Material/title-slides
-   Error running filter /opt/quarto/share/filters/main.lua:
-   /opt/quarto/share/filters/main.lua:586: FATAL QUARTO ERROR
-   stack traceback:
-        /opt/quarto/share/filters/main.lua:2619: in function 'fatal'
-        /opt/quarto/share/filters/main.lua:2199: in function 'fail'
-        /opt/quarto/share/filters/main.lua:3757: in field 'Pandoc'
-        /opt/quarto/share/filters/main.lua:586: in function 'run_emulated_filter'
-        /opt/quarto/share/filters/main.lua:1314: in local 'callback'
-        /opt/quarto/share/filters/main.lua:1332: in upvalue 'run_emulated_filter_chain'
-        /opt/quarto/share/filters/main.lua:1368: in function </opt/quarto/share/filters/main.lua:1365>
-   WARN: Error encountered when rendering files
-
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
@@ -184,3 +161,26 @@ makes position a safe identity: the active list only ever holds work still to do
    before each section, using as title the title of the slides, and highlightning in bold the section that comes next. Minor version.
 
 17. [recap](ideas/recap/) - If the default 1 day value for --since doesn't produce any result, make it 2d, then 3d, and so on, always specifying in the output the value considered. Minor version. (finished 2026-08-24, v0.5)
+
+18. [title-slides](ideas/title-slides/) The preview of a qmd document with this extension configured in the frontmatter fails with an error. I added the qmd file that failed (finished 2026-08-24, v0.3)
+   to the ideas/title-slides/tests folder within this repo. Build a test in the title-slides repo that uses this document (it's license is CC-By-SA-4.0 so it can be shared 
+   in title-slides' own repo) to ensure the extension works as expected. It must render it properly. The error lines are provided below:
+   FATAL (/opt/quarto/share/filters/main.lua:3757) An error occurred:
+   Could not run /home/patxi/Insync/francisco.gortazar@urjc.es/OneDrive Biz/Asignaturas/LP/Módulo II - Python/Material/title-slides as a JSON filter.
+   Please make sure the file exists and is executable.
+   Did you intend 'title-slides' as a Lua filter in an extension?
+   If so, make sure you've spelled the name of the extension correctly.
+   The original Pandoc error follows below.
+   Error running filter /home/patxi/Insync/francisco.gortazar@urjc.es/OneDrive Biz/Asignaturas/LP/Módulo II - Python/Material/title-slides:
+   Could not find executable /home/patxi/Insync/francisco.gortazar@urjc.es/OneDrive Biz/Asignaturas/LP/Módulo II - Python/Material/title-slides
+   Error running filter /opt/quarto/share/filters/main.lua:
+   /opt/quarto/share/filters/main.lua:586: FATAL QUARTO ERROR
+   stack traceback:
+        /opt/quarto/share/filters/main.lua:2619: in function 'fatal'
+        /opt/quarto/share/filters/main.lua:2199: in function 'fail'
+        /opt/quarto/share/filters/main.lua:3757: in field 'Pandoc'
+        /opt/quarto/share/filters/main.lua:586: in function 'run_emulated_filter'
+        /opt/quarto/share/filters/main.lua:1314: in local 'callback'
+        /opt/quarto/share/filters/main.lua:1332: in upvalue 'run_emulated_filter_chain'
+        /opt/quarto/share/filters/main.lua:1368: in function </opt/quarto/share/filters/main.lua:1365>
+   WARN: Error encountered when rendering files

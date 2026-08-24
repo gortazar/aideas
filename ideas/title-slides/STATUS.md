@@ -2,11 +2,14 @@ status: done
 version: 0.3
 started_at: 2026-08-16
 last_session_id: 498f8809-49e3-4e71-b8bb-3905366ad588
-last_run: 2026-08-24T08:17:45+02:00
-last_cycle_cost_usd: 15.026146999999996
+last_run: 2026-08-24T18:26:27+02:00
+last_cycle_cost_usd: 13.305927500000001
 
 ## Log
+- 2026-08-24T18:26:27+02:00 — done ($13.305927500000001)
 - 2026-08-24T08:17:45+02:00 — done ($15.026146999999996)
+- 2026-08-16T21:29:26+02:00 — done ($12.985914499999996)
+
 
 ### 2026-08-24 — 0.3 delivered: the real deck as a test
 
@@ -71,7 +74,6 @@ and removes nothing: it has no top-level `---` to carry a title across and no `#
 to index, so both features are structurally inert on it. The only complaint is the missing
 `codigus.png`, a warning rather than an error.
 
-- 2026-08-16T21:29:26+02:00 — done ($12.985914499999996)
 
 
 ### 2026-08-24 — 0.2 delivered: show-index
