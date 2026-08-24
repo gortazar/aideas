@@ -1,9 +1,21 @@
-status: not_started
+status: in_progress
 version: 0.4
 started_at: 2026-08-09
 last_session_id: fa22503c-6cd0-436e-b54f-1a557e15f321
 last_run: 2026-08-14T20:02:19+02:00
 last_cycle_cost_usd: 14.976537500000003
+
+## Units — 0.5 (widen the window until there is something to say)
+- [x] U0 — restore the submodule pin. Third cycle running: the gitlink was at 9c19569 while
+      flake.lock and the v0.4 tag both said 4f6e9d1.
+- [ ] U1 — the escalation, as a pure function next to FilterSessions
+- [ ] U2 — wire it into cli: read once at the cap, escalate the filter in memory
+- [ ] U3 — the output: leading window line, the empty message, `window` in --json
+- [ ] U4 — measure and record
+- [ ] U5 — docs, version 0.5, release v0.5
+
+The cap is **7d**, not the 30d the plan's own text assumed: the answered question says
+"7 days max". Everything the plan says about 30d reads as 7d.
 
 ## Log
 - 2026-08-14T20:02:19+02:00 — done ($14.976537500000003)
