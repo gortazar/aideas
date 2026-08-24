@@ -19,11 +19,11 @@
     "recap-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1786728208,
-        "narHash": "sha256-NbabqpFzyTl+B1YhMXALufE+Bhz3LCbbZXngMZkpfj8=",
+        "lastModified": 1787551518,
+        "narHash": "sha256-djGon76pQ2kbd6cBg0CnEEVEBsp1VrVZkM4oNjA3vkk=",
         "owner": "gortazar",
         "repo": "recap",
-        "rev": "4f6e9d1feecedc650bdfdece2d1cd1a82a773b06",
+        "rev": "7e7d134a22d7e67b3a54f06218ffdd5e8747e7ec",
         "type": "github"
       },
       "original": {
