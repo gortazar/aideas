@@ -1,5 +1,5 @@
-status: in_progress
-version: 0.4
+status: done
+version: 0.5
 started_at: 2026-08-09
 last_session_id: fa22503c-6cd0-436e-b54f-1a557e15f321
 last_run: 2026-08-14T20:02:19+02:00
@@ -8,11 +8,47 @@ last_cycle_cost_usd: 14.976537500000003
 ## Units — 0.5 (widen the window until there is something to say)
 - [x] U0 — restore the submodule pin. Third cycle running: the gitlink was at 9c19569 while
       flake.lock and the v0.4 tag both said 4f6e9d1.
-- [ ] U1 — the escalation, as a pure function next to FilterSessions
-- [ ] U2 — wire it into cli: read once at the cap, escalate the filter in memory
-- [ ] U3 — the output: leading window line, the empty message, `window` in --json
-- [ ] U4 — measure and record
-- [ ] U5 — docs, version 0.5, release v0.5
+- [x] U1 — `report.Widen`: 1d, 2d, … 7d, first non-empty wins, table-tested. It builds
+      whole reports rather than re-filtering sessions, because "empty" has to mean the
+      report the user would have seen — `--project` and `--running` are properties of a
+      grouped, classified project. The duration grammar moved to `internal/duration` and
+      gained a `Format` with a round-trip test, so the printed window can be pasted back.
+- [x] U2 — wired in: widening only when neither `--since` nor the config key chose a
+      window, the read done once at the 7d cap, the filter escalated in memory.
+- [x] U3 — the output: `last 1d` / `last 3d (nothing in the last 1d)` first and
+      prefix-free on every run, `nothing to report in the last 7d — try --all` on stderr
+      with exit 0, and a `window` object in `--json` with the schema version still 1.
+- [x] U4 — measured (below).
+- [x] U5 — README section, flag table, `--help`, config comment and JSON guarantees;
+      version 0.5, released as v0.5, published one-liner verified from a clean directory.
+
+**v0.5 is published**: https://github.com/gortazar/recap/releases/tag/v0.5. Release workflow
+green including both smoke jobs; the published one-liner was then run here from a clean
+directory and the default run, the 7d message and the `--json` window object all behaved.
+
+### What the widening costs
+
+The plan asked for the default run to stay within a few tens of milliseconds of the 293 ms
+0.4 recorded. It does — but the absolute numbers moved, and the honest comparison needed a
+second binary rather than a comparison against a number taken three cycles ago:
+
+| | cold |
+|---|---|
+| v0.4 (released binary), default | 532 ms |
+| v0.4, `--since 24h` | 540 ms |
+| **0.5, default (reads at the 7d cap, escalates)** | **555 ms** |
+| 0.5, `--since 24h` | 539 ms |
+
+So widening costs **23 ms**, almost exactly the ~25 ms the plan predicted, and an explicit
+window costs nothing. Warm is 19 ms.
+
+The rise from 293 ms to 532 ms is not this entry: the same v0.4 binary is that slow on this
+store today. `~/.claude/projects` is now 253 MB over 80 transcripts in 31 projects, roughly
+double what it was when 0.4 was measured. Worth knowing for the next entry that touches
+reading — the per-session 1 MiB cap bounds each *file*, so cost grows with the number of
+sessions, not their size.
+
+### The cap
 
 The cap is **7d**, not the 30d the plan's own text assumed: the answered question says
 "7 days max". Everything the plan says about 30d reads as 7d.
