@@ -1,5 +1,5 @@
-status: not_started
-version: 0.2
+status: done
+version: 0.3
 started_at: 2026-08-16
 last_session_id: 498f8809-49e3-4e71-b8bb-3905366ad588
 last_run: 2026-08-24T08:17:45+02:00
@@ -7,6 +7,70 @@ last_cycle_cost_usd: 15.026146999999996
 
 ## Log
 - 2026-08-24T08:17:45+02:00 — done ($15.026146999999996)
+
+### 2026-08-24 — 0.3 delivered: the real deck as a test
+
+Released as [v0.3](https://github.com/gortazar/title-slides/releases/tag/v0.3). What this
+entry actually settled, beyond the fixture:
+
+- **The bug was never in the extension.** See the U0 diagnosis below: the reported message
+  is what Quarto prints when it cannot find the extension at all, and it never found it
+  because `_extensions/` was not beside the document. So the deliverable is a fixture, an
+  installation test and a troubleshooting section — not a code change. The filter is
+  unchanged by this entry apart from the version in `_extension.yml`.
+- **The install test is not vacuous.** Packaging the extension under a versioned directory
+  name makes it land as `_extensions/title-slides-0.2/`, and the assertion fires — Quarto
+  keeps whatever directory name the archive carries. That is candidate 2 from the plan,
+  now permanently guarded even though it was not what happened here.
+- **`quarto list extensions` writes its table to stderr**, so a test grepping its stdout
+  sees nothing and "passes" or fails for the wrong reason. Fold stderr in.
+- **The install test cannot live in `nix flake check`** — the build sandbox has no network.
+  It runs as its own CI step, and skips loudly rather than quietly when offline. Confirmed
+  from the CI log that it really ran rather than skipping.
+- **The real deck renders hermetically** inside the nix sandbox despite
+  `embed-resources: true`, which the plan flagged as a risk. No network needed.
+- **A 115-byte placeholder satisfies `logo:`** and embeds without the missing-resource
+  warning, so the frontmatter stayed untouched.
+
+### 2026-08-24 — 0.3, U0: the reported failure, diagnosed
+
+**The pin here really was stale, and it was the sweep that did it.** `flake.lock` named the
+0.2 commit `7c60db8` while the `upstream/` gitlink named the 0.1 commit `77e5b51`. The
+culprit is commit `09235d9` "title-slides: automated build cycle (progress)" — the
+orchestrator's end-of-cycle sweep — which reverted the gitlink while leaving `STATUS.md`
+saying 0.2. `scripts/check-pin.sh` caught it, which is exactly what it is for. Restored the
+gitlink to `7c60db8`; both pins agree and the 0.2 suite (89 unit tests, golden, smoke) is
+green before any change.
+
+**Root cause of the user's failure: the extension was not installed in the directory that
+matters.** Reproduced each candidate against the real deck:
+
+| set-up | result |
+| --- | --- |
+| no `_extensions/` at all | **the reported message, verbatim** |
+| `_extensions/gortazar/title-slides/` beside the document | renders fine |
+| the same, from a directory named `…/Módulo II - Python/Material` | renders fine |
+| `_extensions/` in the document's **parent** directory | **the reported message** |
+| the same, with a `_quarto.yml` project root at the parent | **the reported message** |
+| `quarto-required` excluding the running Quarto | a different, clear error |
+
+So **Quarto looks for `_extensions/` next to the document and does not search upwards** —
+not the parent, not even the project root. The user had the folder, just not in the folder
+holding `T4-funciones.qmd`; `quarto add` had been run somewhere else in the OneDrive tree.
+`quarto list extensions`, run in the document's own directory, says
+"No extensions are installed in this directory" and is the diagnostic to document.
+
+Eliminated with evidence, not assumed: the installed directory name is right
+(`_extensions/gortazar/title-slides`, resolved by `filters: [title-slides]`), spaces and
+accents in the path are harmless, and a `quarto-required` mismatch produces its own
+explicit message rather than this one. **The extension's own code is blameless**, so this
+entry is a fixture, an installation test and troubleshooting docs rather than a code fix.
+
+The deck itself renders to its 14 slides with the accents intact, and the extension adds
+and removes nothing: it has no top-level `---` to carry a title across and no `#` section
+to index, so both features are structurally inert on it. The only complaint is the missing
+`codigus.png`, a warning rather than an error.
+
 - 2026-08-16T21:29:26+02:00 — done ($12.985914499999996)
 
 
@@ -43,6 +107,40 @@ absent (see the log). Medium overall for the idea, going by 0.1.
 Upstream: https://github.com/gortazar/title-slides — released as
 [v0.2](https://github.com/gortazar/title-slides/releases/tag/v0.2), submodule pointer and
 flake input both at that tagged commit.
+
+## What "done" covers for 0.3
+
+The 0.3 entry is delivered, tested and released. Every feature it listed:
+
+- **The failing deck is a test upstream** — `tests/fixtures/real-deck/T4-funciones.qmd`,
+  byte for byte as it failed, attributed to Francisco Gortázar under CC-BY-4.0 per its own
+  frontmatter, with a 115-byte `codigus.png` placeholder so the frontmatter stayed
+  untouched. `nix flake check` renders it.
+- **The test renders it the way a user does** — into a temp directory holding
+  `_extensions/gortazar/title-slides/`, with the filter resolved by name, never by path.
+- **The render is asserted** — the 14 slides in order with their accented titles, from a
+  pinned expected outline. Confirmed it fails when the expectation is perturbed.
+- **A no-op deck is proven to be a no-op** — the same deck with the filter switched off
+  gives the same outline, and no continuation or index marker appears in the output.
+- **Duplicate and case-colliding headings survive** — 14 slides, 14 distinct identifiers,
+  despite `Definición` twice, `Parámetros por defecto` three times and
+  `Retorno de Valores` against `Retorno de valores`.
+- **The root cause is addressed at its source** — which U0 established is *where the
+  extension was installed*, not the extension. Hence documentation, plus a test that
+  asserts the installed layout instead of trusting it.
+- **An installation test that would have caught it** — installs the published release into
+  an empty directory, asserts something lands at a path ending in `title-slides`, that
+  `quarto list extensions` reports it, and that a document naming the filter renders with
+  the title carried. Proven to fail on a versioned directory name.
+- **Troubleshooting in the README** — the error quoted verbatim, what it means, how to
+  check with `quarto list extensions` from the document's directory, the fix, and the two
+  candidates ruled out by experiment.
+- **`show-index` on a deck with no sections is pinned** by this fixture: no index slide, no
+  warning, no crash, for a document that sets the key in good faith.
+- **Released and installable** — `_extension.yml` at 0.3.0, v0.3 tagged with
+  `title-slides-0.3.zip` attached and verified present. Both install paths re-checked from
+  clean directories by rendering *the real deck* through them; the gitlink and `flake.lock`
+  moved here together with `scripts/check-pin.sh` green.
 
 ## What "done" covers for 0.2
 
@@ -186,5 +284,19 @@ Two mechanics worth recording, both feeding later units:
 - [x] U5 — README, screenshots, `_extension.yml` at 0.2.0, v0.2 released, both install
       paths verified from clean directories, pin moved here
 
-Next: nothing — 0.2 is done. 89 unit tests plus 4 golden cases and the smoke test, all
+### 0.3 — the real deck as a test
+- [x] U0 — pin reconciled (the sweep had reverted it), 0.2 baseline green, and the
+      reported failure reproduced and diagnosed: `_extensions/` must sit beside the document
+- [x] U1 — the fixture upstream, attributed and licensed, with the render test (U3's
+      assertions folded in: outline, accents, no-op proof, identifier uniqueness)
+- [x] U2 — the installation test: installs the published release into an empty directory
+      and asserts what lands; runs as its own CI step, skips loudly without a network
+- [x] U3 — folded into U1, plus confirmation that both new tests can fail
+- [x] U4 — README troubleshooting, `_extension.yml` at 0.3.0, v0.3 released, both install
+      paths verified from clean directories against the real deck, pin moved here
+
+Next: nothing — 0.3 is done. 89 unit tests, 4 golden cases, the smoke test, the real-deck
+test and the install test, all green.
+
+Previously: 0.2 was done at 89 unit tests plus 4 golden cases and the smoke test, all
 green in `nix flake check` upstream and at the pinned commit here.
