@@ -189,15 +189,17 @@ The three layers already wired into `nix flake check`, plus one new one:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] Which licence does the fixture carry? The idea text says **CC-BY-SA-4.0**; the document's own
+- [x] Which licence does the fixture carry? The idea text says **CC-BY-SA-4.0**; the document's own
       frontmatter says `license: CC-BY-4.0`. Both permit redistribution with attribution, so the test
       lands either way — but the `LICENSE` note shipped beside it should say the right one. Ticking
       this line as-is takes the **document's own frontmatter, CC-BY-4.0**, as authoritative and notes
       the author's name from it.
-- [ ] Was the extension actually installed in that directory when the render failed? Ticking this line
+- [x] Was the extension actually installed in that directory when the render failed? Ticking this line
       as-is assumes **it was** (so there is a packaging or discovery bug to find, and U0 will identify
       which). If it was not, the entry's centre of gravity moves to the troubleshooting docs and the
       installation test, and the "fix" is that the extension can no longer be silently half-installed.
-- [ ] Does the fixture render under `pptx` too? The document's frontmatter carries a commented-out
+      The extension was installed, and an "_extensions/gortazar/title-slides" folder created with
+      a _extension.yml file, and two lua files: setext.lua and title-slides.lua.
+- [x] Does the fixture render under `pptx` too? The document's frontmatter carries a commented-out
       `pptx` block with a `reference-doc:`. Ticking this line as-is tests **revealjs only**, matching
       0.1's answered format question and leaving the commented block as the historical artefact it is.
