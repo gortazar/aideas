@@ -1,0 +1,235 @@
+---
+title: "Tema 4 - Funciones en Python"
+author: "Francisco Gortázar"
+license: CC-BY-4.0
+filters:
+    - title-slides
+show-index: true
+title-slides: true
+format: 
+    # pptx:
+    #     reference-doc: plantilla.potx
+    revealjs:
+        theme: sky #sky #moon #blood #beige #dark
+        logo: codigus.png
+        slide-number: c/t
+        toc: false
+        embed-resources: true
+---
+
+## Definición
+
+- Sintaxis
+
+```python
+def my_function(arg1, arg2, arg3):
+    # Código de la función
+```
+- `arg1`, `arg2` y `arg3` son **parámetros** de la función 
+
+## Definición
+
+- Ejemplo:
+
+```python
+def fibonacci(num_terminos):
+    a = 0
+    b = 1
+    while num_terminos > 0:
+        print(a)
+        a = b
+        b = a + b
+        num_terminos -= 1
+```
+## Llamado
+
+- Sintaxis
+
+```python
+my_function(arg1, arg2, arg3)
+```
+- `arg1`, `arg2` y `arg3` son **argumentos** posicionales de la función
+  - A qué parámetro se asigna cada uno depende de su posición
+
+- Ejemplo:
+
+```python
+fibonacci(10)
+```
+
+## Retorno de Valores
+
+- Sintaxis
+
+```python
+def my_function(arg1, arg2):
+    return arg1 + arg2
+```
+
+- Ejemplo
+
+```python
+def fibonacci(num_terminos):
+    a = 0
+    b = 1
+    while num_terminos > 0:
+        a = b
+        b = a + b
+        num_terminos -= 1
+    return a
+```
+
+- Llamada
+
+```python
+value = fibonacci(10)
+print(value)
+```
+
+## Retorno de valores
+
+- Podemos devolver múltiples valores:
+
+```python
+def minmax(a, b):
+    if a < b:
+        return a, b
+    else:
+        return b, a
+```
+
+- Uso:
+
+```python
+min, max = minmax(20, 10)
+print(min, max)
+```
+
+## Argumentos nombrados
+
+- Se pueden pasar argumentos a una función indicando el nombre del parámetro al que se asignan
+- Flexibilidad: el orden de los argumentos no importa
+- Claridad: permite saber exactamente qué valor corresponde a cada parámetro en la definición
+
+```python
+value = fibonacci(num_terminos=10)
+print(value)
+```
+
+- `num_terminos` es un argumento nombrado: se especifica a qué parámetro de la función se asigna el valor `10`
+
+## Argumentos nombrados
+
+- Son mucho más claros en contextos donde no sabemos en qué orden suministrar los argumentos:
+
+```python
+generate(True, False)
+```
+
+- ¿Qué hace el primer `True`? ¿Y el segundo `False`?
+- Usando argumentos nombrados se clarifica el código:
+
+```python
+generate(createFileIfNotExists=True, overwrite=False)
+```
+
+## Parámetros por defecto
+
+- Es posible asignar un valor predeterminado a un parámetro
+- Los parámetros con valores por defecto deben ir al final de la lista de argumentos de la definición de la función para que los argumentos posicionales sigan funcionando
+- Si al llamar a la función se omite el argumento, se usa el valor por defecto
+
+## Parámetros por defecto 
+
+- Ejemplo:
+
+```python
+def fibonacci(num_terminos=10):
+    a = 0
+    b = 1
+    while num_terminos > 0:
+        a = b
+        b = a + b
+        num_terminos -= 1
+    return a
+```
+
+- El valor de `num_terminos` será `10`:
+
+```python
+value = fibonacci()
+print(value)
+```
+
+## Parámetros por defecto
+
+- Ejemplo incorrecto:
+
+```python
+def fibonacci(num_terminos=10, init_termino):
+    # Código...
+```
+## Parámetros opcionales
+
+- Para que un argumento sea opcional, se le suele asignar el valor especial None por defecto en la definición
+- En el cuerpo de la función, se utiliza una estructura condicional (if) para comprobar si se proporcionó un valor o si el parámetro permanece como None
+- Útil cuando se desea que una función maneje información extra solo si el usuario decide enviarla
+
+## Parámetros opcionales
+
+- Ejemplo:
+
+```python
+def fibonacci(num_terminos=None):
+    # En realidad se podría hacer con un parámetro por defecto
+    if num_terminos is None: 
+        num_terminos = 10
+    a = 0
+    b = 1
+    while num_terminos > 0:
+        a = b
+        b = a + b
+        num_terminos -= 1
+    return a
+```
+
+```python
+value = fibonacci()
+print(value)
+```
+
+## Paso de funciones a funciones
+
+- Las funciones son ciudadanos de primer orden
+    - Pueden pasarse como argumentos
+    - Pueden asignarse a variables
+
+```python
+def starts_with_a(w):
+    return w.startswith("a")
+
+li = ["apple", "banana", "avocado", "cherry", "apricot"]
+res = filter(starts_a, li)
+print(list(res))
+```
+
+## Funciones lambda
+
+- Son funciones anónimas y se definen con la palabra clave lambda
+- Restricción
+    - Están limitadas a contener una única expresión en lugar de múltiples sentencias de código
+- Uso
+    - Se utilizan frecuentemente en programación funcional para operaciones rápidas que se pueden pasar como objetos a otras funciones
+
+```python
+li = ["apple", "banana", "avocado", "cherry", "apricot"]
+res = filter(lambda w: w.startswith("a"), li)
+print(list(res))
+```
+
+```python
+l = ["apple", "banana", "avocado", "cherry", "apricot"]
+l.sort(key=lambda w: len(w))
+print(l)
+```
+
