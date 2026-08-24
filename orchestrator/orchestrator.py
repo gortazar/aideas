@@ -49,10 +49,15 @@ from pathlib import Path
 # The orchestrator's own version, bumped by hand — unrelated to the per-idea versions it
 # manages. 1.0 is the Python rewrite with parallel agents, graceful stop, a renewing lock,
 # repeat entries and versioning. 1.1 merges and retries a push that lost a race instead of
-# leaving the work for the next cycle.
-ORCHESTRATOR_VERSION = "1.1"
+# leaving the work for the next cycle. 1.2 survives a leftover worktree directory and
+# no longer strands an agent when a sibling fails to start.
+ORCHESTRATOR_VERSION = "1.2"
 
 UNLIMITED = {"unlimited", "none", "off"}
+
+
+class AgentSetupError(RuntimeError):
+    """An idea could not be given a worktree. Its siblings still run."""
 
 # Planning reads and researches; it must not build, so it gets no Bash and no Edit.
 # WebFetch and WebSearch are the point of the set: three consecutive planning runs were
@@ -961,13 +966,45 @@ class Orchestrator:
 
     # -- build pass -----------------------------------------------------------------------
 
+    def clear_worktree(self, worktree: Path, slug: str) -> None:
+        """Make the worktree path usable, whatever a previous cycle left there.
+
+        `worktree remove` only knows about paths git still has registered, and a killed
+        cycle — or a re-cloned repo, which forgets every registration — leaves a plain
+        directory behind instead. `worktree add` then refuses the non-empty path, and
+        because nothing checked its exit status the cycle went on to read PLAN.md out of
+        a months-old checkout and died with a FileNotFoundError.
+
+        Read-only files are the reason `rm -rf` alone is not enough: an idea that unpacks
+        a zip to test its own installer leaves modes that deny the owner write, and the
+        removal fails part-way through.
+        """
+        git("worktree", "remove", "--force", str(worktree), cwd=self.repo)
+        git("worktree", "prune", cwd=self.repo)
+        if worktree.exists():
+            log(f"{slug}: clearing a leftover directory at {worktree}.")
+            for path in sorted(worktree.rglob("*"), reverse=True):
+                try:
+                    path.chmod(path.stat().st_mode | 0o200)
+                except OSError:
+                    pass
+            shutil.rmtree(worktree, ignore_errors=True)
+        git("branch", "-D", f"agent/{slug}", cwd=self.repo)
+
     def start_agent(self, slug: str) -> Agent:
         worktree = self.state_dir / "worktrees" / slug
-        # A worktree left behind by a killed cycle would block `worktree add`.
-        git("worktree", "remove", "--force", str(worktree), cwd=self.repo)
-        git("branch", "-D", f"agent/{slug}", cwd=self.repo)
-        git("worktree", "add", "--quiet", "-b", f"agent/{slug}", str(worktree), "HEAD",
-            cwd=self.repo)
+        self.clear_worktree(worktree, slug)
+        added = git("worktree", "add", "--quiet", "-b", f"agent/{slug}", str(worktree),
+                    "HEAD", cwd=self.repo)
+        # Checked, unlike the three commands this replaced. A failed `worktree add` still
+        # creates the branch ref, so the next line would otherwise read a stale tree —
+        # or none at all — and the traceback would name PLAN.md rather than the real fault.
+        if added.returncode != 0 or not (worktree / "ideas" / slug / "PLAN.md").is_file():
+            git("worktree", "remove", "--force", str(worktree), cwd=self.repo)
+            git("branch", "-D", f"agent/{slug}", cwd=self.repo)
+            raise AgentSetupError(
+                f"could not create a worktree for {slug} at {worktree}: "
+                f"{added.stderr.strip() or 'PLAN.md missing from the checkout'}")
 
         agent = Agent(
             slug=slug,
@@ -1415,7 +1452,19 @@ class Orchestrator:
             self.lock.set_agents(chosen)
 
             git("worktree", "prune", cwd=self.repo)
-            self.agents = [self.start_agent(slug) for slug in chosen]
+            # Appended one at a time, not built as a comprehension: a comprehension that
+            # raises half-way through never binds self.agents, so an agent already spawned
+            # became invisible to wait_for_agents, wind_down and finalize — left running
+            # with nobody to collect its work. One idea failing to start must not strand
+            # the others.
+            for slug in chosen:
+                try:
+                    self.agents.append(self.start_agent(slug))
+                except AgentSetupError as exc:
+                    log(f"WARNING: skipping {slug} — {exc}")
+            if not self.agents:
+                log("No agent could be started; exiting.")
+                return 0
             self.wait_for_agents()
 
             if self.lock.lost:
