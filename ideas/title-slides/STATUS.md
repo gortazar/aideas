@@ -1,5 +1,5 @@
-status: not_started
-version: 0.1
+status: done
+version: 0.2
 started_at: 2026-08-16
 last_session_id: 498f8809-49e3-4e71-b8bb-3905366ad588
 last_run: 2026-08-16T21:29:26+02:00
@@ -8,16 +8,72 @@ last_cycle_cost_usd: 12.985914499999996
 ## Log
 - 2026-08-16T21:29:26+02:00 — done ($12.985914499999996)
 
-Difficulty estimate: medium — as forecast. The transform itself was short; identifiers,
-the setext trap and getting a real `quarto render` to run hermetically in CI were the
-bulk of the work, exactly as the plan predicted.
+### 2026-08-24 — 0.2 delivered: show-index
+
+Five units, each committed with its tests. What is worth knowing next time:
+
+- **The plan's main worry for this entry did not exist.** It expected an injected index
+  heading to be adopted as a carried title unless the passes were ordered carefully. I
+  ran the two passes in the opposite order and got an identical result: an index slide is
+  always immediately followed by the section heading that clears the carried title, so
+  ordering was never what protected us. The carry now ignores generated headings
+  explicitly, so the invariant is real rather than incidental — and that test does fail
+  when the check is removed.
+- **The bold survives.** `Strong` and the `title-slides-index-current` span both reach the
+  HTML untouched by Quarto's revealjs filters, so the golden fixture can be written with
+  `[**Section**]{.title-slides-index-current}` typed out by hand and compared literally.
+  The normaliser strips the marker classes but deliberately not that one.
+- **Reveal nests an index slide into the preceding section's vertical stack**, because it
+  is a slide-level slide sitting just before the next `#`. The first index, which precedes
+  any `#`, is the exception. Harmless under Quarto's default `navigationMode: linear`,
+  visible in the overview grid. Documented as a caveat rather than worked around, since
+  the plan chose a slide-level heading deliberately.
+- **`match($0, re, arr)` is a gawk extension.** The smoke test used it and died with a
+  syntax error under the sandbox's awk; rewritten as a plain shell loop.
+- **A plain `git push` from the submodule really is a silent no-op.** It printed nothing,
+  and `ls-remote` showed main unmoved — the detached HEAD needs `git push origin HEAD:main`.
+  The plan warned about this and it still caught me; checking `ls-remote` is what found it.
+
+Difficulty estimate: easy — as forecast for 0.2. Every mechanism the entry needed already
+existed from 0.1, and the one subtlety the plan flagged turned out to be structurally
+absent (see the log). Medium overall for the idea, going by 0.1.
 
 Upstream: https://github.com/gortazar/title-slides — released as
-[v0.1](https://github.com/gortazar/title-slides/releases/tag/v0.1). The submodule pointer
-here tracks upstream `main`, which is the v0.1 tag plus one README-wording commit made
-after the release; the published artefact is unaffected.
+[v0.2](https://github.com/gortazar/title-slides/releases/tag/v0.2), submodule pointer and
+flake input both at that tagged commit.
 
-## What "done" covers
+## What "done" covers for 0.2
+
+`show-index` is delivered, tested and released. Every feature in the 0.2 entry:
+
+- **`show-index: true`** — read through the same `quarto.metadata.get`-then-`Meta` chain as
+  `title-slides`, defaulting to off; the two keys are independent, and either switches the
+  filter on.
+- **An index slide before every section** — a slide-level heading titled with the deck's
+  own `title:` (or `Outline` without one), followed by a bullet list of every section in
+  document order.
+- **The next section in bold** — wrapped in `Strong` and in a `title-slides-index-current`
+  span. Verified in the rendered HTML that both survive Quarto's own revealjs filters.
+- **Index slides do not disturb the title carry** — the carry now explicitly ignores
+  headings the extension generated, and a test fails if that check is removed.
+- **Safe identifiers** — `<section>-index-<n>` from the same uniqueness table as the
+  `-cont-<n>` names, so the two kinds cannot collide; index headings are `unlisted`.
+- **Hidden sections stay hidden** — `.unlisted` or `visibility="hidden"` sections are
+  neither listed nor given an index slide.
+- **Degenerate decks** — no sections, one section, a section as the first block, an empty
+  trailing section, and the `slide-level: 1`/`0` cases where a deck has no sections at all,
+  each pinned by a test.
+- **Documented and screenshotted** — README gains the key, an example, the rule, the CSS
+  hooks and the caveats; two screenshots of real index slides show the emphasis moving.
+- **Released and installable** — `_extension.yml` at 0.2.0, `v0.2` tagged with
+  `title-slides-0.2.zip` attached. Verified from clean directories, not assumed:
+  `quarto add gortazar/title-slides@v0.2` and the downloaded zip each render a deck with
+  both features working.
+
+All of 0.1 still passes unchanged: the three 0.1 golden fixtures are the regression check,
+and the example deck kept all four of its continuation slides.
+
+## What "done" covered for 0.1
 
 Every feature in `PLAN.md` is delivered, tested and released:
 
@@ -103,6 +159,7 @@ Two mechanics worth recording, both feeding later units:
   the source text, not the AST.
 
 ## Units
+### 0.1
 - [x] M0 — spike: confirmed rules survive, inserted headings split slides, ids/classes land
 - [x] Extension skeleton + title inheritance across top-level rules, with the metadata switch
 - [x] Wrapper here: `upstream` submodule, `flake.nix` consuming it, `scripts/check-pin.sh`,
@@ -116,5 +173,16 @@ Two mechanics worth recording, both feeding later units:
 - [x] Release workflow, screenshots, example deck; v0.1 published and both install paths
       verified from clean directories
 
-Next: nothing — 0.1 is done. 50 unit tests plus 3 golden cases and the smoke test, all
+### 0.2 — `show-index`
+- [x] U0 — pin and baseline: submodule populated, pins agree, 0.1 suite green before any change
+- [x] U1 — `show-index` read alongside `title-slides`, each gating its own feature
+- [x] U2 — the index slide itself: sections collected, list built, next section emboldened,
+      inserted before each section, unique `-index-<n>` identifiers
+- [x] U3 — composition with the carry: generated headings never adopted as a carried title
+- [x] U4 — golden case `index.qmd` vs a hand-written expectation, plus index assertions in
+      the smoke test and an example deck with sections
+- [x] U5 — README, screenshots, `_extension.yml` at 0.2.0, v0.2 released, both install
+      paths verified from clean directories, pin moved here
+
+Next: nothing — 0.2 is done. 89 unit tests plus 4 golden cases and the smoke test, all
 green in `nix flake check` upstream and at the pinned commit here.
