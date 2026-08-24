@@ -137,11 +137,11 @@ Units, each one commit, tests first:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] Does a `since` key in `~/.config/recap/config.toml` count as the user choosing a window (no
+- [x] Does a `since` key in `~/.config/recap/config.toml` count as the user choosing a window (no
       widening), or as choosing a *starting point* to widen from? Ticking this line as-is treats it as
       **an explicit choice: no widening**, on the grounds that someone who wrote it down meant it.
-- [ ] Is the widening cap 30d? Ticking this line as-is keeps **30d**, after which stderr says to use
-      `--all`. Alternatives are 7d (a week; safer, gives up sooner) or no cap at all.
-- [ ] Should the window line be printed on every run, or only when the window widened? The idea says
+- [x] Is the widening cap 30d? Ticking this line as-is keeps **30d**, after which stderr says to use
+      `--all`. Alternatives are 7d (a week; safer, gives up sooner) or no cap at all. 7 days max. 
+- [x] Should the window line be printed on every run, or only when the window widened? The idea says
       "always specifying in the output the value considered", so ticking this line as-is prints it
       **always** — one extra line on every default run, including runs where nothing widened.

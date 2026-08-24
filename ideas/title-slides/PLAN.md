@@ -165,20 +165,21 @@ The three layers 0.1 established, all headless and all already wired into `nix f
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] "using as title the title of the slides" — what is the index slide's own heading text? Ticking
+- [x] "using as title the title of the slides" — what is the index slide's own heading text? Ticking
       this line as-is uses **the document's `title:` from the frontmatter** (the deck's title, which
       is what "the title of the slides" reads as), falling back to a bare index with no heading text
       when the document has no title. Alternatives: a fixed word (`Contents` / `Outline`), the title
-      of the section that comes next, or a value configurable through the same frontmatter key.
-- [ ] Which headings count as "sections"? Ticking this line as-is lists **only headings below the
+      of the section that comes next, or a value configurable through the same frontmatter key. The 
+      document's title from the frontmatter or Outline if there's no title.
+- [x] Which headings count as "sections"? Ticking this line as-is lists **only headings below the
       slide level** (`#` by default) — Quarto's section slides. The alternative is to index the
       slide-level `##` headings as well (a two-level index, or a flat one of every slide title),
-      which changes what the index is for on a deck that uses no `#` at all.
-- [ ] Does `show-index: true` work on its own, or only together with `title-slides: true`? Ticking
+      which changes what the index is for on a deck that uses no `#` at all. 
+- [x] Does `show-index: true` work on its own, or only together with `title-slides: true`? Ticking
       this line as-is makes them **independent** — either key switches the filter on, and you can
       have indexes without carried titles. The alternative is `title-slides: true` as a master switch
       and `show-index` as a sub-option (`title-slides: {show-index: true}`), which is tidier
       namespacing but no longer the flat `show-index` key the idea asks for.
-- [ ] Is there an index slide before the *first* section? Ticking this line as-is injects one before
+- [x] Is there an index slide before the *first* section? Ticking this line as-is injects one before
       **every** section including the first, per the literal "before each section" — even though it
       lands right after the deck's own title slide and can look redundant there.
