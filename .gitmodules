@@ -16,3 +16,6 @@
 [submodule "ideas/lo-pert/upstream"]
 	path = ideas/lo-pert/upstream
 	url = https://github.com/gortazar/lo-pert.git
+[submodule "ideas/vacas/upstream"]
+	path = ideas/vacas/upstream
+	url = https://github.com/gortazar/vacas.git
