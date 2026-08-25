@@ -209,3 +209,29 @@ Units, one commit each, tests (or the check script) first:
       coverage work this entry** and a baseline that says so plainly; the alternative is to
       instrument the three easy ones and let the baseline show real numbers for Go and Python
       against no numbers for GJS. No coverage for now.
+- [ ] **Answering your two questions, and the one thing I still need.** (a) *Can I push the token
+      from `aideas` to the other repositories?* No. GitHub Actions secrets are write-only: the
+      REST API returns a secret's name and dates but never its value, so nothing running here or
+      in a workflow can read it back out of `gortazar/aideas` to copy it elsewhere. And
+      `gortazar` is a **User** account, not an Organization (`gh api users/gortazar` says
+      `"type": "User"`), so there are no account-level secrets to share one copy from either.
+      A secret in `aideas` alone would only ever analyse `aideas`; the other five repositories'
+      `sonar` jobs would take the skip path on every run. (b) *Do I need to add each repo to
+      SonarQube Cloud manually?* Probably not — once I have the token I can create all six
+      projects through the web API (`POST api/projects/create` with
+      `organization=gortazar&project=gortazar_<repo>&visibility=public`), and turn off Automatic
+      Analysis per project, which otherwise makes the CI scan fail with a conflict. What I cannot
+      do from here is anything in GitHub's own settings: if the SonarCloud GitHub App is
+      installed on *selected repositories* rather than all of them, the six need adding to its
+      repository access in the browser. I checked what I could without a token: the organisation
+      `gortazar` exists, one project (`gortazar_casaos`) is in it and confirms the key format is
+      `gortazar_<repo-name>`, none of our six projects exist yet, and none of the six
+      repositories has any secret set.
+      **So the concrete ask is just the token value.** Paste it here (or in the next session) and
+      I will run `gh secret set SONAR_TOKEN --repo gortazar/<repo>` for all six — the `gh` login
+      in this environment is `gortazar` with `repo` scope, which is enough — create the projects,
+      and wire, push and read the gates. The token is never written into any file in any
+      repository. If you would rather not hand it over, set it by hand in `gortazar/recap`,
+      `gortazar/recap-gs`, `gortazar/gnome-shell-pwgen`, `gortazar/restore-wss`,
+      `gortazar/lo-pert` and `gortazar/aideas`, and say so — I do not need to see the value to
+      use it, only to distribute it.

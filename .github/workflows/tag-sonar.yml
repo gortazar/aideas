@@ -1,0 +1,45 @@
+# Keep the `v1` tag pointing at the current sonar.yml.
+#
+# Six repositories pin `gortazar/aideas/.github/workflows/sonar.yml@v1`, so `v1` has to
+# exist and has to move when sonar.yml changes. Nobody can push it by hand: agents work
+# in worktrees they may not push, and the orchestrator merges their branches with a
+# plain `git push`, which carries no tags. Same reason release-aideas.yml creates its
+# own tag.
+#
+# So the tag is maintained here, from main, with the automatic GITHUB_TOKEN — the way
+# published actions maintain their own major tag. Force-moving `v1` is the point, not
+# an accident: a fix to the reusable workflow should reach all six callers without any
+# of them being edited.
+name: Tag - sonar.yml v1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/sonar.yml"
+      - ".github/workflows/tag-sonar.yml"
+  # For the case where v1 has somehow gone missing without sonar.yml changing.
+  workflow_dispatch:
+
+permissions:
+  contents: write # create and move the tag
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Move v1 to this commit
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f v1 "$GITHUB_SHA"
+          git push -f origin refs/tags/v1
+          echo "v1 -> $GITHUB_SHA"
+          {
+            echo "### \`v1\` now points at \`$GITHUB_SHA\`"
+            echo
+            echo "Every caller of \`gortazar/aideas/.github/workflows/sonar.yml@v1\` picks this up on its next run."
+          } >> "$GITHUB_STEP_SUMMARY"
