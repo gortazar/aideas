@@ -1,4 +1,4 @@
-status: not_started
+status: in_progress
 version: 0.4
 started_at: 2026-08-16
 last_session_id: 498f8809-49e3-4e71-b8bb-3905366ad588
@@ -6,6 +6,36 @@ last_run: 2026-08-25T11:01:20+02:00
 last_cycle_cost_usd: 13.913596000000002
 
 ## Log
+
+### 2026-08-25 — 0.5, U0: pin, baseline and the before picture
+
+Pin intact (gitlink and `flake.lock` both at `e15b38a`), 0.4 green before any change: 104
+unit tests, 4 golden cases, smoke, real-deck and install.
+
+Recorded what the three decks do **today**, from real renders rather than from reading the
+goldens, so the 0.5 diff is measured against evidence:
+
+- **The reporter's deck** — 14 slides, no index, and 0.4's warning that it has no section
+  headings.
+- **`tests/fixtures/index.qmd`** — three `#` sections, an index before each, listing
+  `Beginnings | Middles | Ends`.
+- **`example/deck.qmd`** — two `#` sections, an index before each, four continuations.
+
+The deck's fourteen `##` headings, which decide the new index's contents:
+
+```
+Definición, Definición, Llamado, Retorno de Valores, Retorno de valores,
+Argumentos nombrados, Argumentos nombrados, Parámetros por defecto,
+Parámetros por defecto (trailing space), Parámetros por defecto,
+Parámetros opcionales, Parámetros opcionales, Paso de funciones a funciones,
+Funciones lambda
+```
+
+Two things this settles for the answered "collapse identical consecutive titles" rule:
+`Retorno de Valores` and `Retorno de valores` differ only in case and so are **two**
+entries, and one `Parámetros por defecto` carries a trailing space, so whether the run of
+three collapses depends on pandoc stripping it. Both are checked in U2 rather than assumed.
+
 - 2026-08-25T11:01:20+02:00 — done ($13.913596000000002)
 - 2026-08-24T18:26:27+02:00 — done ($13.305927500000001)
 - 2026-08-24T08:17:45+02:00 — done ($15.026146999999996)
