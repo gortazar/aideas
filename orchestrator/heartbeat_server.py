@@ -65,18 +65,9 @@ def orchestrator_state():
                           else "orchestrator module could not be imported"}
     repo = Path(repo_path)
 
-    running, agents, since, age = False, [], None, None
-    meta_path = repo / ".orchestrator" / "lock" / "meta.json"
-    try:
-        meta = json.loads(meta_path.read_text())
-        last_seen = meta.get("renewed_at") or meta.get("acquired_at") or 0
-        age = time.time() - float(last_seen)
-        running = age <= float(meta.get("ttl_minutes", 5)) * 60
-        if running:
-            agents = list(meta.get("agents") or [])
-            since = meta.get("acquired_at")
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
-        pass
+    # One reader for the lock, shared with the preflight POST /cycle runs, so that "a cycle is
+    # running" cannot mean one thing to this endpoint and another to the button beside it.
+    running, agents, since, age = _orch.lock_status(repo)
 
     try:
         ideas = _orch.queue_rows(repo, tuple(agents))

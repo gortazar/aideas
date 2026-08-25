@@ -701,23 +701,31 @@ class Orchestrator:
         log(f"Today's spend so far: ${spent:.4f} of ${limit:.2f}.")
         return True
 
-    def laptop_is_idle(self) -> bool:
-        """A dead heartbeat server is not evidence the laptop is idle — it is the absence
-        of evidence either way. Backing off is the safe reading: building while the user
-        works spends the very allowance this gate exists to protect."""
+    def heartbeat_over_http(self) -> tuple[str, str]:
+        """Ask the heartbeat receiver whether a laptop session is active: (state, detail).
+
+        Three answers, not two. A dead heartbeat server is not evidence the laptop is idle — it
+        is the absence of evidence either way, and backing off is the safe reading: building
+        while the user works spends the very allowance this gate exists to protect. Telling
+        "active" apart from "cannot tell" matters because they are different sentences to show
+        somebody who has just pressed a button and seen nothing happen.
+        """
         try:
             with urllib.request.urlopen(f"{self.heartbeat_url}/status", timeout=3) as r:
                 stale_seconds = float(json.loads(r.read()).get("stale_seconds", 0))
         except Exception as exc:  # noqa: BLE001 — any failure means "can't tell"
             log(f"Heartbeat server unreachable at {self.heartbeat_url} ({exc}); "
-                "can't tell whether the laptop is busy; exiting.")
-            return False
+                "can't tell whether the laptop is busy.")
+            return HEARTBEAT_UNKNOWN, f"{self.heartbeat_url} is unreachable"
         threshold = self.config.number("heartbeat_staleness_minutes", 10) * 60
         if stale_seconds < threshold:
-            log(f"Laptop Claude Code session active (heartbeat {stale_seconds:.0f}s old); "
-                "exiting.")
-            return False
-        return True
+            log(f"Laptop Claude Code session active (heartbeat {stale_seconds:.0f}s old).")
+            return HEARTBEAT_ACTIVE, f"heartbeat {stale_seconds:.0f}s old"
+        return HEARTBEAT_IDLE, f"heartbeat {stale_seconds:.0f}s old"
+
+    def laptop_is_idle(self) -> bool:
+        """The heartbeat gate as a yes/no, for callers that only want the verdict."""
+        return self.heartbeat_over_http()[0] == HEARTBEAT_IDLE
 
     # -- README ---------------------------------------------------------------------
 
@@ -1446,12 +1454,15 @@ class Orchestrator:
     # -- main ---------------------------------------------------------------------------
 
     def run(self) -> int:
-        if self.stop_file.exists():
-            log(f"Paused: {self.stop_file} exists. Remove it to resume.")
-            return 0
-        if not self.within_allowed_hours() or not self.within_budget():
-            return 0
-        if not self.laptop_is_idle():
+        # The same gates, in the same order, as the ones POST /cycle reports on — one
+        # implementation, so a button can never name a gate this path does not apply. The
+        # heartbeat is still observed over HTTP here, because for a process that is not the
+        # receiver, the receiver being reachable is itself part of the evidence.
+        check = cycle_preflight(
+            self.repo,
+            heartbeat=self.heartbeat_over_http)
+        if not check.ok:
+            log(f"{check.reason} ({check.gate}); exiting.")
             return 0
         if not self.lock.acquire():
             log("Lock held by another run; exiting.")
@@ -1589,6 +1600,131 @@ def heartbeat_report(url: str) -> list[str]:
     lines.append(f"                {how}")
     lines.append(f"                {detail}")
     return lines
+
+
+# ------------------------------------------------------------ starting a cycle on request
+
+# What the heartbeat evidence can say. "unknown" is not "idle": a heartbeat that cannot be read
+# is the absence of evidence either way, and building while someone works spends the very
+# allowance that gate exists to protect.
+HEARTBEAT_IDLE, HEARTBEAT_ACTIVE, HEARTBEAT_UNKNOWN = "idle", "active", "unknown"
+
+
+@dataclass
+class Preflight:
+    """Whether a cycle may start, and if not, which gate said no and how to say it.
+
+    `reason` is written to be shown to a person in a menu, not only logged — this is what the
+    panel's "Run a cycle" button reports when nothing happens, and a button whose whole visible
+    effect is "nothing happened" is worse than no button.
+    """
+    ok: bool
+    gate: str | None = None
+    reason: str | None = None
+
+
+def lock_status(repo: Path) -> tuple[bool, list[str], float | None, int | None]:
+    """(running, agents, acquired_at, age_seconds) from the cycle lock's metadata.
+
+    One reader, used by `GET /state`, by the preflight and by `status`, so that "is a cycle
+    running" cannot mean one thing in the panel and another to the button beside it. Liveness
+    and the agent list come from the same write: a running cycle rewrites this file every
+    lock_renew_seconds, so a reader can never see one without the other. A lock whose last
+    renewal is older than its TTL means nothing is running — the cycle was killed or crashed.
+    """
+    meta_path = repo / ".orchestrator" / "lock" / "meta.json"
+    try:
+        meta = json.loads(meta_path.read_text())
+        last_seen = meta.get("renewed_at") or meta.get("acquired_at") or 0
+        age = time.time() - float(last_seen)
+        running = age <= float(meta.get("ttl_minutes", 5)) * 60
+        agents = list(meta.get("agents") or []) if running else []
+        since = meta.get("acquired_at") if running else None
+        return running, agents, since, round(age)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return False, [], None, None
+
+
+def heartbeat_from_file(path: str | Path, staleness_seconds: float) -> tuple[str, str]:
+    """Read the heartbeat state file the receiver writes, without asking it over HTTP.
+
+    This is what `POST /cycle` uses, and it has to: the receiver is a single-threaded
+    HTTPServer, so a handler that called its own /status would block on its own socket, time
+    out, and report "cannot tell" every single time. The file is the same data from the same
+    place — and inside that process the server being up is not in question, which is the one
+    thing the HTTP check knows that this does not.
+    """
+    try:
+        state = json.loads(Path(path).read_text())
+        stale_seconds = time.time() - float(state.get("last_ts", 0))
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return HEARTBEAT_UNKNOWN, f"cannot read {path}: {exc}"
+    if stale_seconds < staleness_seconds:
+        return HEARTBEAT_ACTIVE, f"heartbeat {stale_seconds:.0f}s old"
+    return HEARTBEAT_IDLE, f"heartbeat {stale_seconds:.0f}s old"
+
+
+def claude_missing_reason(env: dict[str, str] | None = None) -> str | None:
+    """None when `claude` is on the PATH a spawned cycle would get; a sentence when it is not.
+
+    A cycle that starts without it does not fail early: it runs, every agent fails, and it costs
+    a real cycle's worth of time while saying nothing useful. That is the same shape as the bug
+    0.2 existed to fix — the thing launched fine, in an environment that could not do the work.
+    """
+    # `if env is None`, not `env or os.environ`: an *empty* environment is a meaningful thing
+    # to be asked about — it is what a child gets when a caller builds its environment from
+    # scratch — and falling back to our own PATH there would answer about the wrong process.
+    source = os.environ if env is None else env
+    path = source.get("PATH", "")
+    if path and shutil.which("claude", path=path):
+        return None
+    return "claude is not on the orchestrator's PATH"
+
+
+def cycle_preflight(repo: Path, *, heartbeat=None, override: bool = False) -> Preflight:
+    """The gates a cycle must pass, in the order `Orchestrator.run()` applies them.
+
+    One implementation, called by both the run path and `POST /cycle`, because every one of
+    these gates returns "success, silently" today: a button that cannot say which of them
+    refused is a button that reports nothing.
+
+    `heartbeat` is the injected evidence source — HTTP for a cycle started by the timer, the
+    state file for one requested through the endpoint — because the *decision* is shared but the
+    way to observe a laptop differs between a process that can ask the receiver and the receiver
+    itself. `override` skips the two gates that are about *when* it is convenient to build; it
+    never skips the stop file, the budget or the lock, which are about whether it is safe to.
+    """
+    orchestrator = Orchestrator(repo, "")
+
+    if orchestrator.stop_file.exists():
+        return Preflight(False, "stop-file",
+                         f"Paused: {orchestrator.stop_file.relative_to(repo)} exists")
+
+    if not override and not orchestrator.within_allowed_hours():
+        window = orchestrator.config.get("allowed_hours", "")
+        zone = orchestrator.config.get("timezone", "")
+        return Preflight(False, "allowed-hours",
+                         f"Outside allowed_hours ({window}{' ' + zone if zone else ''})")
+
+    if not orchestrator.within_budget():
+        cap = orchestrator.config.get("max_daily_cost_usd", "")
+        return Preflight(False, "budget",
+                         f"Daily budget spent (${orchestrator.spend_today():.2f} of ${cap})")
+
+    if not override and heartbeat is not None:
+        state, detail = heartbeat()
+        if state == HEARTBEAT_ACTIVE:
+            return Preflight(False, "heartbeat",
+                             "A Claude Code session is active on this laptop")
+        if state != HEARTBEAT_IDLE:
+            return Preflight(False, "heartbeat",
+                             f"Cannot tell whether a Claude Code session is active ({detail})")
+
+    running, _agents, _since, _age = lock_status(repo)
+    if running:
+        return Preflight(False, "lock", "A cycle is already running")
+
+    return Preflight(True)
 
 
 def queue_rows(repo: Path, running: tuple[str, ...] = ()) -> list[dict]:
