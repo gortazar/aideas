@@ -187,7 +187,7 @@ Units, one commit each, tests (or the check script) first:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **How does a SonarQube Cloud token reach the six repositories?** Only a human can create
+- [x] **How does a SonarQube Cloud token reach the six repositories?** Only a human can create
       the SonarCloud organisation, install its GitHub App on the `gortazar` account, bind the
       projects and issue a token — no part of that is reachable from an agent. Once the token
       value exists the agent can distribute it (`gh secret set SONAR_TOKEN --repo gortazar/<repo>`
@@ -196,8 +196,9 @@ Units, one commit each, tests (or the check script) first:
       the organisation key and confirming the project keys are `gortazar_<repo-name>`, or (b) say
       to use SonarCloud's *Automatic Analysis* instead, which needs no token and no workflow but
       cannot take a coverage report — and which contradicts the entry's explicit request for a
-      reusable workflow, so the workflow would ship unused until a token appears.
-- [ ] **Should this entry add coverage reporting where it is cheap, or leave every coverage
+      reusable workflow, so the workflow would ship unused until a token appears. I will store the token in the aideas repo. 
+      Can you push it to any other repo from there? Do I need to add each repo to sonar cloud manually?
+- [x] **Should this entry add coverage reporting where it is cheap, or leave every coverage
       number unmeasured?** No repository emits a coverage report today, so the 80%-on-new-code
       condition would be recorded as "0% / ignored" everywhere and entry 5 would be choosing its
       most consequential threshold from an absence. Cheap: `go test -coverprofile` in `recap`,
@@ -207,4 +208,4 @@ Units, one commit each, tests (or the check script) first:
       `gnome-tasks`), which have no instrumentation story. The plan as written assumes **no
       coverage work this entry** and a baseline that says so plainly; the alternative is to
       instrument the three easy ones and let the baseline show real numbers for Go and Python
-      against no numbers for GJS.
+      against no numbers for GJS. No coverage for now.

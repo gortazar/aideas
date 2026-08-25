@@ -157,19 +157,19 @@ Units, one commit each, expectation written before implementation:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] One index slide before **every** `##`, or a single one at the top of the deck? Ticking this
+- [x] One index slide before **every** `##`, or a single one at the top of the deck? Ticking this
       line as-is keeps 0.2's shape exactly one level down — an index before each indexed heading,
       with the emphasis moving — which is what makes the `title-slides-index-current` span mean
       anything, and turns the reporter's fourteen-slide deck into twenty-eight slides. The
       alternative is one index slide at the top listing all fourteen with nothing emboldened (an
       agenda), leaving the deck at fifteen: quieter, but then the current-item emphasis has no
       purpose. A third possibility is repeated indexes only where consecutive titles differ.
-- [ ] Are consecutive repeated titles listed once or every time? Ticking this line as-is lists every
+- [x] Are consecutive repeated titles listed once or every time? Ticking this line as-is lists every
       `##` **verbatim in document order**, so the reporter's index reads `Definición`, `Definición`,
       … `Parámetros por defecto` three times in a row — a faithful list of slides, a poor agenda.
       The alternative collapses a run of identical adjacent titles into one entry, emphasised for
-      every slide in the run, giving that deck ten entries instead of fourteen.
-- [ ] Does the old behaviour stay reachable for decks that do use `#` sections? Ticking this line
+      every slide in the run, giving that deck ten entries instead of fourteen. Collapse identical consecutive titles.
+- [x] Does the old behaviour stay reachable for decks that do use `#` sections? Ticking this line
       as-is makes 0.5 a **straight replacement**: `#` headings are no longer indexed at all, and a
       0.4 user with `#` sections silently gets a differently indexed deck. The alternative is an
       `index-level:` key (defaulting to the slide level) so both conventions are expressible — more
