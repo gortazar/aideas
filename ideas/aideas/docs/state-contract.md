@@ -1,9 +1,14 @@
-# The `/state` contract
+# The orchestrator's HTTP contract
 
-`GET http://<box>:8787/state` is the only thing the aideas panel indicator reads. This
-document specifies that response, and `tests/test_state_contract.py` asserts it against
-fixture repositories, so the endpoint and the extension cannot drift apart while they live
-in one repository.
+Two endpoints the aideas panel uses: `GET /state`, which is everything it *reads*, and
+`POST /cycle`, which is the one thing it *writes*. This document specifies both, and
+`tests/test_state_contract.py`, `tests/test_cycle_preflight.py` and
+`tests/test_cycle_endpoint.py` assert them against fixture repositories, so the endpoints and
+the extension cannot drift apart while they live in one repository.
+
+Until 0.3 this document opened by saying `/state` was "the only thing the aideas panel
+indicator reads", which was true and is still true of reading. The panel now also asks for a
+cycle to be started.
 
 The endpoint is served by `orchestrator/heartbeat_server.py` (`orchestrator_state()`), and
 every per-idea row comes from `orchestrator.queue_rows()` — the same function
@@ -180,3 +185,79 @@ box that is also running agents, so:
 Additive changes (a new key, a new `state` word, a new `reason`) are expected and must not
 break a consumer. If a key's meaning or type ever has to change, `/state` gains a
 `contract` integer and this document gains a section; until then its absence means 1.
+
+
+## `POST /cycle`
+
+Asks the box to start a cycle now. New in 0.4; a box that does not serve it answers **404**,
+which a client must read as "this box is older than this extension" rather than as a failure of
+the request.
+
+### Request
+
+```json
+{ "secret": "…", "override": false }
+```
+
+| key | meaning |
+|-----|---------|
+| `secret` | the shared secret, as `POST /heartbeat` sends it. Required only when the box has `HEARTBEAT_SHARED_SECRET` set; when it does not, any request is accepted, exactly as `/heartbeat` behaves |
+| `override` | optional. `true` skips the two gates about *when* it is convenient to build — `allowed_hours` and the laptop heartbeat — and **never** the stop file, the daily budget or the lock |
+
+### Response
+
+Always JSON, and always the same three keys:
+
+```json
+{ "started": true,  "gate": null,        "reason": null }
+{ "started": false, "gate": "stop-file", "reason": "Paused: .orchestrator/stop exists" }
+```
+
+`reason` is a sentence written to be shown to a person. `gate` is a word for a program to branch
+on. **`started: true` means launched, never finished**: the cycle re-applies these same gates
+itself and may still exit, so a client confirms by watching `/state`, not by believing this
+reply. A successful reply additionally carries `command`, the argv that was started.
+
+| `gate` | when | typical `reason` |
+|--------|------|------------------|
+| `stop-file` | `.orchestrator/stop` exists | `Paused: .orchestrator/stop exists` |
+| `allowed-hours` | outside the configured window | `Outside allowed_hours (23:00-08:00 Europe/Madrid)` |
+| `budget` | today's spend is at or over `max_daily_cost_usd`, or that value is unparseable | `Daily budget spent ($12.40 of $10)` |
+| `heartbeat` | a Claude Code session is active on the laptop, or the heartbeat cannot be read at all | `A Claude Code session is active on this laptop` / `Cannot tell whether …` |
+| `lock` | a cycle is already running | `A cycle is already running` |
+| `claude` | the default launch would find no `claude` on its `PATH` | `claude is not on the orchestrator's PATH` |
+| `spawn` | the launch itself failed | `could not start a cycle: …` |
+| `server` | this box cannot do it at all — no `IDEAS_REPO_PATH`, or the orchestrator module would not import | `IDEAS_REPO_PATH is not set` |
+| `rate-limit` | a cycle was launched moments ago | `a cycle was just launched, wait 24 s` |
+
+The gates are applied **in the order `Orchestrator.run()` applies them**, from one
+implementation (`cycle_preflight()`), so a refusal names a gate that a timer-fired cycle would
+really have hit. `count`-style vocabulary growth is expected: a client shows `reason` verbatim
+and treats an unknown `gate` as "refused, for the reason given".
+
+### Statuses
+
+| status | meaning |
+|--------|---------|
+| `200` | the request was understood. Read `started` — a gate saying no is a normal answer, not an error |
+| `401` | the box has a shared secret and the request did not match it |
+| `404` | this box does not serve `/cycle`: it predates 0.4 |
+| `429` | rate-limited. The body is the usual shape, with `gate: "rate-limit"` |
+
+### The rate limit
+
+At most one launch per `ORCHESTRATOR_CYCLE_MIN_SECONDS` (default 30). The lock already makes a
+duplicate cycle harmless; this is about a double-click, or a wedged panel, not filling the
+journal with launches. A *refused* request does not start that clock — only a launch does.
+
+### What starts
+
+`ORCHESTRATOR_CYCLE_COMMAND` if it is set, split as a shell word list; otherwise a detached
+`python3 orchestrator.py run` from the server's own directory, which is how the orchestrator
+running in this deployment is launched by hand today.
+
+A box whose heartbeat receiver is sandboxed **must** set it — `idea-heartbeat.service` has
+`ProtectSystem=strict`, `ProtectHome=yes`, `MemoryMax=128M` and no `PATH` carrying `claude`, so
+a cycle `fork()`ed from inside it would start, find no `claude`, and fail every agent. Pointing
+it at `systemctl start idea-orchestrator.service` makes systemd supply the cycle's environment
+instead. `SETUP.md` has both forms.

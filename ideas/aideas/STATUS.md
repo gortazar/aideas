@@ -50,14 +50,29 @@ failure modes are environmental — and therefore invisible to every headless te
       environment as "no environment given" and would have checked the server's own PATH.
       58 python tests green; also run against the live repo, where it reported the real cycle's
       lock and refused an override at it.
-- [ ] U2 — `POST /cycle`: authorisation, the preflight, the injected spawn, the rate limit.
+- [x] **U2 — `POST /cycle`.** New in `heartbeat_server.py`, and the extension's first write.
+      `request_cycle()` is the whole endpoint except the HTTP — authorisation through the
+      existing `_authorized()` path (open when no secret is set, per the answered question), the
+      shared preflight with the *file-based* heartbeat, the `claude`-on-`PATH` guard for the
+      default command only, a 30 s rate limit, and a response that is small and total:
+      `{started, gate, reason}`. A gate saying no is a **200**, not an error; 401 for a wrong
+      secret, 429 for the rate limit, 404 for a box that predates this. `started: true` means
+      *launched*, never finished.
+      The launch is an **injected callable**, so nothing spawns in a test: 33 tests assert that a
+      launch was requested with the right argv and environment, that a configured
+      `ORCHESTRATOR_CYCLE_COMMAND` is used verbatim and *not* second-guessed by the claude guard
+      (a `systemctl` call legitimately has no claude on its own PATH), that a failed launch
+      answers instead of 500ing, and that a refused request does not start the rate-limit clock.
+      `docs/state-contract.md` is now the orchestrator's HTTP contract rather than just
+      `/state`'s: the request shape, the two-field response, the whole gate vocabulary, the
+      statuses, the rate limit, and what actually gets started. 79 python tests green.
 - [ ] U3 — POST in the transport, and the phrases a failure maps to.
 - [ ] U4 — the two items, as data.
 - [ ] U5 — the widgets, and the secret in preferences.
 - [ ] U6 — the compositor: activating both items for real.
 - [ ] U7 — the bump to 0.4 and the docs.
 
-Next: U2 — POST /cycle.
+Next: U3 — POST in the transport.
 
 ### Answered questions, as read
 

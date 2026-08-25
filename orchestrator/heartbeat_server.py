@@ -11,6 +11,8 @@ State is kept in a single JSON file so it survives restarts of this process.
 """
 import json
 import os
+import shlex
+import subprocess
 import sys
 import time
 import hmac
@@ -32,6 +34,23 @@ STATE_PATH = os.environ.get("HEARTBEAT_STATE_PATH", "/var/lib/idea-agent/heartbe
 SECRET = os.environ.get("HEARTBEAT_SHARED_SECRET", "")
 BIND_IP = os.environ.get("HEARTBEAT_BIND_IP", "127.0.0.1")
 PORT = int(os.environ.get("HEARTBEAT_PORT", "8787"))
+
+# How a cycle is started when POST /cycle decides one may run.
+#
+# Set this on a box whose heartbeat unit is sandboxed — which idea-heartbeat.service is:
+# ProtectSystem=strict, ProtectHome=yes, MemoryMax=128M and no PATH carrying `claude`. A cycle
+# fork()ed from inside that would start, find no claude, and fail every agent. Pointing it at
+# `systemctl start idea-orchestrator.service` makes systemd, not this process, supply the
+# cycle's PATH, its home directory and its timeouts. SETUP.md has both forms and the reason.
+CYCLE_COMMAND = os.environ.get("ORCHESTRATOR_CYCLE_COMMAND", "")
+
+# A panel is a thing that can get stuck. The lock already makes a duplicate cycle harmless, so
+# this is only about not filling the journal with launches after a double-click.
+CYCLE_MIN_SECONDS = float(os.environ.get("ORCHESTRATOR_CYCLE_MIN_SECONDS", "30"))
+
+# When the last launch was requested. Module state on purpose: the rate limit is about this
+# process, and a test resets it.
+_last_launch = 0.0
 
 
 def load_state():
@@ -84,14 +103,125 @@ def orchestrator_state():
     }
 
 
+def default_cycle_command():
+    """How this deployment starts a cycle when nothing has been configured.
+
+    Exactly how the orchestrator that runs here is launched by hand today: a detached
+    `python3 orchestrator.py run`, from the directory this file lives in.
+    """
+    return [sys.executable or "python3",
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "orchestrator.py"),
+            "run"]
+
+
+def cycle_command():
+    """The configured command if there is one, else this deployment's default."""
+    return shlex.split(CYCLE_COMMAND) if CYCLE_COMMAND.strip() else default_cycle_command()
+
+
+def cycle_environment():
+    """The environment a spawned cycle gets: this process's, with the repo path assured.
+
+    Inherited rather than built from nothing, because on a box the interesting parts of it —
+    PATH, HOME, the heartbeat URL — are what the unit file sets, and a cycle needs the same
+    ones the orchestrator unit would have got. Where that inheritance is wrong is exactly where
+    ORCHESTRATOR_CYCLE_COMMAND is the answer, rather than this function guessing.
+    """
+    env = dict(os.environ)
+    repo = env.get("IDEAS_REPO_PATH")
+    if repo:
+        env["IDEAS_REPO_PATH"] = repo
+    return env
+
+
+def spawn_cycle(argv, env):
+    """Start a cycle and stop caring about it.
+
+    `start_new_session=True` detaches it into its own process group, so it survives this
+    server being restarted and is not killed with it — a cycle takes 45 minutes and this
+    process is not its supervisor. Output goes wherever this server's does, which under systemd
+    is the journal.
+    """
+    subprocess.Popen(argv, env=env, start_new_session=True,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+
+
+def request_cycle(*, override=False, spawn=spawn_cycle, now=None):
+    """Decide whether to start a cycle, and start it. Returns (http_status, body).
+
+    The whole of POST /cycle except the HTTP: the gates, the rate limit, the claude check and
+    the launch, with the spawn injected so that a test can assert *that a launch was requested,
+    with which command and which environment* without anything being spawned.
+
+    `started: true` means **launched**, never finished. The cycle re-applies these same gates
+    itself and may still exit; a caller confirms by watching /state, not by believing this.
+    """
+    global _last_launch
+    moment = time.time() if now is None else now
+
+    repo_path = os.environ.get("IDEAS_REPO_PATH")
+    if not repo_path or _orch is None:
+        return 200, {"started": False, "gate": "server",
+                     "reason": "IDEAS_REPO_PATH is not set" if not repo_path
+                               else "orchestrator module could not be imported"}
+
+    since = moment - _last_launch
+    if since < CYCLE_MIN_SECONDS:
+        wait = int(CYCLE_MIN_SECONDS - since) + 1
+        return 429, {"started": False, "gate": "rate-limit",
+                     "reason": f"a cycle was just launched, wait {wait} s"}
+
+    staleness = 600.0
+    try:
+        repo = Path(repo_path)
+        config = _orch.Config(_orch.load_config(repo / ".agent-config.yml"))
+        staleness = config.number("heartbeat_staleness_minutes", 10) * 60
+    except Exception:  # noqa: BLE001 — a missing config is not a reason to refuse
+        repo = Path(repo_path)
+
+    check = _orch.cycle_preflight(
+        repo,
+        heartbeat=lambda: _orch.heartbeat_from_file(STATE_PATH, staleness),
+        override=override)
+    if not check.ok:
+        return 200, {"started": False, "gate": check.gate, "reason": check.reason}
+
+    argv, env = cycle_command(), cycle_environment()
+
+    # Only for the default command: a configured one is a deployment's own business, and it may
+    # legitimately be a systemctl call that has no claude on its own PATH.
+    if not CYCLE_COMMAND.strip():
+        missing = _orch.claude_missing_reason(env)
+        if missing:
+            return 200, {"started": False, "gate": "claude", "reason": missing}
+
+    try:
+        spawn(argv, env)
+    except Exception as exc:  # noqa: BLE001 — a failed launch must answer, not 500
+        return 200, {"started": False, "gate": "spawn",
+                     "reason": f"could not start a cycle: {exc}"}
+
+    _last_launch = moment
+    return 200, {"started": True, "gate": None, "reason": None,
+                 "command": " ".join(argv)}
+
+
 class Handler(BaseHTTPRequestHandler):
     def _authorized(self, body_secret):
         if not SECRET:
             return True
         return hmac.compare_digest(body_secret or "", SECRET)
 
+    def _json(self, status, body):
+        payload = json.dumps(body).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
     def do_POST(self):
-        if self.path != "/heartbeat":
+        if self.path not in ("/heartbeat", "/cycle"):
             self.send_response(404)
             self.end_headers()
             return
@@ -104,6 +234,15 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized(payload.get("secret")):
             self.send_response(401)
             self.end_headers()
+            return
+
+        # The extension's one write. Authenticated the way this system already authenticates
+        # writes — the shared secret in the body, as POST /heartbeat's is — and answering with
+        # *why* when it refuses, because every gate below returns "success, silently" and a
+        # button that cannot say which one said no reports nothing at all.
+        if self.path == "/cycle":
+            status, body = request_cycle(override=payload.get("override") is True)
+            self._json(status, body)
             return
 
         event = payload.get("event", "unknown")
