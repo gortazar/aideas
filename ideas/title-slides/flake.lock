@@ -25,11 +25,11 @@
     "title-slides-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1787588418,
-        "narHash": "sha256-1HYnsKnItQOG3Xl3hYqrtg5WiJAAsLfz6mx2t5/V0Yg=",
+        "lastModified": 1787647031,
+        "narHash": "sha256-lyv8/EVLnJAbU/Le+Rq1jwRJoMt/KNexo/DTeXEXT6A=",
         "owner": "gortazar",
         "repo": "title-slides",
-        "rev": "1ba5baaf5931aa8ebff947cea10c3f6ba7f25948",
+        "rev": "e15b38a1aa5d122ed7d626e7e564bab5d52e8cb6",
         "type": "github"
       },
       "original": {

@@ -1,11 +1,77 @@
-status: not_started
-version: 0.3
+status: done
+version: 0.4
 started_at: 2026-08-16
 last_session_id: 498f8809-49e3-4e71-b8bb-3905366ad588
 last_run: 2026-08-24T18:26:27+02:00
 last_cycle_cost_usd: 13.305927500000001
 
 ## Log
+
+### 2026-08-25 — 0.4 delivered: show-index explains itself
+
+Released as [v0.4](https://github.com/gortazar/title-slides/releases/tag/v0.4).
+
+**The entry shipped a warning, not the agenda the plan describes.** The plan's centrepiece
+was a fallback index listing the deck's `##` headings, with the real deck growing from
+fourteen slides to fifteen. Its own first open question was answered *"In a section-less
+deck no agenda is inserted"*, which removes that fallback and everything hanging off it —
+the fifteenth slide, the agenda's identifiers, its hidden-heading rule, and the second
+question about making the fallback opt-in. What remained of the report was that the deck
+asked for a feature and got **silence**, and that is what was fixed: `show-index: true`
+with nothing to index now warns, naming the key and giving the reason, and inserts nothing.
+
+Note on the version: the plan's prose calls this 0.3.1, but `CLAUDE.md`'s versioning rule
+uses two integer components and its cycle block named 0.4 as the version to set, so this
+shipped as 0.4 / `_extension.yml` 0.4.0 / tag `v0.4`.
+
+Worth keeping:
+
+- **The warning distinguishes three causes**, because they send the author to different
+  places: no `#` headings at all, every `#` hidden, or a `slide-level` that leaves no
+  heading below it. A single generic message would have been nearly as unhelpful as
+  silence.
+- **`quarto render --quiet` suppresses the warning** along with everything else, so the
+  real-deck test renders without it. Anyone debugging "nothing happened" has to drop
+  `--quiet` to see why.
+- **The sectioned path is provably untouched**: all four golden fixtures still match byte
+  for byte, which is the check the plan asked for.
+- **Fourteen tests go red if the warning is removed** — verified by removing it.
+
+### 2026-08-25 — 0.3.1/0.4, U0: reproduced, and the plan redirected
+
+Pin was intact this time (gitlink and `flake.lock` both at `1ba5baa`), 0.3 suite green
+before any change.
+
+**Reproduced the report exactly.** The reporter's deck renders, `show-index: true` is set,
+and there is no index slide, no warning and no error. It has fourteen `##` headings and
+zero `#`, so it has no sections and the feature is structurally inert on it. Candidate 1.
+
+Walked the other candidates rather than assuming, and two of the plan's guesses were wrong:
+
+| candidate | verdict |
+| --- | --- |
+| 1 — the deck has no `#` sections | **confirmed, this is the reporter's deck** |
+| 2 — a stale v0.1 install | **reproduces the symptom word for word**: key ignored, total silence. `quarto list extensions` reports `0.1.0`, which is the diagnostic |
+| 3a — key nested under `format: revealjs:` | **not a failure mode at all** — it works, Quarto folds format metadata into the document metadata. The plan's advice to keep the key top-level would have been wrong |
+| 3b — `show-index:true` with no space | fails loudly with a YAML parse error, so it cannot be this report |
+| 4 — generated but unreachable | **dead.** Index slides render and are reachable by their own URL fragment, emphasis correct, including the ones reveal nests into the preceding vertical stack. The only `display: none` in the output is Quarto's hidden footer template |
+| 5 — all sections hidden, or `slide-level: 1` | reproduces the same silence, so it belongs to the same fix |
+
+**Candidate 4 being dead is what matters most**: the feature works, and the entry stays a
+semantics-and-diagnostics change rather than becoming placement work.
+
+**The plan's proposed fix is rejected by its own answered question.** The plan is built
+around a fallback agenda listing the `##` headings, and says the real-deck outline should
+grow from fourteen slides to fifteen. The answer to the first open question says instead:
+*"In a section-less deck no agenda is inserted."* So no agenda is built, the real-deck
+outline stays at fourteen, and the second question (automatic vs. an `index-level:` key)
+is moot — there is no fallback to make automatic.
+
+What survives the answer is the part that made this a bug report: **silence**. So
+`show-index: true` on a deck with nothing to index now warns, naming the key and the
+reason, and inserts nothing. Every other feature bullet in the entry that depended on the
+agenda — its identifiers, its hidden-heading rule, the fifteenth slide — falls away with it.
+
 - 2026-08-24T18:26:27+02:00 — done ($13.305927500000001)
 - 2026-08-24T08:17:45+02:00 — done ($15.026146999999996)
 - 2026-08-16T21:29:26+02:00 — done ($12.985914499999996)
@@ -109,6 +175,33 @@ absent (see the log). Medium overall for the idea, going by 0.1.
 Upstream: https://github.com/gortazar/title-slides — released as
 [v0.2](https://github.com/gortazar/title-slides/releases/tag/v0.2), submodule pointer and
 flake input both at that tagged commit.
+
+## What "done" covers for 0.4
+
+- **`show-index: true` is never silent.** A deck that sets it either gets index slides or a
+  warning naming the key and explaining why it cannot have any.
+- **No agenda is invented** for a section-less deck — the answered decision. The document
+  is returned exactly as it arrived.
+- **The reason is specific** — no section headings, all sections hidden, or a `slide-level`
+  of 1 or 0 — and it is emitted once per document, not once per slide.
+- **The reporter's deck is the acceptance test**: `tests/fixtures/real-deck/` renders to
+  its fourteen slides with accents and distinct identifiers intact, injects nothing, and
+  now emits the explanation. The test asserts the warning as well as the outline.
+- **Decks with sections are untouched** — all four golden fixtures match byte for byte, and
+  the smoke test's two index slides are unchanged.
+- **The degenerate cases are re-pinned as decisions** — no sections, no headings at all,
+  one heading, hidden sections, `slide-level` 1 and 0, a `#` nested in a div, and both
+  features on together: each asserts the warning rather than merely tolerating it.
+- **Diagnosis for the causes that are not ours** — README troubleshooting covers checking
+  the installed version with `quarto list extensions` (no warning at all means an install
+  older than 0.4), the `--quiet` trap, and the `show-index:true` spacing trap. It also
+  records the two candidates the plan guessed at that turned out to be wrong.
+- **Released and installable** — `_extension.yml` at 0.4.0, `v0.4` tagged with
+  `title-slides-0.4.zip` attached and verified present. Both install paths re-checked from
+  clean directories: the reporter's deck warns and stays at fourteen slides, and a
+  sectioned deck still gets its index slides with no warning.
+
+104 unit tests, 4 golden cases, the smoke test, the real-deck test and the install test.
 
 ## What "done" covers for 0.3
 
@@ -297,7 +390,19 @@ Two mechanics worth recording, both feeding later units:
 - [x] U4 — README troubleshooting, `_extension.yml` at 0.3.0, v0.3 released, both install
       paths verified from clean directories against the real deck, pin moved here
 
-Next: nothing — 0.3 is done. 89 unit tests, 4 golden cases, the smoke test, the real-deck
+### 0.4 — `show-index: true` that showed no index
+- [x] U0 — pin verified intact, 0.3 baseline green, report reproduced and every candidate
+      walked: the deck simply has no sections, and two of the plan's guesses were wrong
+- [x] U1/U2 — the decision implemented: warn, naming the key and the reason, and insert
+      nothing; the degenerate cases re-pinned to assert the warning
+- [x] U3 — the real deck as the acceptance test: fourteen slides, no index, an explanation
+- [x] U4 — README, `_extension.yml` at 0.4.0, v0.4 released, both install paths verified
+      from clean directories, pin moved here
+
+Next: nothing — 0.4 is done. 104 unit tests, 4 golden cases, the smoke test, the real-deck
+test and the install test, all green.
+
+Previously: 0.3 was done. 89 unit tests, 4 golden cases, the smoke test, the real-deck
 test and the install test, all green.
 
 Previously: 0.2 was done at 89 unit tests plus 4 golden cases and the smoke test, all
