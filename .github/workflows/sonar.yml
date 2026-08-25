@@ -1,0 +1,183 @@
+# The one SonarQube Cloud analysis every idea calls.
+#
+# AGENTS.md tells every idea to wire itself up with
+# `uses: gortazar/aideas/.github/workflows/sonar.yml@v1` — this is that workflow. It
+# exists so there is exactly one place where the scanner version, the skip rules and
+# the fetch depth are decided; a fleet of subtly different per-idea Sonar configs is
+# worse than none.
+#
+# The smallest caller is five lines:
+#
+#     sonar:
+#       uses: gortazar/aideas/.github/workflows/sonar.yml@v1
+#       secrets:
+#         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+#
+# which analyses the whole repository as project `gortazar_<repo-name>` in the
+# `gortazar` organisation, taking sonar.sources, sonar.tests and the exclusions from
+# the caller's own sonar-project.properties. Everything below is for the cases that
+# need more than that.
+#
+# `v1` is a moving major tag, force-updated by tag-sonar.yml on every push to main
+# that touches this file, so a fix here reaches all six callers without any of them
+# being edited.
+name: SonarQube Cloud
+
+on:
+  workflow_call:
+    inputs:
+      project-key:
+        description: >
+          SonarQube Cloud project key. Defaults to gortazar_<repo-name>, which is what
+          binding a repository through the SonarCloud GitHub App produces.
+        type: string
+        required: false
+        default: ""
+      organization:
+        description: SonarQube Cloud organization key.
+        type: string
+        required: false
+        default: gortazar
+      extra-args:
+        description: Extra -Dsonar.* arguments, appended to the scanner command line.
+        type: string
+        required: false
+        default: ""
+      coverage-artifact:
+        description: >
+          Name of an artifact uploaded earlier in the calling run holding a coverage
+          report. Left empty, no coverage is reported and Sonar records 0% on new
+          code — or ignores the condition entirely, if the new-code period has fewer
+          than 20 new lines. Those are different answers; see ideas/quality-gate/baseline.md.
+        type: string
+        required: false
+        default: ""
+      coverage-path:
+        description: Directory to unpack coverage-artifact into, relative to the workspace.
+        type: string
+        required: false
+        default: "."
+      working-directory:
+        description: sonar.projectBaseDir — where sonar-project.properties lives.
+        type: string
+        required: false
+        default: "."
+      runs-on:
+        description: Runner label for the analysis job.
+        type: string
+        required: false
+        default: ubuntu-latest
+    secrets:
+      SONAR_TOKEN:
+        # Not required, so that the skip path below is reachable. A pull request from
+        # a fork gets no secrets at all, and a repository can be wired up before its
+        # token is set: neither should turn the build red for a gate that is still
+        # advisory.
+        required: false
+
+jobs:
+  sonar:
+    name: Analysis
+    runs-on: ${{ inputs.runs-on }}
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      # First, because everything after it is conditional on the answer. An empty
+      # secret is the normal state for a fork PR, so this says so once, clearly, and
+      # succeeds — an advisory gate that turned every fork PR red would be switched
+      # off within a week.
+      - name: Is there a token?
+        id: token
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${SONAR_TOKEN:-}" ]; then
+            echo "have-token=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "have-token=no" >> "$GITHUB_OUTPUT"
+            echo "::notice title=SonarQube Cloud analysis skipped::No SONAR_TOKEN is available to this run (pull requests from forks get no secrets, and a repository can be wired up before its token is set). Skipping the analysis rather than failing: the quality gate is advisory."
+            {
+              echo "### SonarQube Cloud analysis skipped"
+              echo
+              echo "No \`SONAR_TOKEN\` was available to this run. The gate is advisory, so this is not a failure."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # fetch-depth: 0 is not optional. Sonar attributes new code by git blame, and
+      # against a shallow clone every line looks new — which would make the one thing
+      # this gate judges, "new code", quietly wrong.
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.have-token == 'yes'
+        with:
+          fetch-depth: 0
+
+      # The project key defaults to the repository name rather than being written out
+      # in six callers. Computed in a step, not in the input's `default:`, because a
+      # workflow_call default cannot read the github context.
+      - name: Which project
+        id: project
+        if: steps.token.outputs.have-token == 'yes'
+        env:
+          PROJECT_KEY: ${{ inputs.project-key }}
+          ORGANIZATION: ${{ inputs.organization }}
+        run: |
+          set -euo pipefail
+          key="$PROJECT_KEY"
+          if [ -z "$key" ]; then
+            key="${ORGANIZATION}_${GITHUB_REPOSITORY##*/}"
+          fi
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          echo "analysing $key in organization $ORGANIZATION"
+
+      # Coverage is an input, not something this workflow knows how to produce. Four
+      # repositories here have four different test runners, three of them inside a
+      # nix sandbox; teaching one workflow to drive all of them would make it the
+      # thing nobody dares change. A caller that starts producing coverage uploads it
+      # as an artifact and names it here — two lines, and no nix in this file.
+      - name: Fetch the coverage report
+        if: steps.token.outputs.have-token == 'yes' && inputs.coverage-artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.coverage-artifact }}
+          path: ${{ inputs.coverage-path }}
+
+      - name: Scan
+        if: steps.token.outputs.have-token == 'yes'
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          # SONAR_HOST_URL is deliberately unset: the action targets SonarQube Cloud
+          # when it has no host, and setting one is how you point it at a server.
+          #
+          # The scanner reads the pull request number, branch and base from the
+          # runner's own environment; the token lets it resolve them against the API
+          # so the analysis is attributed to the PR rather than to a branch.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectBaseDir: ${{ inputs.working-directory }}
+          # Everything else — sources, tests, exclusions — comes from the caller's
+          # sonar-project.properties, which is version-controlled beside the code it
+          # describes rather than buried in a workflow input.
+          args: >
+            -Dsonar.projectKey=${{ steps.project.outputs.key }}
+            -Dsonar.organization=${{ inputs.organization }}
+            ${{ inputs.extra-args }}
+
+      # The gate result is on the dashboard, not in this log — the scan step returns
+      # as soon as the analysis is submitted. So leave a link, because "where do I
+      # read what the gate said" is the question this whole idea exists to answer.
+      - name: Where to read the result
+        if: steps.token.outputs.have-token == 'yes'
+        env:
+          KEY: ${{ steps.project.outputs.key }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### SonarQube Cloud"
+            echo
+            echo "[\`$KEY\` dashboard](https://sonarcloud.io/dashboard?id=$KEY)"
+            echo
+            echo "The quality gate is advisory: a red gate is reported, not enforced."
+          } >> "$GITHUB_STEP_SUMMARY"

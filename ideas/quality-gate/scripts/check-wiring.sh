@@ -94,7 +94,31 @@ check_project() {
     fi
 }
 
+# The thing being pinned has to be there, and has to be callable. A caller pinned at
+# @v1 fails with "workflow was not found" rather than anything about Sonar, so check
+# the two ends of that reference here where the message can say what is wrong.
+check_shared_workflow() {
+    local shared="$repo_root/.github/workflows/sonar.yml"
+    local tagger="$repo_root/.github/workflows/tag-sonar.yml"
+
+    if [ ! -f "$shared" ]; then
+        fail "no reusable workflow at .github/workflows/sonar.yml"
+    elif ! file_contains "$shared" "workflow_call:"; then
+        fail ".github/workflows/sonar.yml is not callable (no workflow_call trigger)"
+    fi
+
+    # Without this, v1 never moves and never exists in the first place, and every
+    # caller in the table above breaks at once.
+    if [ ! -f "$tagger" ]; then
+        fail "no .github/workflows/tag-sonar.yml — nothing would create or move the v1 tag"
+    elif ! file_contains "$tagger" "refs/tags/v1"; then
+        fail ".github/workflows/tag-sonar.yml does not push refs/tags/v1"
+    fi
+}
+
 echo "checking wiring against $repo_root"
+
+check_shared_workflow
 
 for row in "${projects[@]}"; do
     IFS='|' read -r key dir workflow readmes <<<"$row"
