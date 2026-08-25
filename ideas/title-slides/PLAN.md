@@ -1,182 +1,176 @@
-# Plan: title-slides 0.3.1 — `show-index: true` that shows no index
+# Plan: title-slides 0.5 — index the `##` headings, not the `#` ones
 
-Difficulty estimate: medium — the code change is small and local, but it turns on a contract decision
-(what an index means in a deck with no `#` sections) and it rewrites tests that currently pin
-"no sections, no index slide" as *correct* behaviour.
+Difficulty estimate: medium — the code change is a couple of predicates, but it replaces the
+feature's contract, so every index fixture, screenshot and README paragraph is rewritten, and a
+guard that was decorative until now (generated headings are not indexed) becomes load-bearing.
 
 ## Context
 
-The report: **the index is never shown, although `show-index: true` is set in the frontmatter.** No
-error, no warning — the deck renders, and the index simply is not there.
+The report: **the index must be extracted from level 2 titles (`##`), not from level 1 (`#`).
+Level 1 is reserved for the title slide; sections use level 2 instead.** Minor version, so 0.5.
 
-The leading hypothesis is not a defect in the index code at all but the contract it was written to.
-`insert_indexes` calls `sections_of`, which collects headings with `level < slide_level` — `#`
-headings when slides start at `##` — and returns the blocks unchanged when there are none. The deck
-this reporter renders is almost certainly `tests/T4-funciones.qmd`, the same one that drove 0.3: it
-sets `show-index: true` and `title-slides: true` in good faith and contains **fourteen `##` headings
-and not a single `#`**. So it has no sections, no index is inserted, and 0.3 shipped a test asserting
-exactly that:
+This is the other half of the 0.4 conversation. 0.4 reproduced a deck that set `show-index: true`
+and saw nothing, found the deck had fourteen `##` headings and no `#` at all, and — on the answered
+question "in a section-less deck no agenda is inserted" — shipped a *warning* saying the deck has no
+sections to index. The reporter's answer to that warning is this entry: the deck is not
+section-less. Its sections are the `##`s. `#` is where the deck's own title page goes, so keying the
+index off `#` indexes the one heading level that is guaranteed not to be a section.
 
-> **`show-index` on a deck with no sections is pinned** by this fixture: no index slide, no warning,
-> no crash, for a document that sets the key in good faith.
+So 0.4's warning was the right response to the wrong contract, and this entry moves the contract.
+`tests/fixtures/real-deck/T4-funciones.qmd` — already upstream, already rendered by
+`nix flake check` — stops warning and starts getting an index, and that diff is the proof.
 
-That test passes. The user is still looking at a deck with no index. That gap — between a pinned
-"correct" behaviour and a document that asked for a feature and got silence — is the bug this entry
-fixes. The README's troubleshooting already says "if `show-index: true` produces no index slides, the
-deck probably has no sections"; documentation that explains away a silent no-op is not the same as
-the feature working.
+**The rule this plan implements: the index lists the headings that start slides.** Concretely
+`is_section(block) = block.level < slide_level` becomes `block.level == slide_level`, which at
+Quarto's default `slide-level: 2` is exactly "level 2" as reported, and makes `#` — above the slide
+level — neither listed nor given an index slide. Stated as a decision rather than asked, because it
+reproduces the report at the default and disposes of the whole `slide-level` matrix that 0.4 had to
+special-case: at `slide-level: 1` the index lists `#` headings and its own heading is a `#`, at
+`slide-level: 3` it lists `###`, and only `slide-level: 0` — where no heading starts a slide — is
+left with nothing to index and keeps 0.4's warning. The alternative, hard-coding level 2 whatever
+the slide level, is in Open Questions.
 
-Candidate causes, in the order U0 should eliminate them. Only the first is a design question; the
-rest are cheap and would each change the entry's centre of gravity if true:
+Further assumptions, stated once:
 
-1. **The deck has no `#` sections**, so the feature is structurally inert. Expected to be the answer,
-   given the fixture already in the suite. Fix is semantic, below.
-2. **A stale install.** `show-index` did not exist before 0.2. A user still on the v0.1 zip — and
-   this reporter's previous issue *was* an installation problem — sees the key ignored with no error
-   whatsoever, which matches the report word for word. `quarto list extensions` prints the installed
-   version; the troubleshooting section must say to check it.
-3. **The key is not where the filter looks.** `show-index` nested under `format: revealjs:` rather
-   than at the top level, or written `show-index:true` with no space after the colon (as the report
-   itself spells it), which YAML does not read as a mapping key at all.
-4. **The index is generated but never reachable.** 0.2 recorded that reveal nests an index slide into
-   the preceding section's vertical stack. Under a non-linear `navigation-mode`, or with the
-   `unlisted` class that every generated heading carries, a slide can exist in the HTML and never be
-   seen. Every test we have inspects the AST or the HTML source; none of them asserts that the slide
-   is on the path a viewer actually walks. If this is the cause, the fix is placement, not semantics.
-5. **All sections hidden.** Every `#` marked `.unlisted` or `visibility="hidden"`, or `slide-level: 1`
-   / `0`, under which the extension defines no sections at all.
-
-The fix this plan assumes, stated rather than asked: **`show-index: true` must never silently produce
-nothing.** Concretely, when a deck has no visible sections, the index falls back to listing the
-deck's *slide-level* headings — the `##`s — as a single index slide at the top of the deck, an
-agenda. Before every slide would double a fourteen-slide deck; before every section is meaningless
-when there are none. A deck that does have sections keeps 0.2's behaviour byte for byte, so the
-fallback is reachable only from the case that today produces silence. Where even that finds nothing
-to list — a deck with no headings at all — the filter warns, naming the key and the reason, through
-the same `quarto.log.warning` path the setext check uses.
-
-Further assumptions:
-
-- **This is 0.3.1, as the idea asks.** Worth saying plainly once: by semver this is a behaviour
-  change, not a bug fix, since output that was pinned as correct becomes different output. The entry
-  proceeds as a patch on the reporter's instruction, and the release notes describe the new
-  behaviour rather than burying it.
-- **The reporter's deck is the acceptance test.** `tests/fixtures/real-deck/T4-funciones.qmd` is
-  already upstream and already rendered by `nix flake check`. Its expected outline moves from
-  fourteen slides to fifteen, and that diff *is* the proof the bug is fixed.
-- **No new frontmatter key.** An `index-level:` option is the obvious alternative and is left in Open
-  Questions; a key the reporter would have had to know about does not fix a silent no-op.
+- **This is a behaviour change, not a bug fix**, which is why it is a minor bump. A deck with `#`
+  sections and `##` slides — the shape `tests/fixtures/index.qmd` and `example/deck.qmd` have —
+  gets a different deck out of 0.5 than out of 0.4: its index slides move from before each `#` to
+  before each `##`, and list the `##` titles. The release notes lead with that rather than bury it.
+- **The carry is untouched.** The 0.1 contract stands as written, `#` still clears the carried
+  title, and `title-slides:` behaves identically with this entry applied. Only the index moves.
+- **The 0.4 warning survives, with new reasons.** Silence is still never an outcome; the deck that
+  now warns is the one with no slide-level headings at all, or with all of them hidden.
+- **No new frontmatter key**, on the same grounds as 0.4: the reporter should not have to discover a
+  key to get the level their deck already uses. `index-level:` stays in Open Questions.
 
 ## Features
 
-- **`show-index: true` always does something visible.** A deck that sets the key gets an index or a
-  warning explaining why it cannot have one. Silence is no longer a possible outcome.
-- **An agenda for a section-less deck** — one index slide at the top, listing every slide-level
-  heading in document order, titled from the deck's own `title:` exactly as today's index is.
-- **The reporter's deck shows its index** — the real-deck fixture's pinned outline gains the slide,
-  with the fourteen accented titles listed on it, and the test fails if the index disappears again.
-- **Decks with sections are untouched** — the 0.2 index behaviour is unchanged, asserted by the
-  existing golden fixtures passing byte-identically rather than by inspection.
-- **Duplicate headings on the agenda stay distinct** — `Definición` twice and `Parámetros por
-  defecto` three times are listed as they are written, and the generated heading's identifier comes
-  from the same `taken_identifiers` table, so it cannot collide with anything in the deck.
-- **The index is asserted to be reachable, not merely present** — the render test checks where the
-  index `<section>` sits in the HTML (top level, not nested inside another slide's vertical stack)
-  and that nothing renders it hidden. This is the assertion that would have caught candidate 4, and
-  the one class of failure our AST-level tests structurally cannot see.
-- **Diagnosis for the causes that are not ours** — README troubleshooting gains: check the installed
-  version with `quarto list extensions` (the key does nothing before 0.2), keep `show-index` at the
-  top level of the frontmatter and not inside `format:`, and the `show-index:true` spacing trap.
-- **Hidden headings stay hidden in the fallback** — `.unlisted` and `visibility="hidden"` slide-level
-  headings are left off the agenda, the same rule the section index already follows.
-- **The degenerate cases are re-pinned deliberately** — no headings at all, one slide, `slide-level: 1`
-  and `slide-level: 0`, and a deck with both features on: each gets an updated expectation written
-  as a decision, not as a test edited until it passed.
-- **Released and installable** — `_extension.yml` at 0.3.1, tag cut upstream with the zip attached
-  and verified present, both install paths re-checked from clean directories by rendering the real
-  deck, then the gitlink and `flake.lock` moved here together with `scripts/check-pin.sh` green.
+- **The index is built from slide-level headings** — `##` at Quarto's default — in document order,
+  each one listed with the text the author wrote.
+- **`#` is reserved for the title slide**: a level-1 heading is never listed on an index and never
+  gets an index slide put in front of it, so a deck's title page and its `#` section slides are left
+  exactly as the author wrote them.
+- **The reporter's deck gets its index** — the real-deck fixture stops emitting the 0.4 warning, its
+  fourteen accented `##` titles appear on the index, and the pinned outline changes to match. That
+  outline diff is the acceptance criterion, and the test fails if the index disappears again.
+- **The emphasis still moves** — the entry for the slide the index introduces is wrapped in `Strong`
+  and in the `title-slides-index-current` span, unchanged from 0.2, so the CSS hook and the
+  screenshots' meaning survive the level change.
+- **Generated headings are neither indexed nor anchors** — a `title-slides-continuation` heading
+  inserted by the carry sits at the slide level, which is now precisely what the index looks for.
+  Without an explicit `is_generated` check, a deck using both features would get an index slide
+  before every continuation and its title repeated down the list. A test fails when the check is
+  removed.
+- **Hidden slides stay hidden** — `.unlisted` or `visibility="hidden"` on a slide-level heading
+  keeps it off the index and gives it no index slide, the same rule 0.2 applied to sections, so
+  `show-index` still cannot leak the title of a slide the author suppressed.
+- **Duplicate and accented titles survive** — `Definición` twice and `Parámetros por defecto` three
+  times are listed as written (subject to Open Questions), and identifiers still come from the
+  shared `taken_identifiers` table, so `<slide>-index-<n>` cannot collide with a continuation or
+  with anything in the deck.
+- **`show-index: true` is still never silent** — 0.4's warning stays, re-aimed: no slide-level
+  headings at all, every one of them hidden, or `slide-level: 0`, where no heading starts a slide.
+  Named key, specific reason, once per document.
+- **Index slides are asserted to be reachable, not merely present** — reveal's vertical-stack
+  nesting changes when an index precedes a `##` instead of a `#`, so the render test checks where
+  the index `<section>` lands and that nothing hides it.
+- **Docs and screenshots match the new rule** — the README's "index rule, exactly" section, the
+  worked example, the two index screenshots and the 0.4 troubleshooting entry all describe `##`
+  indexing; the paragraph promising that no agenda of `##` slides is invented is replaced by what
+  0.5 actually does.
+- **Released and installable** — `_extension.yml` at 0.5.0, `v0.5` tagged upstream with
+  `title-slides-0.5.zip` attached and verified present, both install paths re-checked from clean
+  directories by rendering the real deck, then the gitlink and `flake.lock` moved here together with
+  `scripts/check-pin.sh` green.
 
 ## Approach
 
-Units, each one commit, tests first:
+Units, one commit each, expectation written before implementation:
 
-1. **U0 — pin, baseline, reproduce.** `git submodule update --init`, `scripts/check-pin.sh`, full
-   suite green before any change; the sweep has reverted this gitlink once already. Then reproduce:
-   render the real deck as the user does and confirm no index appears; walk candidates 2–5 above
-   deliberately (a v0.1 install, the key under `format:`, the no-space spelling, a hidden-sections
-   deck, `slide-level: 1`) and write down which produce this exact symptom. **No fix is designed
-   before this unit finishes.** If candidate 4 turns out to be live — the index in the HTML but
-   unreachable — the rest of the plan is placement work and the fallback below is a separate concern.
-2. **U1 — the failing test.** Update the real-deck expected outline to the fifteen slides it *should*
-   have and add the reachability assertions; add unit fixtures for a section-less deck with and
-   without a title. Both fail. Commit them failing is not an option under the suite's own rules, so
-   this unit lands with U2 if that is what keeping CI green requires — but the expectation is written
-   before the implementation either way.
-3. **U2 — the fallback.** `sections_of` returning empty becomes a branch, not an early return:
-   collect slide-level headings by the same visibility rule, build one index slide, insert it before
-   the first block. Keep `insert_indexes` a pure function over top-level blocks so the unit tests can
-   drive it directly. Ordering against the carry matters — the agenda heading sits at the slide level
-   and must be `title-slides-index`-classed so `is_generated` keeps the carry from adopting it; add
-   the test that fails when that class is removed.
-4. **U3 — the warning, and the cases that stay silent.** A deck that sets the key and has no heading
-   to list warns once with the reason. Re-pin every degenerate case listed in Features, and confirm
-   each new test can fail by perturbing its expectation.
-5. **U4 — docs and release.** README: what the index lists in a deck without sections, the agenda
-   example, and the three troubleshooting entries from U0; bump `_extension.yml` to 0.3.1; cut the
-   tag and confirm the tag *and its asset* landed (`git ls-remote --tags`, then look at the release —
-   the orchestrator's push carries no tag, so the workflow has to tag itself); verify both install
-   paths from clean directories against the real deck; move the gitlink and `flake.lock` here
-   together and check the remote CI run, not just the local one.
+1. **U0 — pin, baseline, and the current output written down.** `git submodule update --init`,
+   `scripts/check-pin.sh`, full 0.4 suite green before any change; the sweep has reverted this
+   gitlink once already. Then record, from real renders rather than from reading the code: what the
+   real deck does today (warning, fourteen slides), and what `index.qmd` and `example/deck.qmd`
+   produce today, so the 0.5 diff is measured against evidence rather than against the goldens.
+2. **U1 — the failing expectations.** Rewrite `tests/fixtures/index.expected.qmd` for `##`
+   indexing, update the real-deck expected outline, and add unit fixtures: a deck with only `##`
+   headings, a deck with both `#` and `##`, a deck whose `#` is a title slide followed by `##`s.
+   They fail. If keeping CI green means landing them with U2, the expectations are still written
+   first.
+3. **U2 — the predicate.** `is_section` becomes `is_indexed` — `level == slide_level`, not hidden,
+   not generated — and `sections_of`, `index_slide` and `insert_indexes` follow it. Keep
+   `insert_indexes` a pure function over top-level blocks so the unit tests drive it directly. The
+   `is_generated` exclusion lands here with the test that fails without it.
+4. **U3 — the warning, re-aimed, and the degenerate cases re-pinned.** New reason strings for "no
+   `##` headings", "all hidden" and `slide-level: 0`; then every case 0.4 pinned as *warning* that
+   is now an *index* — no sections, one heading, `slide-level: 1`, a `#` nested in a div, both
+   features on together — rewritten as a decision, each perturbed once to confirm it can fail.
+5. **U4 — docs, screenshots and release.** README rule, example and troubleshooting; regenerate the
+   two index screenshots from a deck of the new shape; `_extension.yml` to 0.5.0; cut the tag and
+   confirm the tag *and its asset* landed (`git ls-remote --tags`, then look at the release — the
+   orchestrator's push carries no tag, so the workflow tags itself); verify both install paths from
+   clean directories against the real deck; move the gitlink and `flake.lock` here together and
+   check the remote CI run, not just the local one.
 
 ## Testing
 
-- **Real deck** (`tests/run-real-deck.sh`, existing) — the acceptance test. Outline goes to fifteen
-  slides with the agenda first; the filter-off run still gives fourteen, so the equivalence assertion
-  there has to be restated as "the extension adds exactly the index" rather than "adds nothing".
-- **Reachability** (new, folded into the same script) — the index `<section>` is a direct child of
-  the slides container, carries no hiding class or inline `display:none`, and appears before the
-  first content slide. Cheap string/structure assertions on the HTML; no browser.
-- **Unit** — the fallback as a pure transform: section-less deck, no headings, hidden headings only,
-  `slide-level: 1`/`0`, both features on together, and the `is_generated` guard.
-- **Golden** — `index.qmd` and the other three fixtures must pass **byte-identically**; a diff there
-  means the fallback leaked into the sectioned path and is a finding, not a fixture to update.
-- **Smoke and install** — unchanged, both still run; the install test is the one that catches the
-  stale-install cause going forward.
+- **Real deck** (`tests/run-real-deck.sh`, existing) — the acceptance test. New pinned outline, the
+  accented titles listed on the index, no warning on stderr, and the filter-off run still fourteen
+  slides so the no-op proof stays honest.
+- **Golden** — `index.qmd` is rewritten by design; `basic.qmd`, `nested.qmd` and `sections.qmd`
+  must pass **byte-identically**, because they exercise the carry, which this entry does not touch.
+  A diff there is a finding, not a fixture to update.
+- **Unit** — the transform as a pure function: `##`-only deck, `#`-and-`##` deck, title slide then
+  `##`s, hidden slide-level headings, `slide-level: 1` and `3` and `0`, carry and index together
+  with `---` continuations present, and the `is_generated` guard.
+- **Reachability** — where the index `<section>` sits in the rendered HTML now that it precedes a
+  `##`, and that no class or inline style hides it. String and structure assertions; no browser.
+- **Smoke and install** — both still run; the smoke test's index assertions move to the new level,
+  and the install test is unchanged.
+- **Every new or changed expectation is perturbed once** to prove it can fail, as in 0.3 and 0.4.
 
 ## Risks / things to verify early
 
-- **The pin.** `scripts/check-pin.sh` before anything else; `STATUS.md` claiming 0.3 is not evidence
+- **The pin.** `scripts/check-pin.sh` before anything else; `STATUS.md` claiming 0.4 is not evidence
   that the gitlink points at it.
-- **Re-pinning a test to make it pass is exactly what a broken fix looks like.** The real-deck outline
-  changes in this entry by design, so every other expectation must be defended: if a golden fixture
-  needs touching, that is a bug in the change, not a chore.
-- **The agenda could be adopted as a carried title.** Same trap 0.2 flagged; it is currently
-  structurally impossible because a section heading always follows an index, and the fallback breaks
-  that — the agenda is followed by an ordinary `##`. The `is_generated` check is now load-bearing.
-  Test that it fails when removed.
-- **A fifteenth slide changes `slide-number: c/t`** and every in-deck link that counts slides. Worth
-  a sentence in the README rather than a surprise.
-- **Candidate 4 would invalidate the fix.** If index slides are generated but unreachable, adding one
-  more generated slide changes nothing the user can see. Settle reachability in U0, on the sectioned
-  example deck, before building the fallback.
+- **The generated-heading guard is now load-bearing.** 0.2 recorded that the carry could not adopt an
+  index title because a `#` always followed one; 0.4 recorded that removing the guard broke fourteen
+  tests. Now the index also has to *skip* continuations. Verify by removing each check in turn.
+- **The index slide count.** Indexing the slide level means one index per slide, so the reporter's
+  fourteen-slide deck becomes twenty-eight. This is Open Question 1 and the answer decides the
+  acceptance outline; do not build past U1 without it.
+- **Reveal's nesting changes.** 0.2 documented an index being pulled into the preceding section's
+  vertical stack. An index at the same level as the heading it precedes nests differently — check
+  the rendered structure on a deck with `#` sections before assuming the caveat still reads true.
+- **Rewriting a golden is what a broken fix looks like.** `index.expected.qmd` changes here by
+  design; the other three must not, and neither may the carry unit tests.
+- **`slide-number: c/t` and any in-deck link that counts slides** shift with the extra slides. A
+  README sentence, not a surprise.
 - **`upstream/` is a detached-HEAD submodule** — `git push origin HEAD:main` and confirm with
-  `git ls-remote origin main` before calling a unit done; a plain push prints nothing and does nothing.
+  `git ls-remote origin main` before calling a unit done; a plain push prints nothing and does
+  nothing.
 - **The release workflow must create its own tag**; the orchestrator's push carries none.
+- **`quarto render --quiet` hides the warning**, as 0.4 found — do not read a quiet render as proof
+  that a deck no longer warns.
 
 ## Open Questions
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [x] Where does the agenda go in a section-less deck? Ticking this line as-is puts **one index slide
-      at the very top of the deck**, listing every slide, with nothing emboldened since no single
-      slide is "next". The alternative — an index before *every* slide, mirroring the section rule —
-      turns a fourteen-slide deck into twenty-eight and is rejected unless the reporter wants it. 
-      In a section-less deck no agenda is inserted.
-- [x] Should the fallback be automatic, or an opt-in `index-level: 2` key? Ticking this line as-is
-      makes it **automatic**, on the grounds that a key the user would have to discover does not fix
-      a silent no-op. An explicit key is the cleaner semver story and could still be added later as
-      the way to index a level other than the default.
-- [x] Is the reporter's deck really `T4-funciones.qmd`? Ticking this line as-is **assumes it is** and
-      treats that fixture's outline as the acceptance criterion. If the failing deck does have `#`
-      sections, candidate 4 (generated but unreachable) becomes the likely cause and U0's findings
-      redirect the entry.
+- [ ] One index slide before **every** `##`, or a single one at the top of the deck? Ticking this
+      line as-is keeps 0.2's shape exactly one level down — an index before each indexed heading,
+      with the emphasis moving — which is what makes the `title-slides-index-current` span mean
+      anything, and turns the reporter's fourteen-slide deck into twenty-eight slides. The
+      alternative is one index slide at the top listing all fourteen with nothing emboldened (an
+      agenda), leaving the deck at fifteen: quieter, but then the current-item emphasis has no
+      purpose. A third possibility is repeated indexes only where consecutive titles differ.
+- [ ] Are consecutive repeated titles listed once or every time? Ticking this line as-is lists every
+      `##` **verbatim in document order**, so the reporter's index reads `Definición`, `Definición`,
+      … `Parámetros por defecto` three times in a row — a faithful list of slides, a poor agenda.
+      The alternative collapses a run of identical adjacent titles into one entry, emphasised for
+      every slide in the run, giving that deck ten entries instead of fourteen.
+- [ ] Does the old behaviour stay reachable for decks that do use `#` sections? Ticking this line
+      as-is makes 0.5 a **straight replacement**: `#` headings are no longer indexed at all, and a
+      0.4 user with `#` sections silently gets a differently indexed deck. The alternative is an
+      `index-level:` key (defaulting to the slide level) so both conventions are expressible — more
+      surface, but it is also the answer to the level question 0.4 deferred.
