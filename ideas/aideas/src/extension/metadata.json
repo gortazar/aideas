@@ -5,5 +5,5 @@
   "shell-version": ["46", "47", "48", "49", "50"],
   "settings-schema": "org.gnome.shell.extensions.aideas",
   "url": "https://github.com/gortazar/aideas/tree/main/ideas/aideas",
-  "version-name": "0.3"
+  "version-name": "0.4"
 }

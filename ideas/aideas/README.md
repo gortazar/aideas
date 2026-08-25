@@ -48,6 +48,46 @@ The orchestrator folds each question out of `PLAN.md` and bounds it; the extensi
 Rows are read-only: answering a blocked idea means editing its `PLAN.md` on the box, which is
 not something a panel menu should do.
 
+## The two things the menu does
+
+Beneath the queue, above *Preferences*:
+
+**Check now** reads `/state` immediately. Worth having in three situations: the box was down and
+the poller has backed off to five minutes (a click resets that), you have just answered a
+question and want to watch the idea go `ready`, or you have just started a cycle. The menu stays
+open, because the header's own `updated just now` is the answer to the click.
+
+**Run a cycle** asks the box to start one, and this is the only thing aideas ever writes. One
+click, no confirmation. A cycle refuses far more often than it starts, so the item reports which
+gate said no, in the orchestrator's own words:
+
+| It says | Because |
+| --- | --- |
+| `Paused: .orchestrator/stop exists` | the stop file is there |
+| `Outside allowed_hours (23:00-08:00 Europe/Madrid)` | not the time of day it was told to build |
+| `Daily budget spent ($12.40 of $10)` | `max_daily_cost_usd` is reached |
+| `A Claude Code session is active on this laptop` | the heartbeat gate: you are working |
+| `A cycle is already running` | the lock is held |
+| `claude is not on the orchestrator's PATH` | it would have started and failed every agent |
+| `this box does not support starting cycles` | the box predates 0.4 |
+
+`started` from the box means **launched**, not finished — the cycle re-checks its own gates and
+can still exit — so the extension keeps watching `/state` for 45 seconds and says
+`The cycle exited without starting — check the journal on the box` if it never appears.
+
+**Run anyway** appears only after a refusal about *when* it is convenient to build — the schedule
+or the laptop heartbeat — and skips exactly those two. It never skips the stop file, the daily
+budget or the lock: a pause, a spent cap and a running cycle are not things to click past.
+
+The item goes insensitive, with the reason beneath it, whenever clicking could not possibly
+work. A box answering `available: false` is *reachable*, so the item stays live there — it can be
+told to try, and the answer will be honest either way.
+
+Starting a cycle needs the box's `HEARTBEAT_SHARED_SECRET` if it has one; set it in
+preferences. Reading the queue needs no secret. The secret lives in GSettings, which anything in
+your session can read — it is the same secret the heartbeat hook already holds in its
+environment, so it adds no new class of exposure, but it is not a vault.
+
 ## The bulb
 
 The button is a light bulb, and it is **grey because it is symbolic** — a shipped
@@ -74,8 +114,9 @@ good reading dated beneath it — one dropped poll on a VPN should not blink the
 
 ## Behaviour worth knowing
 
-- **It sends nothing and spawns nothing.** GJS and libsoup only, which is what the GNOME
-  Extensions review guidelines require and why `/state` exists at all.
+- **It spawns nothing, and writes one thing.** GJS and libsoup only, which is what the GNOME
+  Extensions review guidelines require and why `/state` exists at all. The single write is
+  `POST /cycle`, which asks the box to start a cycle and is the whole of "Run a cycle".
 - **Polling pauses completely** while the session is locked (GNOME disables the extension) or
   idle (Mutter's idle monitor). A laptop asleep on a desk does not wake up to talk to a VPN
   host. Every 30 s otherwise, configurable 10–300 s, 5 s while the menu is open, backing off to
@@ -115,11 +156,11 @@ nix flake check       # the same four checks in the sandbox
 
 | Test | What it covers | Needs |
 | --- | --- | --- |
-| `make test-unit` | 251 tests: parsing, grouping, wording, visibility, badge, icons, backoff, scheduler | gjs, gdk-pixbuf |
-| `make test-http` | 16 tests: the real libsoup transport against a stub server on loopback | gjs, python3 |
-| `make test-contract` | 32 tests: `/state` driven over fixture repositories | stock python3 |
+| `make test-unit` | 297 tests: parsing, grouping, wording, actions, visibility, badge, icons, backoff, scheduler | gjs, gdk-pixbuf |
+| `make test-http` | 39 tests: the real libsoup transport and the cycle POST, against a stub server | gjs, python3 |
+| `make test-contract` | 79 tests: `/state`, the cycle preflight and `POST /cycle`, over fixture repositories | stock python3 |
 | `make check-bundle` | the assembled extension loads: metadata, imports, compiled schema | gjs, glib |
-| `make smoke` | 56 checks in a nested headless GNOME Shell, plus screenshots | a GNOME machine |
+| `make smoke` | 78 checks in a nested headless GNOME Shell, plus screenshots | a GNOME machine |
 | `make test-install` | 39 checks: `install.sh` run for real, from a clean directory | dbus, zip |
 | `make test-pack` | the artefact is a function of the source alone, and `nix build` agrees | zip, nix |
 | `make test-release` | 19 checks: the release decision, over fixture releases lists | python3 |

@@ -52,9 +52,9 @@ mkdir -p "$STATE"
 # Each server prints the port it bound to on its first line of stdout, flushed, before serving.
 # Waiting for that line is the handshake: when it arrives, the server is listening.
 start_stub() {
-    local mode="$1" portfile="$STATE/$1.port"
+    local mode="$1" cycle_mode="${2:-started}" portfile="$STATE/$1.port"
     rm -f "$portfile"
-    python3 tests/stub-state-server.py --mode "$mode" \
+    python3 tests/stub-state-server.py --mode "$mode" --cycle-mode "$cycle_mode" \
         >"$portfile" 2>"$STATE/stub-$mode.err" &
     local pid=$!
     for _ in $(seq 1 100); do
@@ -72,7 +72,8 @@ RUNNING_PID=$(start_stub running)
 RUNNING_PORT=$(head -1 "$STATE/running.port")
 IDLE_PID=$(start_stub idle)
 IDLE_PORT=$(head -1 "$STATE/idle.port")
-ALL_BLOCKED_PID=$(start_stub all-blocked)
+# This one refuses a cycle at the heartbeat gate, which is what the override is for.
+ALL_BLOCKED_PID=$(start_stub all-blocked refused)
 ALL_BLOCKED_PORT=$(head -1 "$STATE/all-blocked.port")
 echo "   running cycle on 127.0.0.1:$RUNNING_PORT, idle box on 127.0.0.1:$IDLE_PORT,"
 echo "   a queue with every idea blocked on 127.0.0.1:$ALL_BLOCKED_PORT"

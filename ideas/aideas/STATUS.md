@@ -1,5 +1,5 @@
-status: in_progress
-version: 0.3
+status: done
+version: 0.4
 started_at: 2026-08-14T15:31:00+02:00
 last_session_id: 35386b06-271b-4df6-8da8-1c51dd289449
 last_run: 2026-08-18T01:39:40+02:00
@@ -107,10 +107,82 @@ failure modes are environmental — and therefore invisible to every headless te
       shows it, which is the honest reading of `started: true`. `orchestrator-secret` joins the
       schema and preferences as a password field, with the exposure stated plainly rather than
       dressed up. 297 unit tests green; flake check green.
-- [ ] U6 — the compositor: activating both items for real.
-- [ ] U7 — the bump to 0.4 and the docs.
+- [x] **U6 — the compositor.** The smoke test went from 56 checks to **78**, all green, and it
+      *activates* both items for real: `Check now` makes the box be read again and **the menu
+      stays open**; `Run a cycle` produces exactly one `POST /cycle`, without an override, with
+      the outcome rendered under the item and the menu still open; a refusal at the heartbeat
+      gate puts the box's own sentence on screen and offers `Run anyway`, which posts with
+      `override: true`; and against a running cycle the item is insensitive, says
+      `a cycle is already running` beneath itself, does nothing when activated — while
+      `Check now` stays live. Screenshots: `menu-actions.png`, `menu-refused.png`.
+      The probe gained `Activate(label)`, which works precisely because the items replace their
+      `activate` *method* instead of connecting to the signal that closes the menu — the risk
+      PLAN.md flagged, settled in the first attempt.
+      One older assertion was updated rather than kept: "Preferences is the only item that
+      reacts" is no longer true, and now reads "nothing in the queue reacts to a click".
+- [x] **U7 — the bump and the docs.** `version: 0.4` here, in `metadata.json` and in
+      `flake.nix`. `README.md` gains **The two things the menu does** — what each item is for,
+      the table of gates it can report, what `started` really means, what `Run anyway` will and
+      will not skip, and the secret's exposure stated plainly. `SETUP.md` gains **Letting the
+      panel start a cycle**: `ORCHESTRATOR_CYCLE_COMMAND`, why a sandboxed receiver needs it,
+      the polkit rule or the `--user` alternative, and a `curl` to check it by hand.
 
-Next: U6 — the compositor.
+Next: nothing — every unit is done. See **What 0.4 covers** below.
+
+## What 0.4 covers
+
+Two menu items, and the extension's first write. Green at 0.4:
+
+| Suite | Covers | Result |
+| --- | --- | --- |
+| `make test-unit` | the pure logic, now including the action items and the cycle client | **297 pass** |
+| `make test-http` | real libsoup, now including the POST and every status | **39 pass** |
+| `make test-contract` | `/state`, the preflight and `POST /cycle` over fixtures | **79 pass** |
+| `make smoke` | the extension in a nested headless GNOME Shell, clicking both items | **78 pass** |
+| `make test-pack` / `test-release` / `test-install` | the release path, untouched this entry | **7 / 19 / 39 pass** |
+| `nix flake check` | lint, unit, http, bundle | **4 green** |
+
+| What the entry asked for | Where it landed |
+| --- | --- |
+| A "check now" item that reports what it did | `Check now`, `Checking…` while out, menu stays open, backoff reset via `pollNow()` |
+| A "run a cycle" item that starts one or says why not | `Run a cycle` + `POST /cycle`, every gate reported in the orchestrator's words |
+| Insensitive when clicking could not work | with the reason beneath it; live on an `available: false` box, which is reachable |
+| `POST /cycle` deciding before it spawns | `request_cycle()` — one preflight, shared with `run()` |
+| Never talking to itself over HTTP | `heartbeat_from_file()`, with the no-server-listening regression test |
+| The launch owned by the deployment | `ORCHESTRATOR_CYCLE_COMMAND`, documented in `SETUP.md` |
+| Refusing a cycle that would fail on `claude` | `claude_missing_reason()`, default command only |
+| Authenticated as this system already authenticates writes | the existing `_authorized()` path; open when no secret is set |
+| A rate limit | 30 s server-side, plus a client that refuses two outstanding posts |
+| Both items decided as data | `menuModel` + `menuItems`; 21 tests over whole menus |
+| POST in the transport, phrases from codes | `post()` + `cycleClient.js`; 404 worded as an old box |
+| A launched cycle that never appears is said out loud | 45 s of brisk polling, then `The cycle exited without starting` |
+| The contract documents it | `docs/state-contract.md` is now the HTTP contract, not just `/state`'s |
+| Nothing spawns in a test | the spawn is one injected callable |
+| The override | `Run anyway`, after refusals at `allowed-hours` or `heartbeat` only |
+
+**The real run, by hand, as the plan asked.** Against a fresh receiver pointed at *this
+repository*, over real HTTP:
+
+- `POST /cycle` → `{"started": false, "gate": "lock", "reason": "A cycle is already running"}` —
+  correct, since the cycle that wrote this was running at the time — and `{"override": true}`
+  was refused at the same gate, which is the answered question's rule holding in reality.
+- `GET /state` kept working beside it, so the shared `lock_status()` refactor did not break it.
+- With `ORCHESTRATOR_CYCLE_COMMAND` pointed at a harmless `touch`, `POST /cycle` answered
+  `{"started": true, …, "command": "touch /tmp/aideas-spawn-proof"}` **and the command really
+  ran** — the file appeared. A second post one second later got `HTTP 429`
+  `a cycle was just launched, wait 28 s`.
+
+So the spawn path is proven end to end with a harmless command rather than by launching a paid
+cycle on top of the one that was running. What that leaves unproven is only whether a *real*
+`python3 orchestrator.py run` inherits a working environment on a given box — which is exactly
+what `ORCHESTRATOR_CYCLE_COMMAND` and the `claude` guard exist for, and what `SETUP.md` now
+explains.
+
+**One thing the screenshots say that is worth repeating.** `Check now` and `Run a cycle` sit
+adjacent and, when nothing is wrong, look alike — same weight, same size, one above the other.
+The labels are unmistakably different and the second one carries its refusal or its outcome
+beneath it, but if this button ever grows a mis-click problem, that adjacency is where it will
+come from.
 
 ### Answered questions, as read
 
