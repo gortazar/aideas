@@ -2,15 +2,25 @@
 # regenerated, so your changes to the real test command will stick.
 name: CI - quality-gate
 
+# What this idea delivers lives at this repo's root, not under ideas/quality-gate/:
+# the reusable workflow and the workflow that tags it. Both are in the path filter, so
+# editing sonar.yml re-runs the lint that would catch a broken one before six other
+# repositories start calling it.
 on:
   push:
     paths:
       - "ideas/quality-gate/**"
       - ".github/workflows/ci-quality-gate.yml"
+      - ".github/workflows/sonar.yml"
+      - ".github/workflows/tag-sonar.yml"
+      - ".github/workflows/sonar-aideas-repo.yml"
   pull_request:
     paths:
       - "ideas/quality-gate/**"
       - ".github/workflows/ci-quality-gate.yml"
+      - ".github/workflows/sonar.yml"
+      - ".github/workflows/tag-sonar.yml"
+      - ".github/workflows/sonar-aideas-repo.yml"
 
 jobs:
   test:
@@ -19,8 +29,18 @@ jobs:
       run:
         working-directory: ideas/quality-gate
     steps:
+      # check-wiring.sh reads the submodule working trees — the caller workflow and
+      # sonar-project.properties of five of the six projects live in them — so an
+      # unpopulated submodule has to be a checkout failure here, not a silent skip.
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: cachix/install-nix-action@v27
         with:
           extra_nix_config: "experimental-features = nix-command flakes"
+      # shellcheck over scripts/, sandboxed against this directory alone.
       - run: nix flake check
+      # actionlint over the workflows this idea owns, and check-wiring.sh over the
+      # whole checkout — both read files above ideas/quality-gate/, which the
+      # sandboxed check cannot see.
+      - run: nix run .#lint
