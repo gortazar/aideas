@@ -158,6 +158,62 @@ Two things to know, both about the box rather than the extension:
 - `HEARTBEAT_BIND_IP` and `HEARTBEAT_PORT` are what the extension has to be pointed at. If
   you changed the port from 8787, change it in the extension's preferences too.
 
+#### Letting the panel start a cycle
+
+The menu's *Run a cycle* posts to `/cycle` on the same receiver. It applies the gates a
+timer-fired cycle applies — the stop file, `allowed_hours`, the daily budget, the heartbeat,
+the lock — and reports which one refused, so a click that does nothing still says why.
+
+**How the cycle is launched is the box's decision, and on a sandboxed box you must make it.**
+`idea-heartbeat.service` deliberately runs with `ProtectSystem=strict`, `ProtectHome=yes`,
+`MemoryMax=128M` and no `PATH` carrying `claude`; a cycle forked from inside it would start,
+find no `claude`, and fail every agent. So point it at systemd instead:
+
+```bash
+# In /etc/idea-agent.env, read by idea-heartbeat.service
+ORCHESTRATOR_CYCLE_COMMAND="systemctl start idea-orchestrator.service"
+```
+
+That makes systemd, not the receiver, supply the cycle's `PATH`, its home directory and its
+timeouts — the same environment a timer-fired cycle gets. The cost is a permission: the
+receiver's user must be allowed to start that unit. Either run the receiver as a user with a
+polkit rule for it:
+
+```
+# /etc/polkit-1/rules.d/50-idea-orchestrator.rules
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") == "idea-orchestrator.service" &&
+        subject.user == "CHANGEME_USER")
+        return polkit.Result.YES;
+});
+```
+
+or use the `--user` units and `ORCHESTRATOR_CYCLE_COMMAND="systemctl --user start
+idea-orchestrator.service"`, which needs no polkit rule at all.
+
+If you leave it unset, the receiver starts a detached `python3 orchestrator.py run` itself,
+which is right for a box that runs the receiver *outside* that sandbox — for instance one where
+you start it by hand. It refuses to do so when `claude` is not on the `PATH` it would hand the
+cycle, rather than burning a cycle to discover it.
+
+Two more optional settings: `HEARTBEAT_SHARED_SECRET` also protects this endpoint (the panel
+sends it, as the heartbeat hook does; without one the endpoint is as open as `/heartbeat`), and
+`ORCHESTRATOR_CYCLE_MIN_SECONDS` (default 30) is the shortest gap between two launches.
+
+Check it by hand before trusting the button:
+
+```bash
+curl -s -X POST -H 'Content-Type: application/json' \
+  -d "{\"secret\":\"$ORCHESTRATOR_HEARTBEAT_SECRET\"}" \
+  http://<box-vpn-ip>:8787/cycle
+# {"started": false, "gate": "lock", "reason": "A cycle is already running"}
+```
+
+A `404` means the box is older than the extension; `started: true` means *launched*, not
+finished — the cycle re-checks its own gates and may still exit, which is why the panel keeps
+watching `/state` afterwards.
+
 To check what the extension will see, from the laptop, without installing anything:
 
 ```bash

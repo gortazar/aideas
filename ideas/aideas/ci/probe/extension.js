@@ -44,6 +44,13 @@ const IFACE = `
       <arg type="s" name="path" direction="in"/>
       <arg type="s" name="result" direction="out"/>
     </method>
+    <!-- Activate the menu item whose first label is this, and say what happened. The items
+         that act replace their own activate() method rather than emitting the signal that
+         closes the menu, which is exactly why this can call it directly. -->
+    <method name="Activate">
+      <arg type="s" name="label" direction="in"/>
+      <arg type="s" name="result" direction="out"/>
+    </method>
     <!-- One half of an enable/disable round. The rounds are driven from outside, one call at a
          time with a wait between them: disabling and re-enabling within a single main-loop
          iteration leaves ExtensionManager's bookkeeping out of step with reality, and the
@@ -195,6 +202,23 @@ export default class AideasProbe extends Extension {
         Main.overview.hide();
         indicator.menu.open();
         return indicator.menu.isOpen ? 'ok' : 'error: the menu did not open';
+    }
+
+    Activate(label) {
+        const indicator = this._indicator;
+        if (indicator === null)
+            return 'error: the aideas indicator is not in the panel';
+
+        for (const item of indicator.menu._getMenuItems?.() ?? []) {
+            const labels = labelsOf(item);
+            if (labels[0] !== label)
+                continue;
+            if (item.reactive !== true)
+                return 'insensitive';
+            item.activate(null);
+            return 'activated';
+        }
+        return `error: no item labelled "${label}"`;
     }
 
     CloseMenu() {

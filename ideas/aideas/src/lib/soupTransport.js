@@ -40,6 +40,26 @@ const IO_ERROR_REASONS = new Map([
     [Gio.IOErrorEnum.INVALID_ARGUMENT, 'the address could not be used'],
 ]);
 
+/**
+ * The reply's status, as a number.
+ *
+ * `message.get_status()` marshals its return through libsoup's `Status` *enumeration*, and that
+ * enumeration does not contain every status a server may send: a 429 makes GJS throw "429 is not
+ * a valid value for enumeration Status" — inside the async callback, where the throw settles
+ * nothing and the request hangs for ever. The `status-code` property is the same value without
+ * the marshalling, and a proxy answering 429 or 451 is not a reason to wedge the poller.
+ */
+function statusOf(message) {
+    const code = message.status_code;
+    if (Number.isInteger(code) && code > 0)
+        return code;
+    try {
+        return message.get_status();
+    } catch {
+        return 0; // unknowable: the caller reports it as a failed request
+    }
+}
+
 /** An Error the client will turn into an unreachable reading. */
 function transportError(reason, cause = null) {
     const error = new Error(`aideas: ${reason}`);
@@ -94,6 +114,20 @@ export class SoupTransport {
      * @returns {Promise<{status: number, body: string}>}
      */
     send(url, timeoutSeconds) {
+        return this._request('GET', url, null, timeoutSeconds);
+    }
+
+    /**
+     * POST `body` (a string, sent as JSON) to `url`, giving up after `timeoutSeconds`.
+     *
+     * The same deadlines and the same reason-mapping as a GET, because the failures are the
+     * same failures: a box asleep behind a VPN does not care which verb was used.
+     */
+    post(url, body, timeoutSeconds) {
+        return this._request('POST', url, body, timeoutSeconds);
+    }
+
+    _request(method, url, body, timeoutSeconds) {
         return new Promise((resolve, reject) => {
             if (this._session === null) {
                 reject(transportError('the extension is shutting down'));
@@ -102,7 +136,7 @@ export class SoupTransport {
 
             let message;
             try {
-                message = Soup.Message.new('GET', url);
+                message = Soup.Message.new(method, url);
             } catch (error) {
                 reject(transportError('the address could not be used', error));
                 return;
@@ -115,6 +149,11 @@ export class SoupTransport {
 
             // A cache would be worse than useless here: the whole point is what is true now.
             message.request_headers.append('Cache-Control', 'no-cache');
+
+            if (body !== null) {
+                message.set_request_body_from_bytes(
+                    'application/json', new GLib.Bytes(new TextEncoder().encode(body)));
+            }
 
             const cancellable = new Gio.Cancellable();
             let settled = false;
@@ -153,7 +192,7 @@ export class SoupTransport {
                         return;
                     }
 
-                    const status = message.get_status();
+                    const status = statusOf(message);
                     const data = bytes?.get_data() ?? null;
 
                     if (data !== null && data.length > MAX_BODY_BYTES) {

@@ -157,7 +157,7 @@
       packages = forAllSystems (pkgs: {
         default = pkgs.stdenv.mkDerivation {
           pname = "aideas-shell-extension";
-          version = "0.3";
+          version = "0.4";
           src = sourceFor pkgs;
           nativeBuildInputs = [ pkgs.glib pkgs.gjs pkgs.gnumake pkgs.zip ];
           buildPhase = ''

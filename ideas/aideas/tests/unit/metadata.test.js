@@ -42,7 +42,7 @@ suite('metadata.json', () => {
     });
 
     test('carries a version-name matching the idea version', () => {
-        assertEquals(metadata['version-name'], '0.3');
+        assertEquals(metadata['version-name'], '0.4');
     });
 
     test('has no version key, which the Shell assigns and EGO rejects by hand', () => {

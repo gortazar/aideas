@@ -202,6 +202,77 @@ function failureMessage(reading, host) {
     }
 }
 
+/** Gates a `Run anyway` may get past. The rest are about safety, not convenience. */
+const OVERRIDABLE_GATES = ['allowed-hours', 'heartbeat'];
+
+/**
+ * The two things in this menu that do something, and the third that appears when one of them
+ * is refused for a reason a person can decide to ignore.
+ *
+ * Every one of them carries why it cannot be clicked, because an item that is simply grey is
+ * indistinguishable from a broken one. And every outcome of a click stays on screen as the
+ * item's detail line: a click whose only visible effect is nothing at all is exactly the
+ * failure the "Run a cycle" button has to avoid.
+ */
+function actionItems(reading, actions) {
+    const { refreshing = false, cycleInFlight = false, cycleOutcome = null } = actions ?? {};
+    const unconfigured = reading.status === Status.UNCONFIGURED;
+    const unreachable = reading.status === Status.UNREACHABLE;
+    const running = reading.status === Status.OK && reading.running;
+
+    const items = [];
+
+    items.push({
+        action: 'refresh',
+        label: refreshing ? 'Checking…' : 'Check now',
+        // The header's own "updated just now" is the answer to this click, so this line only
+        // ever explains a *refusal* to act.
+        detail: unconfigured ? 'no orchestrator address is set' : null,
+        sensitive: !refreshing && !unconfigured,
+    });
+
+    const cycleDetail = () => {
+        if (cycleInFlight)
+            return null;
+        if (cycleOutcome === null)
+            return null;
+        if (cycleOutcome.started)
+            return 'asked the box to start one';
+        return cycleOutcome.reason;
+    };
+
+    let blocked = null;
+    if (cycleInFlight)
+        blocked = null; // the label already says it
+    else if (unconfigured)
+        blocked = 'no orchestrator address is set';
+    else if (unreachable)
+        blocked = 'the box cannot be reached';
+    else if (running)
+        blocked = 'a cycle is already running';
+
+    items.push({
+        action: 'cycle',
+        label: cycleInFlight ? 'Cycle starting…' : 'Run a cycle',
+        detail: blocked ?? cycleDetail(),
+        sensitive: !cycleInFlight && !unconfigured && !unreachable && !running,
+    });
+
+    // Only after a refusal, and only for the gates that are about *when* it is convenient to
+    // build. A pause, a spent budget or a held lock are not things to click past.
+    const refusedGate = cycleOutcome && !cycleOutcome.started ? cycleOutcome.gate : null;
+    if (!cycleInFlight && OVERRIDABLE_GATES.includes(refusedGate)) {
+        items.push({
+            action: 'override',
+            label: 'Run anyway',
+            detail: 'ignores the schedule and the laptop heartbeat',
+            sensitive: true,
+        });
+    }
+
+    return items;
+}
+
 /**
  * Build the whole menu.
  *
@@ -210,9 +281,12 @@ function failureMessage(reading, host) {
  * current attempt failed, the menu shows that earlier reading marked stale beneath the
  * failure, rather than emptying itself and losing the last thing anybody knew.
  */
-export function buildMenu({ reading, now, fetchedAt = null, lastGood = null, host = null }) {
+export function buildMenu({
+    reading, now, fetchedAt = null, lastGood = null, host = null, actions = null,
+}) {
     if (reading.status === Status.OK) {
         return {
+            actions: actionItems(reading, actions),
             header: {
                 text: cycleText(reading, now),
                 detail: readingDetail(reading, now, fetchedAt),
@@ -239,6 +313,7 @@ export function buildMenu({ reading, now, fetchedAt = null, lastGood = null, hos
 
     if (lastGood === null || !lastGood.reading || lastGood.reading.status !== Status.OK) {
         return {
+            actions: actionItems(reading, actions),
             header: { text: 'No reading yet', detail: null },
             sections: [],
             message,
@@ -248,6 +323,7 @@ export function buildMenu({ reading, now, fetchedAt = null, lastGood = null, hos
     }
 
     return {
+        actions: actionItems(reading, actions),
         header: {
             text: cycleText(lastGood.reading, now),
             detail: readingDetail(lastGood.reading, now, lastGood.fetchedAt, { stale: true }),

@@ -15,9 +15,16 @@ The behaviour of each path is what a test needs to provoke:
     /state-huge         a 200 with a body far too large to be a queue
     /state-slow         a 200 that arrives after --slow seconds, to be timed out
     /state-500          a server error
+    /state-429          a status libsoup's Status enumeration does not contain
     /other              valid JSON that is not /state, like a wrong port
     /requests           how many state reads have been served, which is how the smoke test
                         proves a disabled extension left no timer behind still polling
+    /cycles             every POST /cycle this server received, as JSON — which is how a test
+                        knows the button really sent something, and what it sent
+
+POST /cycle answers whatever --cycle-mode says, so a test can have a box that starts a cycle,
+one that refuses at a named gate, one that predates the endpoint (404), one that rejects the
+secret (401) and one that rate-limits (429).
 """
 import argparse
 import json
@@ -89,9 +96,28 @@ ALL_BLOCKED = {
 }
 
 
+# What POST /cycle answers, per --cycle-mode. The shapes are the ones docs/state-contract.md
+# specifies, so an extension that copes with these copes with the real box.
+CYCLE_REPLIES = {
+    "started": (200, {"started": True, "gate": None, "reason": None,
+                      "command": "python3 orchestrator.py run"}),
+    "refused": (200, {"started": False, "gate": "heartbeat",
+                      "reason": "A Claude Code session is active on this laptop"}),
+    "paused": (200, {"started": False, "gate": "stop-file",
+                     "reason": "Paused: .orchestrator/stop exists"}),
+    "unsupported": (404, None),
+    "unauthorised": (401, None),
+    "rate-limited": (429, {"started": False, "gate": "rate-limit",
+                           "reason": "a cycle was just launched, wait 24 s"}),
+    "garbage": (200, "<html>not an answer</html>"),
+}
+
+
 def make_handler(options):
     # Counts every /state* read. /requests itself is not a read, so a test can poll it freely.
     served = {"count": 0}
+    # Every POST /cycle, in order, with what it carried.
+    cycles = []
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -109,6 +135,9 @@ def make_handler(options):
 
             if path == "/requests":
                 self._send(200, json.dumps(served))
+                return
+            if path == "/cycles":
+                self._send(200, json.dumps(cycles))
                 return
             if path.startswith("/state"):
                 served["count"] += 1
@@ -139,10 +168,38 @@ def make_handler(options):
                 self._send(200, json.dumps(dict(RUNNING, cycle_started_at=time.time())))
             elif path == "/state-500":
                 self._send(500, "boom", "text/plain")
+            elif path == "/state-429":
+                # A status outside libsoup's Status enumeration: reading it through
+                # get_status() throws inside the async callback and hangs the request.
+                self._send(429, "slow down", "text/plain")
             elif path == "/other":
                 self._send(200, json.dumps({"last_ts": 0, "stale_seconds": 12}))
             else:
                 self._send(404, "not found", "text/plain")
+
+        def do_POST(self):  # noqa: N802 — the BaseHTTPRequestHandler spelling
+            path = self.path.split("?", 1)[0]
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            raw = self.rfile.read(length) if length else b""
+            try:
+                payload = json.loads(raw or b"{}")
+            except json.JSONDecodeError:
+                payload = {"unparseable": raw.decode("utf-8", "replace")}
+
+            if path != "/cycle":
+                self._send(404, "not found", "text/plain")
+                return
+
+            cycles.append({"body": payload,
+                           "content_type": self.headers.get("Content-Type", "")})
+
+            status, body = CYCLE_REPLIES[options.cycle_mode]
+            if body is None:
+                self._send(status, "", "text/plain")
+            elif isinstance(body, str):
+                self._send(status, body, "text/html")
+            else:
+                self._send(status, json.dumps(body))
 
         def log_message(self, fmt, *args):
             pass  # quiet: the test's output is the test's
@@ -158,6 +215,8 @@ def main():
                         help="exact body to return from /state")
     parser.add_argument("--slow", type=float, default=30.0,
                         help="seconds /state-slow waits before answering")
+    parser.add_argument("--cycle-mode", choices=tuple(CYCLE_REPLIES), default="started",
+                        help="what POST /cycle answers")
     parser.add_argument("--mode", choices=("running", "idle", "all-blocked"),
                         default="running",
                         help="what /state reports: a running cycle, an idle box with a blocked "

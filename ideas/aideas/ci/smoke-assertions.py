@@ -78,6 +78,20 @@ def served(port):
         return json.load(response)["count"]
 
 
+def posted(port):
+    """Every POST /cycle that stub received, in order, with what it carried."""
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/cycles", timeout=10) as response:
+        return json.load(response)
+
+
+def item_labelled(panel, first_label):
+    """The menu item whose first label is this, or None."""
+    for item in panel["items"]:
+        if item["labels"] and item["labels"][0] == first_label:
+            return item
+    return None
+
+
 class Settings:
     """The extension's own GSettings, in the nested session's dconf."""
 
@@ -241,10 +255,16 @@ def main():
           "the queued idea says what it is behind", joined)
     check("Preferences" in labels, "the menu offers Preferences", joined)
 
-    reactive = [item for item in panel["items"] if item["reactive"]]
-    check(len(reactive) == 1 and "Preferences" in reactive[0]["labels"],
-          "Preferences is the only item that reacts — rows are read-only",
-          f"{len(reactive)} reactive items: {[i['labels'] for i in reactive]}")
+    # Rows and questions are read-only: answering a blocked idea means editing PLAN.md on the
+    # box. Since 0.4 the menu also has items that *do* act, so the rule is no longer "only
+    # Preferences reacts" but "nothing from the queue does".
+    may_react = {"Check now", "Run a cycle", "Run anyway", "Preferences"}
+    reactive = [item["labels"][0] for item in panel["items"]
+                if item["reactive"] and item["labels"]]
+    check(set(reactive) <= may_react,
+          "nothing in the queue reacts to a click — only the actions and Preferences",
+          f"reactive: {reactive}")
+    check("Preferences" in reactive, "and Preferences is one of the ones that does")
 
     probe("CloseMenu")
     probe("ShootMenu", f"{options.screenshots}/menu-running.png")
@@ -297,6 +317,100 @@ def main():
     check(any("STATUS.md says blocked" == text for text in labels),
           "and an idea blocked without questions reads exactly as it always did", joined)
     probe("CloseMenu")
+
+    # --- the two buttons ---------------------------------------------------------------------
+    #
+    # The unit this entry turns on: a click that reaches the box, an answer that stays on
+    # screen, and a menu that does not dismiss itself while showing it.
+    print("\ntwo buttons, in a real menu")
+    settings.point_at(options.idle_port)
+    wait_until(lambda: describe().get("icon") == "aideas-bulb-blocked-symbolic", 40,
+               what="the idle box's reading")
+    settings.set("always-show", "true")
+    wait_until(lambda: describe().get("visible") is True, 25, what="the button")
+    probe("OpenMenu")
+    panel = describe()
+
+    check(item_labelled(panel, "Check now") is not None,
+          "there is a Check now item", " | ".join(menu_labels(panel)))
+    cycle_item = item_labelled(panel, "Run a cycle")
+    check(cycle_item is not None, "and a Run a cycle item")
+    check(cycle_item is not None and cycle_item["reactive"] is True,
+          "which can be clicked on an idle box")
+    check(item_labelled(panel, "Run anyway") is None,
+          "and no Run anyway until something has been refused")
+
+    print("\nCheck now")
+    before = served(options.idle_port)
+    check(probe("Activate", "Check now") == "activated", "the item activates")
+    after = wait_until(lambda: served(options.idle_port) > before, 25, what="a fresh read")
+    check(after is not None, "and the box is read again",
+          f"served {before} before the click")
+    check(describe().get("menuOpen") is True,
+          "and the menu stays open, which is the whole point of the click")
+
+    print("\nRun a cycle")
+    probe("OpenMenu")
+    check(probe("Activate", "Run a cycle") == "activated", "the item activates")
+    posts = wait_until(lambda: posted(options.idle_port) or None, 25, what="the POST")
+    check(posts is not None and len(posts) == 1, "the box receives exactly one POST /cycle",
+          f"{posts!r}")
+    check(posts is not None and posts[0]["body"].get("override") is None,
+          "without an override, since none was asked for")
+    check(describe().get("menuOpen") is True, "and the menu is still open")
+    detail = wait_until(
+        lambda: (item_labelled(describe(), "Run a cycle") or {}).get("labels", [None, None])[1:],
+        25, what="the outcome line")
+    check(detail is not None and any("asked the box" in text for text in detail),
+          "and the item says what came back", f"{detail!r}")
+    probe("ShootMenu", f"{options.screenshots}/menu-actions.png")
+    time.sleep(3)
+    probe("CloseMenu")
+
+    print("\na cycle that is refused")
+    settings.point_at(options.all_blocked_port)
+    wait_until(lambda: describe().get("icon") == "aideas-bulb-all-blocked-symbolic", 40,
+               what="the all-blocked reading")
+    probe("OpenMenu")
+    check(probe("Activate", "Run a cycle") == "activated", "the item activates")
+
+    refusal = wait_until(
+        lambda: item_labelled(describe(), "Run anyway"), 25, what="the override to appear")
+    check(refusal is not None,
+          "a refusal at the heartbeat gate offers Run anyway", " | ".join(menu_labels(describe())))
+    labels = menu_labels(describe())
+    check(any("Claude Code session is active" in text for text in labels),
+          "and the box's own sentence is on screen", " | ".join(labels))
+    probe("ShootMenu", f"{options.screenshots}/menu-refused.png")
+    time.sleep(3)
+
+    before_posts = len(posted(options.all_blocked_port))
+    check(probe("Activate", "Run anyway") == "activated", "Run anyway activates")
+    overridden = wait_until(
+        lambda: [p for p in posted(options.all_blocked_port)[before_posts:]
+                 if p["body"].get("override") is True] or None,
+        25, what="the overriding POST")
+    check(overridden is not None, "and posts with override: true",
+          f"{posted(options.all_blocked_port)!r}")
+    probe("CloseMenu")
+
+    print("\nwhile a cycle is already running")
+    settings.point_at(options.running_port)
+    wait_until(lambda: describe().get("icon") == "aideas-bulb-running-symbolic", 40,
+               what="the running reading")
+    probe("OpenMenu")
+    running_item = item_labelled(describe(), "Run a cycle")
+    check(running_item is not None and running_item["reactive"] is False,
+          "Run a cycle cannot be clicked", f"{running_item!r}")
+    check(running_item is not None
+          and any("already running" in text for text in running_item["labels"]),
+          "and says why, under the item itself", f"{running_item!r}")
+    check(probe("Activate", "Run a cycle") == "insensitive",
+          "so activating it does nothing at all")
+    check(item_labelled(describe(), "Check now")["reactive"] is True,
+          "while Check now stays live — resetting the backoff is what it is for")
+    probe("CloseMenu")
+    settings.set("always-show", "false")
 
     # --- the button follows the cycle ------------------------------------------------------
     print("\nthe button follows the cycle (the answered open question)")

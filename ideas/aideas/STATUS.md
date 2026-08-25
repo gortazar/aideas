@@ -1,5 +1,5 @@
-status: not_started
-version: 0.3
+status: done
+version: 0.4
 started_at: 2026-08-14T15:31:00+02:00
 last_session_id: 35386b06-271b-4df6-8da8-1c51dd289449
 last_run: 2026-08-18T01:39:40+02:00
@@ -20,105 +20,180 @@ contract, the orchestrator that serves it and the extension that renders it, plu
 first shipped image assets, whose one hard requirement (that GNOME recolours them like stock
 symbolic icons) can only be confirmed in a real compositor.
 
-## This entry (0.3) — a grey bulb, and the questions behind "blocked"
+Difficulty estimate: **medium**, as PLAN.md said. "Check now" is plumbing over machinery that
+already exists; "Run a cycle" makes the extension *write* for the first time, to an endpoint
+that spends real money, whose launch path differs between the box and this laptop and whose
+failure modes are environmental — and therefore invisible to every headless test.
 
-- [x] **U1 — the server side.** `/state` now carries the questions, not just how many.
-      `open_question_lines()` in `orchestrator.py` is the single reader of a `PLAN.md`'s
-      `## Open Questions` section, and `count_open_questions()` is now literally the length of
-      what it returns — so the count a menu shows and the texts it lists cannot disagree. Each
-      question is folded to one line (the lines it was wrapped across joined, whitespace
-      collapsed, the checkbox and markdown emphasis stripped, cut at a word boundary to 200
-      characters with an ellipsis), and at most 5 are attached to a row as
-      `open_question_texts` while `open_questions` stays whole, so a reader can say "+n more".
-      `docs/state-contract.md` states the key, its bounds and its absent-rather-than-null rule,
-      and turns the old "about 120 bytes per idea" estimate into a stated ~1 KiB per-row bound.
-      `tests/test_state_contract.py`: 24 → **32 tests**, covering a wrapped question, emphasis
-      versus identifiers (`IDEAS_REPO_PATH` survives, `**bold**` does not), an over-long
-      question, more questions than the cap, a ticked/unticked mixture, a question ending at the
-      next heading, and a case asserting the count and the texts come from one reader.
-      Checked against the repo's real `PLAN.md` files: `vacas`'s one open question folds to 197
-      characters, cut at a word boundary.
-- [x] **U2 — parsing it, hostilely.** `state.js` reads the key into `row.openQuestionTexts`,
-      always an array so a caller never has to ask first. Every wrong shape the wire could hold
-      becomes an empty list rather than a throw — absent (an old box against a new extension),
-      null, a string instead of an array, an object, non-string members, blank members — and the
-      server's own bounds are applied again here: newlines collapsed (a newline in a menu row
-      breaks the row), 300 characters per question, 5 questions per row. Not distrust of the box
-      so much as of the *pairing*: laptop and box are updated at different times. 8 tests; 213
-      gjs tests green.
-- [x] **U3 — the questions in the menu.** `menuModel.js` attaches up to three questions to each
-      blocked row (each cut at a word boundary to 120 characters, which is what makes "at most two
-      rendered lines" true without the model knowing the menu's width) plus how many are not
-      shown, counted against the *whole* `open_questions` rather than just what the server sent.
-      `menuItems.js` emits them as `question` items immediately after their row, inside the same
-      block — never separated from the idea they are about by a separator — and a `question-more`
-      item for the remainder. `indicator.js` renders them indented, dimmed, wrapped at word
-      boundaries and non-reactive; `stylesheet.css` keeps them narrow enough to wrap rather than
-      stretch the menu. Only blocked rows ever list questions.
-      15 tests, comparing whole menus: three shown of seven with `+4 more`, a blocked row with no
-      questions rendering exactly as before, a row from a box that never sent texts, two blocked
-      ideas keeping their own, questions present behind a running cycle, and dimmed along with
-      everything else in a stale last-good reading. 228 gjs tests green; flake check green.
-- [x] **U4 — the bulbs.** `src/extension/icons/` ships four SVGs on the 16px Adwaita grid, one
-      colour and that colour `currentColor`, named `-symbolic.svg` — which is the suffix the
-      shell's texture cache looks for before recolouring rather than blitting. `ICONS` keeps its
-      shape (a state-to-name map, one lookup, still pure): the four *queue* states point at
-      bulbs, and `unreachable`/`unavailable`/`unconfigured` keep their stock glyphs, per the
-      answered question. `indicator.js` resolves a shipped name to a `Gio.FileIcon` under the
-      extension's own `icons/`, and a stock name through the icon theme as before.
-      The four were drawn, rendered and **looked at** at 16 and 64 px before being kept: the
-      first attempt had a visibly smaller glass for `running`, which would have made the button
-      appear to shrink whenever a cycle started. All four now share one glass and base, and
-      differ only in the drawing: rays (running), a question punched through the glass
-      (blocked), hollow (idle), struck through (all blocked).
-      12 tests assert what recolouring depends on — the `-symbolic` name, no hex or named
-      colour anywhere, `currentColor`, the 16px viewBox, no embedded raster or script — plus
-      that every name in `ICONS` is a file that ships and every shipped file is named by
-      `ICONS`. `tools/check-bundle.js` imports the bundle's own icon map and fails if a named
-      icon did not ship, because that failure is otherwise a silent blank square; **verified by
-      deleting one from a built bundle and watching it fail**. 239 gjs tests green.
-- [x] **U5 — `allBlocked`.** A queue where nothing can move without a person is now its own
-      panel state: the reading is good, no cycle is running, at least one idea is blocked, and
-      there is nothing the orchestrator could pick up. `queued` deliberately does not count as
-      work — a duplicate entry behind a blocked one is stuck too — while `ready`, `running` and
-      `to be planned` do, and so does a state word this version does not recognise, because
-      declaring the whole queue stuck on the strength of a word we do not understand would be
-      worse than saying nothing. It wears the struck-through bulb, badges the number of blocked
-      ideas, and reads as `aideas: every idea is blocked, 3 waiting for an answer`.
-      It also **summons the button by itself**, the second answered question: this state is
-      never "running", so under the old rule alone it could never have been seen. 10 tests, all
-      of them boundaries: one ready idea among blocked ones, a queued duplicate, an unplanned
-      idea, an empty queue, a running cycle, an unknown state, and an unreachable box.
-      The menu header still says `Idle` for such a queue — accurate, and the Blocked section
-      right beneath it lists every idea and its questions. Changing that wording was not part of
-      this entry.
-- [x] **U6 — the compositor, where this entry's real risk lived.** The smoke test grew from 39
-      checks to **56**, all green: the panel wears the shipped bulb and *resolved to the file*;
-      its pixels are drawn, light and grey — proving the SVG is recoloured to the panel
-      foreground rather than blitted; the questions appear under their blocked idea; the
-      all-blocked bulb appears **without a cycle running and without "always show"**, badged 3,
-      with `+2 more` under the idea that has five questions and `STATUS.md says blocked`
-      unchanged under the one that has none. Screenshots for each.
-      **The screenshots did their job twice.** First: at 16px the original solid bulbs read as a
-      cog, and running and all-blocked were indistinguishable — so all four were redrawn as
-      outline bulbs, where the hollow interior carries the mark. Second, and worse: after the
-      redraw the panel looked *exactly the same*, which is how it came out that the shell had
-      never rendered these files at all. A leading `<!-- -->` comment pushes `<svg>` past
-      gdk-pixbuf's format sniffing, the loader refuses the file, and the shell silently
-      substitutes a fallback icon with nothing logged. Every unit test above passed throughout.
-      Now: the comments live inside the element; two unit tests catch it (nothing may stand
-      between the top of the file and `<svg>`, and every icon must actually rasterise through
-      the same loader the shell uses, for which the flake's `unit` check gained gdk-pixbuf and
-      librsvg); and the smoke test compares the icon's pixels between two states, because a
-      fallback icon is drawn, light and grey too — the one thing it cannot be is *different*
-      between states.
-- [x] **U7 — the bump and the docs.** `version: 0.3` here, in `metadata.json` and in
-      `flake.nix` — the three the release workflow asserts agree. `README.md` gains a **The
-      bulb** section (what each drawing means, and why it is grey), says that the menu lists
-      what a blocked idea is waiting to be told, and records the widened visibility rule and the
-      new test counts.
+## This entry (0.4) — two buttons, and the extension's first write
 
-Next: nothing — every unit is done. See **What 0.3 covers** below.
+- [x] **U1 — one preflight, shared.** `cycle_preflight(repo, heartbeat=…, override=…)` in
+      `orchestrator.py` applies the gates in the order `run()` applied them — stop file,
+      `allowed_hours`, budget, heartbeat, lock — and returns the gate that refused plus a
+      sentence written to be *shown*, not only logged. `run()` now calls it, so a button can
+      never name a gate the run path does not apply.
+      Three supporting pieces: `lock_status()`, now the single reader of the lock's metadata
+      (shared with `GET /state`, so "a cycle is running" cannot mean two things);
+      `heartbeat_from_file()`, which is how the endpoint observes the laptop **without calling
+      its own socket** — the receiver is a single-threaded `HTTPServer`, so a handler asking its
+      own `/status` would block, time out and report "cannot tell" every time; and
+      `claude_missing_reason()`, the cheapest guard against 0.2's failure shape.
+      `laptop_is_idle()` became `heartbeat_over_http()` returning three states, because "a
+      session is active" and "I cannot tell" are different sentences to show someone who just
+      pressed a button. The **override** is here too, per the answered question: it skips the
+      gates about *when* it is convenient (hours, heartbeat) and never those about whether it is
+      safe (stop file, budget, lock).
+      `tests/test_cycle_preflight.py`: **26 tests** — every gate, the order with everything wrong
+      at once, each override boundary, the heartbeat file's three readings, and the regression the
+      plan asked for by name: the preflight passing the heartbeat gate with no server listening.
+      It caught a real defect in my own code — `env or os.environ` treated an *empty* child
+      environment as "no environment given" and would have checked the server's own PATH.
+      58 python tests green; also run against the live repo, where it reported the real cycle's
+      lock and refused an override at it.
+- [x] **U2 — `POST /cycle`.** New in `heartbeat_server.py`, and the extension's first write.
+      `request_cycle()` is the whole endpoint except the HTTP — authorisation through the
+      existing `_authorized()` path (open when no secret is set, per the answered question), the
+      shared preflight with the *file-based* heartbeat, the `claude`-on-`PATH` guard for the
+      default command only, a 30 s rate limit, and a response that is small and total:
+      `{started, gate, reason}`. A gate saying no is a **200**, not an error; 401 for a wrong
+      secret, 429 for the rate limit, 404 for a box that predates this. `started: true` means
+      *launched*, never finished.
+      The launch is an **injected callable**, so nothing spawns in a test: 33 tests assert that a
+      launch was requested with the right argv and environment, that a configured
+      `ORCHESTRATOR_CYCLE_COMMAND` is used verbatim and *not* second-guessed by the claude guard
+      (a `systemctl` call legitimately has no claude on its own PATH), that a failed launch
+      answers instead of 500ing, and that a refused request does not start the rate-limit clock.
+      `docs/state-contract.md` is now the orchestrator's HTTP contract rather than just
+      `/state`'s: the request shape, the two-field response, the whole gate vocabulary, the
+      statuses, the rate limit, and what actually gets started. 79 python tests green.
+- [x] **U3 — POST, and the phrases a failure maps to.** `soupTransport.js` grew a `post()` with
+      a JSON body, sharing the GET path's two deadlines and its code-to-phrase mapping, because
+      the failures are the same failures. `src/lib/cycleClient.js` turns one attempt into
+      `{started, gate, reason}`, never rejects, refuses to have two posts outstanding, and keeps
+      the two answers that must never be confused apart: a box that *refused* (its own words,
+      passed through, unfamiliar gates included) and a box that never heard (worded here, from
+      statuses and GError codes — 404 as `this box does not support starting cycles`, since that
+      is an un-updated box and not the user's mistake).
+      23 unit tests and **10 new http tests** against the stub, which gained `POST /cycle` in six
+      modes and a `/cycles` log so a test can see what the button actually sent.
+      **The http tests found a bug in the code this entry only touched in passing:** 429 is not a
+      member of libsoup's `Status` enumeration, so `message.get_status()` threw inside the async
+      callback — where a throw settles no promise — and the request hung for ever. That was
+      already true of every GET, so a proxy answering 429 would have wedged the poller silently.
+      It reads `message.status_code` now, with a regression test on the GET path. 276 unit + 39
+      http tests green.
+- [x] **U4 — the two items, as data.** `menuModel.js` decides them from the reading, the
+      in-flight state and the last outcome; `menuItems.js` emits `action` items in their own
+      block above Preferences. `Check now` goes insensitive as `Checking…` while a poll is out
+      and stays live while a cycle runs — resetting the backoff is the point of it. `Run a
+      cycle` reads `Cycle starting…` while its post is out, is insensitive with the reason as
+      its detail line when clicking could not possibly work (a cycle already running, nothing to
+      post to), and stays **live** on a box answering `available: false`, which is reachable and
+      can be told to try. A refusal shows the box's own sentence and can be tried again; a
+      launch says `asked the box to start one`, never that a cycle is running.
+      `Run anyway` — the answered question — appears only after a refusal at a gate about *when*
+      it is convenient (`allowed-hours`, `heartbeat`) and is asserted absent for all eleven
+      other gates, including `budget` and `stop-file`. 21 tests; four existing layout
+      expectations updated, since the menu genuinely gained items. 297 unit tests green.
+- [x] **U5 — the widgets, and the secret.** `indicator.js` gained one `action` case. **The menu
+      stays open**: GNOME closes a popup when an item emits `activate`, and both of these items
+      exist to show what happened — a refresh that dismisses the menu hides the very line it was
+      clicked for. So the item's `activate` *method* is replaced rather than its signal
+      connected: pointer and keyboard both still reach it, and nothing tells the menu to go
+      away. `extension.js` wires `refresh` to `scheduler.pollNow()` (which resets the backoff)
+      and `cycle`/`override` to the client, keeping the in-flight state the menu is built from,
+      and — after a launch — polls briskly for 45 s and says
+      `The cycle exited without starting — check the journal on the box` if the queue never
+      shows it, which is the honest reading of `started: true`. `orchestrator-secret` joins the
+      schema and preferences as a password field, with the exposure stated plainly rather than
+      dressed up. 297 unit tests green; flake check green.
+- [x] **U6 — the compositor.** The smoke test went from 56 checks to **78**, all green, and it
+      *activates* both items for real: `Check now` makes the box be read again and **the menu
+      stays open**; `Run a cycle` produces exactly one `POST /cycle`, without an override, with
+      the outcome rendered under the item and the menu still open; a refusal at the heartbeat
+      gate puts the box's own sentence on screen and offers `Run anyway`, which posts with
+      `override: true`; and against a running cycle the item is insensitive, says
+      `a cycle is already running` beneath itself, does nothing when activated — while
+      `Check now` stays live. Screenshots: `menu-actions.png`, `menu-refused.png`.
+      The probe gained `Activate(label)`, which works precisely because the items replace their
+      `activate` *method* instead of connecting to the signal that closes the menu — the risk
+      PLAN.md flagged, settled in the first attempt.
+      One older assertion was updated rather than kept: "Preferences is the only item that
+      reacts" is no longer true, and now reads "nothing in the queue reacts to a click".
+- [x] **U7 — the bump and the docs.** `version: 0.4` here, in `metadata.json` and in
+      `flake.nix`. `README.md` gains **The two things the menu does** — what each item is for,
+      the table of gates it can report, what `started` really means, what `Run anyway` will and
+      will not skip, and the secret's exposure stated plainly. `SETUP.md` gains **Letting the
+      panel start a cycle**: `ORCHESTRATOR_CYCLE_COMMAND`, why a sandboxed receiver needs it,
+      the polkit rule or the `--user` alternative, and a `curl` to check it by hand.
+
+Next: nothing — every unit is done. See **What 0.4 covers** below.
+
+## What 0.4 covers
+
+Two menu items, and the extension's first write. Green at 0.4:
+
+| Suite | Covers | Result |
+| --- | --- | --- |
+| `make test-unit` | the pure logic, now including the action items and the cycle client | **297 pass** |
+| `make test-http` | real libsoup, now including the POST and every status | **39 pass** |
+| `make test-contract` | `/state`, the preflight and `POST /cycle` over fixtures | **79 pass** |
+| `make smoke` | the extension in a nested headless GNOME Shell, clicking both items | **78 pass** |
+| `make test-pack` / `test-release` / `test-install` | the release path, untouched this entry | **7 / 19 / 39 pass** |
+| `nix flake check` | lint, unit, http, bundle | **4 green** |
+
+| What the entry asked for | Where it landed |
+| --- | --- |
+| A "check now" item that reports what it did | `Check now`, `Checking…` while out, menu stays open, backoff reset via `pollNow()` |
+| A "run a cycle" item that starts one or says why not | `Run a cycle` + `POST /cycle`, every gate reported in the orchestrator's words |
+| Insensitive when clicking could not work | with the reason beneath it; live on an `available: false` box, which is reachable |
+| `POST /cycle` deciding before it spawns | `request_cycle()` — one preflight, shared with `run()` |
+| Never talking to itself over HTTP | `heartbeat_from_file()`, with the no-server-listening regression test |
+| The launch owned by the deployment | `ORCHESTRATOR_CYCLE_COMMAND`, documented in `SETUP.md` |
+| Refusing a cycle that would fail on `claude` | `claude_missing_reason()`, default command only |
+| Authenticated as this system already authenticates writes | the existing `_authorized()` path; open when no secret is set |
+| A rate limit | 30 s server-side, plus a client that refuses two outstanding posts |
+| Both items decided as data | `menuModel` + `menuItems`; 21 tests over whole menus |
+| POST in the transport, phrases from codes | `post()` + `cycleClient.js`; 404 worded as an old box |
+| A launched cycle that never appears is said out loud | 45 s of brisk polling, then `The cycle exited without starting` |
+| The contract documents it | `docs/state-contract.md` is now the HTTP contract, not just `/state`'s |
+| Nothing spawns in a test | the spawn is one injected callable |
+| The override | `Run anyway`, after refusals at `allowed-hours` or `heartbeat` only |
+
+**The real run, by hand, as the plan asked.** Against a fresh receiver pointed at *this
+repository*, over real HTTP:
+
+- `POST /cycle` → `{"started": false, "gate": "lock", "reason": "A cycle is already running"}` —
+  correct, since the cycle that wrote this was running at the time — and `{"override": true}`
+  was refused at the same gate, which is the answered question's rule holding in reality.
+- `GET /state` kept working beside it, so the shared `lock_status()` refactor did not break it.
+- With `ORCHESTRATOR_CYCLE_COMMAND` pointed at a harmless `touch`, `POST /cycle` answered
+  `{"started": true, …, "command": "touch /tmp/aideas-spawn-proof"}` **and the command really
+  ran** — the file appeared. A second post one second later got `HTTP 429`
+  `a cycle was just launched, wait 28 s`.
+
+So the spawn path is proven end to end with a harmless command rather than by launching a paid
+cycle on top of the one that was running. What that leaves unproven is only whether a *real*
+`python3 orchestrator.py run` inherits a working environment on a given box — which is exactly
+what `ORCHESTRATOR_CYCLE_COMMAND` and the `claude` guard exist for, and what `SETUP.md` now
+explains.
+
+**One thing the screenshots say that is worth repeating.** `Check now` and `Run a cycle` sit
+adjacent and, when nothing is wrong, look alike — same weight, same size, one above the other.
+The labels are unmistakably different and the second one carries its refusal or its outcome
+beneath it, but if this button ever grows a mis-click problem, that adjacency is where it will
+come from.
+
+### Answered questions, as read
+
+- `POST /cycle` **accepts when no secret is configured**, exactly as `POST /heartbeat` does —
+  the ticked line unchanged.
+- **"Run a cycle" may override the gates** ("Yes should be able to override it"): a second,
+  deliberately awkward action that appears only after a refusal, skipping the hours and the
+  heartbeat but never the stop file, the budget or the lock.
+- **One click**, no confirmation step.
+- **The systemd units are read, not relaxed.** The box sets `ORCHESTRATOR_CYCLE_COMMAND` so
+  systemd supplies the cycle's environment; `SETUP.md` will say what that costs.
 
 ## What 0.3 covers
 
