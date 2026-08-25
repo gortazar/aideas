@@ -51,6 +51,7 @@ suite('a healthy menu', () => {
             'title', 'row', 'separator',
             'title', 'row', 'separator',
             'title', 'row', 'separator',
+            'action', 'action', 'separator',
             'preferences',
         ]);
         assertDeepEquals(list.filter(i => i.type === 'title').map(i => i.text),
@@ -66,9 +67,10 @@ suite('a healthy menu', () => {
         assertDeepEquals(rows.map(r => r.stale), [false, false, false]);
     });
 
-    test('ends with the only item that does anything when clicked', () => {
+    test('ends with Preferences, beneath the items that act', () => {
         assertEquals(list[list.length - 1].type, 'preferences');
         assertEquals(list[list.length - 1].text, 'Preferences');
+        assertEquals(list[list.length - 3].type, 'action');
     });
 
     test('has no leading, trailing or doubled separator', () => {
@@ -83,7 +85,8 @@ suite('an empty queue', () => {
     const list = items({ reading: reading() });
 
     test('says so beneath the cycle line, not above it', () => {
-        assertDeepEquals(types(list), ['header', 'separator', 'message', 'separator', 'preferences']);
+        assertDeepEquals(types(list), ['header', 'separator', 'message', 'separator',
+            'action', 'action', 'separator', 'preferences']);
         assertEquals(list[0].text, 'Idle');
         assertEquals(list[2].text, 'The queue is empty');
         assertEquals(list[2].kind, 'empty');
@@ -97,7 +100,8 @@ suite('a failure', () => {
             host: '10.8.0.1:8787',
         });
 
-        assertDeepEquals(types(list), ['message', 'separator', 'header', 'separator', 'preferences']);
+        assertDeepEquals(types(list), ['message', 'separator', 'header', 'separator',
+            'action', 'action', 'separator', 'preferences']);
         assertEquals(list[0].text, 'Orchestrator unreachable');
         assertEquals(list[0].detail, '10.8.0.1:8787 · connection refused');
         assertEquals(list[0].kind, 'failure');
@@ -107,7 +111,8 @@ suite('a failure', () => {
     test('an unconfigured extension is a two-line menu plus the way to fix it', () => {
         const list = items({ reading: unconfiguredReading() });
 
-        assertDeepEquals(types(list), ['message', 'separator', 'header', 'separator', 'preferences']);
+        assertDeepEquals(types(list), ['message', 'separator', 'header', 'separator',
+            'action', 'action', 'separator', 'preferences']);
         assertEquals(list[0].text, 'Set the orchestrator address in preferences');
         assertEquals(list[list.length - 1].type, 'preferences');
     });
@@ -125,6 +130,7 @@ suite('a failure', () => {
             'title', 'row', 'separator',
             'title', 'row', 'separator',
             'title', 'row', 'separator',
+            'action', 'action', 'separator',
             'preferences',
         ]);
         assertEquals(list[0].text, 'Orchestrator unreachable');
@@ -159,6 +165,7 @@ suite('the questions under a blocked idea', () => {
             'header', 'separator',
             'title', 'row', 'question', 'question', 'separator',
             'title', 'row', 'separator',
+            'action', 'action', 'separator',
             'preferences',
         ]);
     });
@@ -190,6 +197,7 @@ suite('the questions under a blocked idea', () => {
         assertDeepEquals(types(list), [
             'header', 'separator',
             'title', 'row', 'question', 'question', 'question', 'question-more', 'separator',
+            'action', 'action', 'separator',
             'preferences',
         ]);
         assertEquals(list.find(item => item.type === 'question-more').text, '+4 more');
@@ -200,8 +208,8 @@ suite('the questions under a blocked idea', () => {
             idea({ slug: 'asker', state: 'blocked', note: 'STATUS.md says blocked' }),
         ]) });
 
-        assertDeepEquals(types(list),
-            ['header', 'separator', 'title', 'row', 'separator', 'preferences']);
+        assertDeepEquals(types(list), ['header', 'separator', 'title', 'row', 'separator',
+            'action', 'action', 'separator', 'preferences']);
     });
 
     test('a blocked row from a box that never sent texts renders as it always did', () => {
@@ -210,8 +218,8 @@ suite('the questions under a blocked idea', () => {
                 open_questions: 3 }),
         ]) });
 
-        assertDeepEquals(types(list),
-            ['header', 'separator', 'title', 'row', 'separator', 'preferences']);
+        assertDeepEquals(types(list), ['header', 'separator', 'title', 'row', 'separator',
+            'action', 'action', 'separator', 'preferences']);
     });
 
     test('are dimmed with everything else in a stale reading', () => {
@@ -239,6 +247,7 @@ suite('the questions under a blocked idea', () => {
             'header', 'separator',
             'title', 'row', 'separator',
             'title', 'row', 'question', 'separator',
+            'action', 'action', 'separator',
             'preferences',
         ]);
     });
@@ -254,6 +263,7 @@ suite('the questions under a blocked idea', () => {
         assertDeepEquals(types(list), [
             'header', 'separator',
             'title', 'row', 'question', 'row', 'question', 'separator',
+            'action', 'action', 'separator',
             'preferences',
         ]);
         assertDeepEquals(list.filter(i => i.type === 'question').map(i => i.text),
@@ -268,15 +278,16 @@ suite('the footer', () => {
 
         const list = items({ reading: reading({}, ideas) });
 
-        assertDeepEquals(types(list.slice(-4)), ['separator', 'footer', 'separator', 'preferences']);
-        assertEquals(list[list.length - 3].text, '3 further entries not shown');
+        assertDeepEquals(types(list.slice(-7)),
+            ['separator', 'footer', 'separator', 'action', 'action', 'separator', 'preferences']);
+        assertEquals(list[list.length - 6].text, '3 further entries not shown');
     });
 });
 
 suite('every item', () => {
     test('has a type the widget layer knows how to build', () => {
         const known = ['header', 'message', 'title', 'row', 'question', 'question-more',
-            'footer', 'separator', 'preferences'];
+            'footer', 'action', 'separator', 'preferences'];
         const asking = reading({}, [
             idea({ slug: 'asker', state: 'blocked', open_questions: 9,
                 open_question_texts: ['one', 'two', 'three', 'four'] }),
@@ -296,11 +307,11 @@ suite('every item', () => {
         }
     });
 
-    test('rows are the only repeated kind, and nothing else claims a key', () => {
+    test('only rows, questions and actions carry a key', () => {
         const list = items({ reading: busy });
 
         for (const item of list) {
-            if (item.type !== 'row')
+            if (!['row', 'question', 'question-more', 'action'].includes(item.type))
                 assertEquals(item.key, undefined, `${item.type} should not carry a key`);
         }
     });

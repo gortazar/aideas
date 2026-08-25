@@ -82,12 +82,24 @@ failure modes are environmental — and therefore invisible to every headless te
       already true of every GET, so a proxy answering 429 would have wedged the poller silently.
       It reads `message.status_code` now, with a regression test on the GET path. 276 unit + 39
       http tests green.
-- [ ] U4 — the two items, as data.
+- [x] **U4 — the two items, as data.** `menuModel.js` decides them from the reading, the
+      in-flight state and the last outcome; `menuItems.js` emits `action` items in their own
+      block above Preferences. `Check now` goes insensitive as `Checking…` while a poll is out
+      and stays live while a cycle runs — resetting the backoff is the point of it. `Run a
+      cycle` reads `Cycle starting…` while its post is out, is insensitive with the reason as
+      its detail line when clicking could not possibly work (a cycle already running, nothing to
+      post to), and stays **live** on a box answering `available: false`, which is reachable and
+      can be told to try. A refusal shows the box's own sentence and can be tried again; a
+      launch says `asked the box to start one`, never that a cycle is running.
+      `Run anyway` — the answered question — appears only after a refusal at a gate about *when*
+      it is convenient (`allowed-hours`, `heartbeat`) and is asserted absent for all eleven
+      other gates, including `budget` and `stop-file`. 21 tests; four existing layout
+      expectations updated, since the menu genuinely gained items. 297 unit tests green.
 - [ ] U5 — the widgets, and the secret in preferences.
 - [ ] U6 — the compositor: activating both items for real.
 - [ ] U7 — the bump to 0.4 and the docs.
 
-Next: U4 — the two items, as data.
+Next: U5 — the widgets, and the secret.
 
 ### Answered questions, as read
 

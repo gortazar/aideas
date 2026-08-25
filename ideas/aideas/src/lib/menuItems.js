@@ -72,6 +72,19 @@ export function menuItems(built) {
     if (built.footer !== null && built.footer !== undefined)
         blocks.push([{ type: 'footer', text: built.footer }]);
 
+    // The things that act, in their own block above Preferences: one panel button, one click,
+    // then the actions.
+    if ((built.actions ?? []).length > 0) {
+        blocks.push(built.actions.map(action => ({
+            type: 'action',
+            action: action.action,
+            key: `action:${action.action}`,
+            text: action.label,
+            detail: action.detail,
+            sensitive: action.sensitive !== false,
+        })));
+    }
+
     blocks.push([{ type: 'preferences', text: 'Preferences' }]);
 
     // One separator between blocks: never leading, never trailing, never doubled.
