@@ -73,6 +73,22 @@ makes position a safe identity: the active list only ever holds work still to do
 
 3. [title-slides](ideas/title-slides/) - The index must be extracted from level 2 titles ("##"), not from level 1 ("#"). Level 1 is reserved for the title slide. Sections use level 2 instead. Minor version.
 
+4. [quality-gate](ideas/quality-gate) - Roll SonarQube Cloud analysis out across every idea repository whose language it supports, advisory at first. Sonar is free for public
+   repositories with no line-of-code limit, and all of these are public. Deliver a reusable workflow in this repository at `.github/workflows/sonar.yml`, tagged so ideas can pin it
+   as `@v1`, which runs the analysis on push and on pull request; wire each supported idea repository up to call it; and add the project badge to each idea's README. The default
+   `Sonar way` gate judges new code only — no new bugs, no new vulnerabilities, maintainability A, hotspots reviewed, 80% coverage on new code, 3% duplication. Do **not** make it
+   blocking in this entry. Instead produce `ideas/quality-gate/baseline.md`: for every repository, what the gate says today and how far each condition is from passing, with the
+   numbers, so the next entry can choose its conditions from evidence rather than from the defaults. `title-slides` is Lua, which Sonar does not analyse — record that as out of
+   scope rather than substituting a different tool. This project must be done within this repo. Do not create an external repo for this.
+
+5. [quality-gate](ideas/quality-gate) - Make the gate blocking, using the baseline from the previous entry to choose the conditions. Major update. Each supported idea repository
+   gets a branch ruleset on `main` requiring a pull request and requiring the SonarQube Cloud check to pass, which is the only combination that reliably stops a change landing —
+   required checks alone do not clearly block a direct push. This changes how every agent works, so it also rewrites the workflow rules in AGENTS.md: an agent stops pushing its
+   idea's `main` directly and instead pushes a branch, opens a pull request, waits for CI and the gate, and merges when green. Address the three things this breaks: the wait costs
+   turns and wall-clock inside a 45-minute cycle; a red gate mid-cycle leaves an entry unfinishable, so define what an agent does then rather than letting it stall; and releases
+   are cut from `main`, so the release path moves behind the pull request too. Where the baseline shows a condition no idea can meet — 80% coverage on GJS or LibreOffice UNO code
+   is the likely one — set a custom gate at a number that is honest, and say in the plan why.
+
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)

@@ -150,6 +150,25 @@ run the build" is not an installation method.
 - **Verify it from a clean directory before calling the entry done** — download the
   published asset and run it. An installer that was never executed is a guess.
 
+### Analyse the idea in SonarQube Cloud
+
+Every idea whose language SonarQube Cloud supports is analysed on every push and every pull
+request, so that a change which worsens the codebase is visible before it lands.
+
+- Sonar is **free for public repositories, with no limit on lines of code** — public
+  analyses do not consume any allocation. Every idea repository here is public, so this
+  costs nothing.
+- Wire it up in the idea's own repository, calling this repo's reusable workflow:
+  `uses: gortazar/aideas/.github/workflows/sonar.yml@v1`. Do not hand-roll the analysis
+  step per idea; a fleet of subtly different Sonar configs is worse than none.
+- The gate is Sonar's **Clean as You Code** model: it judges *new* code, not the code you
+  inherited. Do not spend an entry paying down old debt to make it green.
+- **Lua is not supported**, which today means `title-slides`. An unsupported language is a
+  reason to skip this deliverable and say so in `STATUS.md` — not a reason to invent a
+  substitute linter and call it the same thing.
+- The gate is **advisory** until the entry that makes it blocking says otherwise. A red
+  gate is information you must report in `STATUS.md`; it does not yet stop you finishing.
+
 ## Required per-idea deliverables
 
 **In the idea's own repository** (`ideas/<this-idea>/upstream`):
@@ -158,7 +177,8 @@ run the build" is not an installation method.
 - `README.md` opening with the one-line install command, then how to enter the environment
   (`nix develop`), run tests and build. Once there is a working build, add screenshots
   under `screenshots/` and reference them here.
-- CI that runs the test suite on push and PR, plus the release workflow described above.
+- CI that runs the test suite on push and PR, plus the release workflow described above,
+  and the SonarQube Cloud analysis described above where the language is supported.
 - The installer — `install.sh` or the packaging that channel needs.
 
 **In `ideas/<this-idea>/` here:**
