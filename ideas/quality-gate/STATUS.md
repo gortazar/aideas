@@ -1,4 +1,4 @@
-status: in_progress
+status: done
 version: 0.1
 started_at: 2026-08-25
 last_session_id: 0c56aa7b-8858-406c-8f49-2c49a15d0727
@@ -10,6 +10,45 @@ last_cycle_cost_usd: 18.3907995
 - 2026-08-25T13:11:09+02:00 — blocked ($3.1778349999999995)
 
 
+
+### 2026-08-25 — U7: done at 0.1
+
+**What `done` covers.** Every feature in `PLAN.md` is delivered and green:
+
+- `.github/workflows/sonar.yml`, the reusable workflow `AGENTS.md` had been telling every
+  idea to call since before it existed — seven inputs, one optional secret, `fetch-depth: 0`,
+  coverage as an artifact input, and a missing token skipping loudly instead of failing.
+- `.github/workflows/tag-sonar.yml`, which keeps `v1` on the current `sonar.yml`. Verified
+  moving: `v1` is at `856feb1` because the last merge touched the workflow.
+- Six SonarQube Cloud projects, created and configured from the API by
+  `scripts/ensure-sonar-project.sh`, all analysed, all with a computed gate.
+- Six repositories calling it, each with its own `sonar-project.properties`; coverage wired
+  where the language has it built in (Go, Python).
+- Badges in seven READMEs for six projects — `aideas` and `gnome-tasks` share one and say so.
+- `baseline.md`, the deliverable this entry exists for: six sections written from real
+  analyses, with dates, links, every condition's measured value and threshold, and what the
+  numbers do and do not mean.
+- `check-wiring.sh` owning all six rows, `read-measures.sh` to re-read the baseline without
+  a token, `check-release.sh` to confirm the release afterwards, and a `flake.nix` running
+  shellcheck and actionlint over all of it. `ci-quality-gate.yml` is green.
+- `README.md`: the five lines that wire an idea up, the inputs, the token, what `v1` means.
+
+**The release publishes on the merge.** `release-quality-gate.yml` is gated on this file
+saying `status: done`, so setting it here is what fires it — the same arrangement as
+`release-aideas.yml`, and necessary for the same reason: an agent cannot push a tag. It
+creates `quality-gate-v0.1` with `sonar.yml`, `baseline.md` and `README.md` as assets, since
+there is nothing to compile. **Confirm it afterwards with
+`ideas/quality-gate/scripts/check-release.sh`**, which also checks the released `sonar.yml`
+is byte-identical to the one `v1` resolves to. Run against the not-yet-published release it
+correctly reports the release missing, so its failure path is tested.
+
+**`title-slides` is out of scope and stays out**: SonarQube Cloud does not analyse Lua, and
+`baseline.md` says so rather than substituting a different linter. `vacas` and `wg` have no
+repository yet.
+
+Nothing is blocked and nothing was left half-built. Two failures on `main` are recorded in
+the U6 entry below as explicitly *not* this idea's: `CI - recap` and `CI - aideas` were both
+already red before this entry started.
 
 ### 2026-08-25 — U6: all six measured, and the gate says something uncomfortable
 
@@ -219,6 +258,9 @@ project up and reads its first gate, not in advance.
       (their first analyses run after the merge moves `v1`)
 - [x] U6 — `baseline.md` written from six real analyses, plus `read-measures.sh` to re-read
       them; `check-wiring.sh` owns all six rows and passes
-- [ ] U7 — `quality-gate-v0.1` release
+- [x] U7 — `quality-gate-v0.1` release: `release-quality-gate.yml` fires on the merge that
+      carries `status: done`; `scripts/check-release.sh` confirms it afterwards
 
-Next: **U7** — the release.
+Next: nothing — the entry is finished at 0.1. The one follow-up for whoever makes the gate
+blocking is in `baseline.md`: all six gates pass vacuously at 0 new lines, and only `recap`
+clears 80% coverage.
