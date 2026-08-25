@@ -1,4 +1,4 @@
-status: not_started
+status: in_progress
 version: 0.3
 started_at: 2026-08-16
 last_session_id: 498f8809-49e3-4e71-b8bb-3905366ad588
@@ -6,6 +6,42 @@ last_run: 2026-08-24T18:26:27+02:00
 last_cycle_cost_usd: 13.305927500000001
 
 ## Log
+
+### 2026-08-25 — 0.3.1/0.4, U0: reproduced, and the plan redirected
+
+Pin was intact this time (gitlink and `flake.lock` both at `1ba5baa`), 0.3 suite green
+before any change.
+
+**Reproduced the report exactly.** The reporter's deck renders, `show-index: true` is set,
+and there is no index slide, no warning and no error. It has fourteen `##` headings and
+zero `#`, so it has no sections and the feature is structurally inert on it. Candidate 1.
+
+Walked the other candidates rather than assuming, and two of the plan's guesses were wrong:
+
+| candidate | verdict |
+| --- | --- |
+| 1 — the deck has no `#` sections | **confirmed, this is the reporter's deck** |
+| 2 — a stale v0.1 install | **reproduces the symptom word for word**: key ignored, total silence. `quarto list extensions` reports `0.1.0`, which is the diagnostic |
+| 3a — key nested under `format: revealjs:` | **not a failure mode at all** — it works, Quarto folds format metadata into the document metadata. The plan's advice to keep the key top-level would have been wrong |
+| 3b — `show-index:true` with no space | fails loudly with a YAML parse error, so it cannot be this report |
+| 4 — generated but unreachable | **dead.** Index slides render and are reachable by their own URL fragment, emphasis correct, including the ones reveal nests into the preceding vertical stack. The only `display: none` in the output is Quarto's hidden footer template |
+| 5 — all sections hidden, or `slide-level: 1` | reproduces the same silence, so it belongs to the same fix |
+
+**Candidate 4 being dead is what matters most**: the feature works, and the entry stays a
+semantics-and-diagnostics change rather than becoming placement work.
+
+**The plan's proposed fix is rejected by its own answered question.** The plan is built
+around a fallback agenda listing the `##` headings, and says the real-deck outline should
+grow from fourteen slides to fifteen. The answer to the first open question says instead:
+*"In a section-less deck no agenda is inserted."* So no agenda is built, the real-deck
+outline stays at fourteen, and the second question (automatic vs. an `index-level:` key)
+is moot — there is no fallback to make automatic.
+
+What survives the answer is the part that made this a bug report: **silence**. So
+`show-index: true` on a deck with nothing to index now warns, naming the key and the
+reason, and inserts nothing. Every other feature bullet in the entry that depended on the
+agenda — its identifiers, its hidden-heading rule, the fifteenth slide — falls away with it.
+
 - 2026-08-24T18:26:27+02:00 — done ($13.305927500000001)
 - 2026-08-24T08:17:45+02:00 — done ($15.026146999999996)
 - 2026-08-16T21:29:26+02:00 — done ($12.985914499999996)
