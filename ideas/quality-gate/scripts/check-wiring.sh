@@ -35,11 +35,13 @@ repo_root="$(cd ../.. && pwd)"
 #
 # Rows are added by the unit that actually wires each project up and reads its first
 # gate, never in advance: a row here is a claim that the analysis is running.
-# gortazar_aideas is wired (sonar-aideas-repo.yml, the root sonar-project.properties and
-# both badges) but not listed yet: its workflow only runs once this branch reaches main, so
-# there is no analysis to claim. Its row goes in with its first gate reading.
 projects=(
+    "gortazar_aideas|.|.github/workflows/sonar-aideas-repo.yml|ideas/aideas/README.md ideas/gnome-tasks/README.md"
     "gortazar_recap|ideas/recap/upstream|.github/workflows/ci.yml|ideas/recap/upstream/README.md"
+    "gortazar_recap-gs|ideas/recap-gs/upstream|.github/workflows/ci.yml|ideas/recap-gs/upstream/README.md"
+    "gortazar_gnome-shell-pwgen|ideas/pwgen/upstream|.github/workflows/ci.yml|ideas/pwgen/upstream/README.md"
+    "gortazar_restore-wss|ideas/restore-wss/upstream|.github/workflows/ci.yml|ideas/restore-wss/upstream/README.md"
+    "gortazar_lo-pert|ideas/lo-pert/upstream|.github/workflows/ci.yml|ideas/lo-pert/upstream/README.md"
 )
 
 # The reference every caller in another repository must pin. They pin the major tag, not

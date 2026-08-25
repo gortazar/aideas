@@ -37,6 +37,20 @@ Trigger it on `push` to `main` and on `pull_request`. Limiting the push trigger 
 is deliberate: otherwise a branch is analysed twice, once as a branch and once as its pull
 request.
 
+A repository being wired for the first time also needs its SonarQube Cloud project to exist
+and its token to be set. Both are one command each and neither needs a browser:
+
+```sh
+scripts/set-repo-secret.sh <repo> SONAR_TOKEN            # from the repository root
+ideas/quality-gate/scripts/ensure-sonar-project.sh <repo>
+```
+
+`ensure-sonar-project.sh` is idempotent and does three things a UI import would have done
+for you: creates the project, renames its main branch to `main` (an API-created project
+calls it `master`, and an analysis of `main` then files itself as a short-lived branch that
+accumulates no measures), and sets the new-code period — without which there is no quality
+gate at all.
+
 ### Inputs, for the cases the five lines above do not cover
 
 | Input | Default | What it is for |
@@ -61,11 +75,19 @@ The analysis needs `SONAR_TOKEN`, a SonarQube Cloud user token. One token works 
 project in the organisation, but GitHub Actions secrets are per-repository and write-only —
 they cannot be read back or copied from one repository to another — and `gortazar` is a
 user account, not an organisation, so there are no account-level secrets to share either.
-Each analysed repository therefore holds its own copy of the same value:
+Each analysed repository therefore holds its own copy of the same value, distributed by the
+script at this repo's root, which reads it from the machine-local agent env file and prints
+only the secret's name:
 
 ```sh
-gh secret set SONAR_TOKEN --repo gortazar/<repo> --body "$SONAR_TOKEN"
+scripts/set-repo-secret.sh <repo> SONAR_TOKEN   # from the repository root
+scripts/set-repo-secret.sh --list               # which credentials exist, without values
 ```
+
+**Never read, echo or write the value** — not into a file, a commit message, `STATUS.md` or
+a log. `ideas/quality-gate/scripts/ensure-sonar-project.sh` follows the same rule for the
+SonarQube Cloud side, taking the token from the same env file straight into a `curl --config`
+on stdin: never into argv, where `ps` would show it to every process on the machine.
 
 **A run without the token is skipped, not failed.** Pull requests from forks get no secrets
 at all, and a repository can be wired up before its token is set. The job prints one notice
@@ -83,6 +105,11 @@ by hand: agents work in worktrees they may not push, and the orchestrator merges
 branches with a plain `git push`, which carries no tags.
 
 `git ls-remote --tags https://github.com/gortazar/aideas v1` says where it points.
+
+Each finished entry also ships a `quality-gate-v<version>` release carrying `sonar.yml`,
+`baseline.md` and this file — the artefacts themselves, since there is nothing to compile.
+`scripts/check-release.sh` says whether it is really there and whether the released
+`sonar.yml` is the same file `v1` resolves to; it needs no token and no clone.
 
 ## The gate is advisory
 
@@ -113,6 +140,12 @@ new code against — so a project that has only ever been analysed once reports 
 nix develop        # actionlint, shellcheck, curl, jq
 nix flake check    # shellcheck over scripts/
 nix run .#lint     # actionlint over the workflows this idea owns, then check-wiring.sh
+```
+
+```sh
+./scripts/read-measures.sh          # every project's gate and measures, no token needed
+./scripts/check-release.sh          # is quality-gate-v<version> published, and does it match v1
+./scripts/ensure-sonar-project.sh <repo>   # create and configure a project for a new repository
 ```
 
 `scripts/check-wiring.sh` walks a table of every project this idea claims to have wired up
