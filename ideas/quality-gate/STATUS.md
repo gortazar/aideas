@@ -9,6 +9,80 @@ last_cycle_cost_usd: 3.1778349999999995
 - 2026-08-25T13:11:09+02:00 — blocked ($3.1778349999999995)
 
 
+### 2026-08-25 — U3, U4 and U5: six projects created, six repositories wired, one measured
+
+The token arrived, so the whole of U3-U5 was doable. All six SonarQube Cloud projects now
+exist, all six repositories call the shared workflow, and `gortazar_recap` has a real gate
+reading in `baseline.md`. The other five are wired but not yet analysed — see the last
+section below, which is the one thing this session could not finish and why.
+
+**Onboarding took three steps the plan did not know about**, all now encoded in
+`scripts/ensure-sonar-project.sh` so no future repository rediscovers them. The script reads
+the token from the machine-local agent env file straight into a `curl --config` on stdin, the
+same discipline as `scripts/set-repo-secret.sh`: never into argv, a file, a log or its own
+output.
+
+1. Projects created with `POST api/projects/create` — no browser step needed, and the key
+   format `gortazar_<repo-name>` was right.
+2. **Their main branch is called `master`.** An analysis of `main` then does not fail: it
+   files itself as a short-lived *branch* named `main`, which accumulates no measures and
+   whose gate is not the project's. recap's first analysis came back green with nothing
+   readable behind it.
+3. **They have no new-code period.** Without one there is no gate at all — `project_status`
+   answers `NONE` and no `new_*` measure is computed, so two analyses look exactly like one.
+   Set to `previous_version` on all six, the default a UI import would have given.
+
+Automatic Analysis was off everywhere already; the conflict the plan anticipated never arose.
+
+**recap's gate: OK, and vacuously so.** 0 new lines in the period, so Sonar skipped the
+coverage and duplication conditions entirely — a blocking gate today would wave through any
+commit under 20 lines without weighing the two things it exists for. The useful numbers are
+whole-project: 3,053 lines of Go, **86.0% coverage**, duplication **3.0% against a 3%
+threshold**, 0 bugs, 0 vulnerabilities, 12 code smells, A/A/A. Coverage is real, not assumed:
+a `coverage` job runs `go test -coverprofile` and hands `cover.out` to the scan as an
+artifact.
+
+Two findings worth having: the first analysis counted 121 lines of "PL/SQL" — the SQLite
+fixtures under `internal/opencode/testdata` — as production code, and excluding them halved
+the reported code smells from 26 to 12 and took duplication from 3.6% to 3.0%.
+
+**The one thing that is not finished: five projects have no numbers.** The reusable
+workflow's job asked for `pull-requests: read`, and five of the six repositories have their
+default workflow token set to *read repository contents*, where that permission is
+ungrantable. GitHub refuses the run before any job starts: *"The nested job 'sonar' is
+requesting 'pull-requests: read', but is only allowed 'pull-requests: none'."* `recap` is the
+only repository whose default is `write`, which is why it was the only one that ran — and a
+good argument for the plan's insistence on proving one project end to end first.
+
+`sonar.yml` no longer asks for it (the SonarQube Cloud GitHub App decorates pull requests
+with its own token, not this one). But callers pin `@v1`, and `v1` only moves when
+`tag-sonar.yml` runs on `main`, which is after this branch is merged. **So `recap-gs`,
+`gnome-shell-pwgen`, `restore-wss` and `lo-pert` currently have a red CI run**, and the next
+session's first job is `gh run rerun` on each of the four plus a first analysis of this
+repository's own project.
+
+`ci-quality-gate.yml` was also failing on `main`, for an unrelated reason found on the way:
+`submodules: recursive` aborts with *"No url found for submodule path
+'ideas/vacas/upstream'"* — a gitlink in the index with no `.gitmodules` entry, belonging to
+another idea. It now initialises exactly the submodules `.gitmodules` declares.
+
+`release-quality-gate.yml` is written and lints clean, gated on `status: done` so it
+publishes nothing until the entry is finished. It creates its own tag, as it must —
+`quality-gate-v<version>`, with `sonar.yml`, `baseline.md` and the idea's `README.md` as
+assets, since there is nothing to compile.
+
+The Python coverage command was run locally rather than assumed: `restore-wss` reports
+**73.6%** over 247 unit tests, and writes a `coverage.xml` whose paths resolve against the
+workspace the same way in the scan job as in the coverage job. `lo-pert` uses the identical
+pattern.
+
+Submodule pointers: bumped for `recap`, `gnome-shell-pwgen` and `restore-wss`, where the
+commit pushed is the only one ahead of the pin, each with its `flake.lock` in the same commit
+so `check-pin.sh` stays green. **Not** bumped for `recap-gs` and `lo-pert`: their upstreams
+had already moved several commits ahead of the pin, and dragging another idea's untested work
+into its wrapper is that idea's call, not this one's. Their wiring is pushed and live
+upstream regardless.
+
 ### 2026-08-25 — Blocked on the SonarQube Cloud token; docs written meanwhile
 
 **U3 onwards cannot start.** Everything after U2 needs an analysis to have run, and no
@@ -83,13 +157,16 @@ project up and reads its first gate, not in advance.
 ## Units
 - [x] U1 — `flake.nix` + `scripts/check-wiring.sh` (empty table) + `ci-quality-gate.yml` green
 - [x] U2 — `.github/workflows/sonar.yml` (reusable) and `tag-sonar.yml` (moves `v1`)
-- [ ] U3 — wire `gortazar/recap` end to end, read its gate
-- [ ] U4 — this repo's own Sonar project, submodule exclusions, badges in `aideas`/`gnome-tasks`
-- [ ] U5 — `gnome-shell-pwgen`, `recap-gs`, `restore-wss`, `lo-pert`
-- [ ] U6 — `baseline.md` from the real analyses (method and out-of-scope sections written;
-      the six measured sections need an analysis)
-- [ ] U7 — `v1` tag, `quality-gate-v0.1` release (idea `README.md` written)
+- [x] U3 — wire `gortazar/recap` end to end, read its gate (OK, vacuously — 0 new lines)
+- [x] U4 — this repo's own Sonar project, submodule exclusions, badges in `aideas`/`gnome-tasks`
+      (wired; its first analysis runs after the merge)
+- [x] U5 — `gnome-shell-pwgen`, `recap-gs`, `restore-wss`, `lo-pert` wired and pushed
+      (their first analyses run after the merge moves `v1`)
+- [ ] U6 — `baseline.md`: method, onboarding, out-of-scope and `recap` written from the real
+      analysis; five projects still to measure
+- [ ] U7 — `quality-gate-v0.1` release (`v1` tag exists, idea `README.md` and
+      `release-quality-gate.yml` written; the release fires when `STATUS.md` says `done`)
 
-Next: **blocked.** U3 — wire `gortazar/recap`, push twice, read its gate — needs a
-`SONAR_TOKEN` in that repository. See the third open question in `PLAN.md`: the only thing
-missing is the token value, and with it U3-U7 are one session's work.
+Next: **U6.** The four red runs need `gh run rerun --repo gortazar/<repo>` once the merge
+has moved `v1` past the `pull-requests: read` fix, and this repository's own analysis runs
+on that same push. Then five `baseline.md` sections, then U7.

@@ -1,5 +1,10 @@
 # aideas — the orchestrator's state in the GNOME top bar
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=gortazar_aideas&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=gortazar_aideas)
+
+*aideas has no repository of its own, so the badge covers the whole `gortazar/aideas`
+repository — this extension, gnome-tasks and the orchestrator — not this directory alone.*
+
 A panel indicator that shows what the idea-builder orchestrator is doing. A button appears
 while a cycle is running; its menu lists which ideas are **running**, which are **ready** to be
 built next, and which are **blocked** waiting for you to answer a question.

@@ -1,0 +1,141 @@
+# Publish the quality-gate entry.
+#
+# quality-gate has no upstream repository: what it ships is a reusable workflow that lives at
+# this repo's root and a measurement that lives in ideas/quality-gate/. So the release is a
+# tag on *this* repo, `quality-gate-v<version>`, published from here — the same arrangement
+# as release-aideas.yml, and for the same reason.
+#
+# **The workflow creates its own tag.** It has to: agents work in worktrees they may not push,
+# and the orchestrator merges their branches with a plain `git push`, which carries no tags.
+# Nothing here needs a secret; the automatic GITHUB_TOKEN can tag, release and upload in the
+# repository the workflow lives in.
+#
+# There is nothing to compile. The assets are the artefacts themselves: the workflow other
+# repositories call, the baseline it was written to produce, and the instructions for wiring
+# a new idea up.
+name: Release - quality-gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ideas/quality-gate/**"
+      - ".github/workflows/sonar.yml"
+      - ".github/workflows/release-quality-gate.yml"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Publish even if ideas/quality-gate/STATUS.md does not say status: done"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # create the tag and the release, and upload the assets
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags, so "has this been released already" is honest
+
+      - name: Is this a finished entry?
+        id: gate
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          status=$(sed -n 's/^status:[[:space:]]*//p' ideas/quality-gate/STATUS.md | head -1)
+          version=$(sed -n 's/^version:[[:space:]]*//p' ideas/quality-gate/STATUS.md | head -1)
+          [ -n "$version" ] || { echo "no version: in STATUS.md" >&2; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$status" = "done" ] || [ "$FORCE" = "true" ]; then
+            echo "proceed=yes" >> "$GITHUB_OUTPUT"
+            echo "quality-gate is $status at version $version"
+          else
+            echo "proceed=no" >> "$GITHUB_OUTPUT"
+            echo "quality-gate is '$status', not 'done' — nothing to publish."
+          fi
+
+      # A release of a broken workflow would be worse than no release: five other
+      # repositories call it by tag.
+      - uses: cachix/install-nix-action@v27
+        if: steps.gate.outputs.proceed == 'yes'
+        with:
+          extra_nix_config: "experimental-features = nix-command flakes"
+
+      - name: Check out the declared submodules
+        if: steps.gate.outputs.proceed == 'yes'
+        run: |
+          set -euo pipefail
+          git config --file .gitmodules --get-regexp '^submodule\..*\.path$' |
+            awk '{print $2}' |
+            xargs git submodule update --init --depth=1 --
+
+      - name: The checks it is releasing
+        if: steps.gate.outputs.proceed == 'yes'
+        working-directory: ideas/quality-gate
+        run: |
+          nix flake check
+          nix run .#lint
+
+      - name: Already published?
+        id: plan
+        if: steps.gate.outputs.proceed == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="quality-gate-v${VERSION}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "publish=no" >> "$GITHUB_OUTPUT"
+            echo "$tag already exists — nothing to do."
+          else
+            echo "publish=yes" >> "$GITHUB_OUTPUT"
+            echo "$tag does not exist yet — publishing."
+          fi
+
+      - name: Publish
+        if: steps.plan.outputs.publish == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          VERSION: ${{ steps.gate.outputs.version }}
+        # --target pins the tag to this commit; gh creates the tag as part of the release,
+        # which is why nothing has to push one.
+        run: |
+          set -euo pipefail
+          {
+            echo "One reusable SonarQube Cloud analysis, called by every idea in this"
+            echo "repository, plus the measured baseline of what the default quality gate"
+            echo "says about each project today."
+            echo
+            echo "Wire an idea up with five lines in its own CI:"
+            echo
+            echo '```yaml'
+            echo "  sonar:"
+            echo "    uses: ${GITHUB_REPOSITORY}/.github/workflows/sonar.yml@v1"
+            echo "    secrets:"
+            echo '      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}'
+            echo '```'
+            echo
+            echo "\`v1\` is a moving major tag, updated by \`tag-sonar.yml\` on every push to"
+            echo "main that touches the workflow, so a fix reaches every caller without any"
+            echo "of them being edited."
+            echo
+            echo "The gate is advisory: a red gate is reported, not enforced."
+            echo
+            echo "Assets are the artefacts themselves — there is nothing to compile."
+          } > release-notes.md
+
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "quality-gate $VERSION - one Sonar workflow, six projects, an honest baseline" \
+            --notes-file release-notes.md \
+            ".github/workflows/sonar.yml#sonar.yml" \
+            "ideas/quality-gate/baseline.md#baseline.md" \
+            "ideas/quality-gate/README.md#README.md"
+          echo "published $TAG"

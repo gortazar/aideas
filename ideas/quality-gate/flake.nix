@@ -33,6 +33,7 @@
           ".github/workflows/sonar.yml"
           ".github/workflows/tag-sonar.yml"
           ".github/workflows/sonar-aideas-repo.yml"
+          ".github/workflows/release-quality-gate.yml"
           ".github/workflows/ci-quality-gate.yml"
         ];
 
