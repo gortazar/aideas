@@ -161,6 +161,17 @@ request, so that a change which worsens the codebase is visible before it lands.
 - Wire it up in the idea's own repository, calling this repo's reusable workflow:
   `uses: gortazar/aideas/.github/workflows/sonar.yml@v1`. Do not hand-roll the analysis
   step per idea; a fleet of subtly different Sonar configs is worse than none.
+- The analysis needs a `SONAR_TOKEN` secret in the idea's own repository. `gortazar` is a
+  User account, so there is no organization secret to inherit and every new repository
+  needs its own copy. **Do not ask for the token.** Run
+  `scripts/set-repo-secret.sh <repo> SONAR_TOKEN`, which copies it from the machine-local
+  agent env file and prints only the name. `scripts/set-repo-secret.sh --list` says which
+  credentials are configured, again without values. The same script distributes
+  `AMO_JWT_ISSUER` and `AMO_JWT_SECRET` for extensions that need signing.
+- **Never read, echo, or write a credential's value.** Not into a file, a commit message,
+  `STATUS.md`, a log or a question. If a credential you need is missing, the script says so
+  and the answer is to ask the user to add it to that env file — never to work around it by
+  putting a value somewhere an agent can read.
 - The gate is Sonar's **Clean as You Code** model: it judges *new* code, not the code you
   inherited. Do not spend an entry paying down old debt to make it green.
 - **Lua is not supported**, which today means `title-slides`. An unsupported language is a

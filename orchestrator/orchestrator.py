@@ -51,8 +51,9 @@ from pathlib import Path
 # repeat entries and versioning. 1.1 merges and retries a push that lost a race instead of
 # leaving the work for the next cycle. 1.2 survives a leftover worktree directory and
 # no longer strands an agent when a sibling fails to start. 1.3 stops the superproject
-# sweep from reverting submodule pins.
-ORCHESTRATOR_VERSION = "1.3"
+# sweep from reverting submodule pins. 1.4 unblocks an idea once its questions are
+# answered, which nothing did before.
+ORCHESTRATOR_VERSION = "1.4"
 
 UNLIMITED = {"unlimited", "none", "off"}
 
@@ -953,7 +954,12 @@ class Orchestrator:
                 continue
             state = (status_value(status, "status") or "").lower()
             if state == "blocked":
-                continue
+                # The questions are the source of truth, and the line above proved there
+                # are none left. Nothing else ever cleared this flag, so an idea an agent
+                # blocked by asking a question stayed blocked after the question was
+                # answered — the only way out was hand-editing STATUS.md, which is
+                # documented nowhere. quality-gate sat in that state.
+                log(f"{slug}: its questions are answered; no longer blocked.")
             # A finished idea stays finished; without this it is rebuilt every cycle.
             if state in ("done", "complete", "completed"):
                 continue
@@ -1775,7 +1781,8 @@ def queue_rows(repo: Path, running: tuple[str, ...] = ()) -> list[dict]:
                 # waited on. Capped: the count above stays whole, so a UI can say "+2 more".
                 row["open_question_texts"] = question_lines[:OPEN_QUESTION_MAX_SENT]
             elif raw == "blocked":
-                row["state"], row["note"] = "blocked", "STATUS.md says blocked"
+                # Stale flag: the questions that caused it have since been answered.
+                row["state"], row["note"] = "ready", "questions answered; unblocks next cycle"
             elif raw in ("done", "complete", "completed"):
                 row["state"], row["note"] = "ready", "finished before — reopens for this entry"
             else:
@@ -1847,7 +1854,8 @@ def cmd_status(repo: Path, heartbeat_url: str) -> int:
                 state = "blocked"
                 note = f"{questions} unanswered question{'s' if questions > 1 else ''}"
             elif raw == "blocked":
-                state, note = "blocked", "STATUS.md says blocked"
+                state, note = "buildable", "questions answered; no longer blocked"
+                buildable.append(slug)
             elif raw in ("done", "complete", "completed"):
                 state, note = "buildable", "finished before — reopens for this entry"
                 buildable.append(slug)

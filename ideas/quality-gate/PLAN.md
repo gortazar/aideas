@@ -209,7 +209,22 @@ Units, one commit each, tests (or the check script) first:
       coverage work this entry** and a baseline that says so plainly; the alternative is to
       instrument the three easy ones and let the baseline show real numbers for Go and Python
       against no numbers for GJS. No coverage for now.
-- [ ] **Answering your two questions, and the one thing I still need.** (a) *Can I push the token
+- [x] **Answering your two questions, and the one thing I still need.** ANSWERED: you were
+      right on both counts, and the token is now in place — you do not need to see it. All six
+      repositories (`recap`, `recap-gs`, `gnome-shell-pwgen`, `restore-wss`, `lo-pert`,
+      `aideas`) already have `SONAR_TOKEN` set; `gh secret list` confirms the name and date on
+      each. Distribute it to any *new* repository with
+      `scripts/set-repo-secret.sh <repo> SONAR_TOKEN`, which reads the value from the
+      machine-local agent env file (mode 600, outside every repo and worktree) and prints only
+      the secret's name. `scripts/set-repo-secret.sh --list` tells you which credentials exist
+      without revealing any. Never ask for or print a credential's value — AGENTS.md now says
+      so. On (b): yes, create the six projects through the web API as you proposed, and turn
+      Automatic Analysis off per project so the CI scan does not conflict. If the SonarCloud
+      GitHub App is installed on selected repositories only, say so in STATUS.md and stop
+      there — that step is in the browser and cannot be done from here. On coverage: add it
+      where it is cheap (Go and Python have it built in) rather than recording zeroes; a
+      baseline of 0% everywhere would tell the next entry nothing about how far 80% really is.
+      **Answering your two questions, and the one thing I still need.** (a) *Can I push the token
       from `aideas` to the other repositories?* No. GitHub Actions secrets are write-only: the
       REST API returns a secret's name and dates but never its value, so nothing running here or
       in a workflow can read it back out of `gortazar/aideas` to copy it elsewhere. And
