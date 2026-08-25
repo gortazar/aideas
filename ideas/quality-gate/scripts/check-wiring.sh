@@ -35,13 +35,23 @@ repo_root="$(cd ../.. && pwd)"
 #
 # Rows are added by the unit that actually wires each project up and reads its first
 # gate, never in advance: a row here is a claim that the analysis is running.
+# gortazar_aideas is wired (sonar-aideas-repo.yml, the root sonar-project.properties and
+# both badges) but not listed yet: its workflow only runs once this branch reaches main, so
+# there is no analysis to claim. Its row goes in with its first gate reading.
 projects=(
+    "gortazar_recap|ideas/recap/upstream|.github/workflows/ci.yml|ideas/recap/upstream/README.md"
 )
 
-# The reference every caller must pin. Callers pin the major tag, not a commit, so
-# that a fix to the reusable workflow reaches all six projects at once; tag-sonar.yml
-# is what keeps v1 pointing at the current sonar.yml.
+# The reference every caller in another repository must pin. They pin the major tag, not
+# a commit, so that a fix to the reusable workflow reaches all of them at once;
+# tag-sonar.yml is what keeps v1 pointing at the current sonar.yml.
 reusable_ref="gortazar/aideas/.github/workflows/sonar.yml@v1"
+
+# This repository is the exception, and on purpose: sonar.yml lives here, so analysing
+# itself through the local path makes it the canary. A change that breaks the reusable
+# workflow fails on the commit that made it, rather than reaching five other repositories
+# the moment v1 moves.
+local_ref="./.github/workflows/sonar.yml"
 
 fail_count=0
 
@@ -64,11 +74,14 @@ check_project() {
         return
     fi
 
+    local expected_ref="$reusable_ref"
+    [ "$dir" = "." ] && expected_ref="$local_ref"
+
     local workflow_path="$project_root/$workflow"
     if [ ! -f "$workflow_path" ]; then
         fail "$key: no caller workflow at $dir/$workflow"
-    elif ! file_contains "$workflow_path" "$reusable_ref"; then
-        fail "$key: $dir/$workflow does not call $reusable_ref"
+    elif ! file_contains "$workflow_path" "$expected_ref"; then
+        fail "$key: $dir/$workflow does not call $expected_ref"
     fi
 
     local props="$project_root/sonar-project.properties"
@@ -131,4 +144,4 @@ if [ "$fail_count" -gt 0 ]; then
     exit 1
 fi
 
-echo "PASS: ${#projects[@]} project(s) wired to $reusable_ref"
+echo "PASS: ${#projects[@]} project(s) wired to sonar.yml"

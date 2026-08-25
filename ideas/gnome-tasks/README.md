@@ -1,5 +1,10 @@
 # gnome-tasks — KDE Activities for GNOME
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=gortazar_aideas&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=gortazar_aideas)
+
+*gnome-tasks has no repository of its own, so the badge covers the whole `gortazar/aideas`
+repository — this extension, aideas and the orchestrator — not this directory alone.*
+
 KDE's Activities let you group applications, documents and background commands under a named
 task, then switch between tasks so the desktop comes back the way you left it. GNOME has
 workspaces, which are ephemeral, unnamed and restore nothing. `gnome-tasks` builds the missing

@@ -1,0 +1,24 @@
+# This repository's own SonarQube Cloud analysis.
+#
+# aideas and gnome-tasks have no upstream repository — both are built here — so they share
+# one project, `gortazar_aideas`, whose scope is set by the root sonar-project.properties:
+# their sources plus the orchestrator, with the ideas/*/upstream submodules excluded,
+# because each of those is a separate repository with a project of its own.
+#
+# The reference below is the *local* path, not `gortazar/aideas/.github/workflows/sonar.yml@v1`
+# that every other caller pins. That is deliberate: this repository is where sonar.yml lives,
+# so analysing itself with the working copy makes it the canary. A change that breaks the
+# reusable workflow fails here, on the commit that made it, instead of reaching five other
+# repositories the moment tag-sonar.yml moves v1.
+name: SonarQube Cloud - aideas repo
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  sonar:
+    uses: ./.github/workflows/sonar.yml
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

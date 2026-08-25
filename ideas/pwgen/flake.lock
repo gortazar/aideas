@@ -37,11 +37,11 @@
     "pwgen-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1786017529,
-        "narHash": "sha256-pdNzYPiqUv2NyL+L1MjsFxyYV7A2tGGSDnrfd66HoGo=",
+        "lastModified": 1787670488,
+        "narHash": "sha256-aR5ZPYEslR7ZeD2cJeq9WqeENh25xXRdWeZ0yNiMrUw=",
         "owner": "gortazar",
         "repo": "gnome-shell-pwgen",
-        "rev": "870d00e4db4354eb90817b5797bd48189ba1268d",
+        "rev": "57b3bf6a64fd4a8109dbe4e6eae1430545a41aa5",
         "type": "github"
       },
       "original": {

@@ -79,9 +79,15 @@ jobs:
   sonar:
     name: Analysis
     runs-on: ${{ inputs.runs-on }}
+    # contents: read and nothing else, deliberately. Five of the six repositories that call
+    # this have their default workflow token set to "read repository contents", where
+    # `pull-requests: read` is not merely unset but *ungrantable* — asking for it made the
+    # whole run fail before a single job started, with "the nested job 'sonar' is requesting
+    # 'pull-requests: read', but is only allowed 'pull-requests: none'". Nothing here needs
+    # it: pull request decoration is done by the SonarQube Cloud GitHub App against its own
+    # installation token, not by this workflow's.
     permissions:
       contents: read
-      pull-requests: read
     steps:
       # First, because everything after it is conditional on the answer. An empty
       # secret is the normal state for a fork PR, so this says so once, clearly, and
@@ -153,7 +159,8 @@ jobs:
           #
           # The scanner reads the pull request number, branch and base from the
           # runner's own environment; the token lets it resolve them against the API
-          # so the analysis is attributed to the PR rather than to a branch.
+          # so the analysis is attributed to the PR rather than to a branch. Read-only
+          # is enough — see the permissions block above.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectBaseDir: ${{ inputs.working-directory }}
