@@ -1,11 +1,39 @@
-status: in_progress
-version: 0.4
+status: done
+version: 0.5
 started_at: 2026-08-16
 last_session_id: 498f8809-49e3-4e71-b8bb-3905366ad588
 last_run: 2026-08-25T11:01:20+02:00
 last_cycle_cost_usd: 13.913596000000002
 
 ## Log
+
+### 2026-08-25 — 0.5 delivered: the index lists the headings that start slides
+
+Released as [v0.5](https://github.com/gortazar/title-slides/releases/tag/v0.5).
+`is_section(level < slide_level)` became `is_indexed(level == slide_level)`, so `##` is
+indexed and `#` is left for the title slide. The reporter's deck stops warning and becomes
+28 slides — fourteen indexes before fourteen slides — listing nine entries.
+
+Worth keeping:
+
+- **Nine entries, not the ten the plan estimated.** Collapsing runs of identical adjacent
+  titles gives `Definición, Llamado, Retorno de Valores, Retorno de valores, Argumentos
+  nombrados, Parámetros por defecto, Parámetros opcionales, Paso de funciones a funciones,
+  Funciones lambda`. Two details decided it, both checked rather than assumed: pandoc
+  strips the trailing space on one `## Parámetros por defecto `, so the run of three
+  collapses to one; and `Retorno de Valores` vs `Retorno de valores` differ in case, so
+  they stay separate.
+- **The generated-heading guard was *not* load-bearing**, contrary to what the plan
+  expected. Removing it broke nothing, because continuations already carry `unlisted` and
+  are excluded as hidden. The guard is kept for intent and now has a test that pins the
+  rule directly — a continuation-classed heading without `unlisted` — which does fail
+  without it.
+- **Reveal's nesting improved, so the 0.2 caveat was rewritten rather than kept.** An index
+  at the slide level lands *inside its own slide's* vertical stack, immediately before the
+  slide it introduces, instead of stranded at the end of the previous section's stack.
+  Verified on a deck with `#` headings.
+- **The three carry fixtures passed byte-identically throughout**, which is what proves the
+  change stayed inside the index path; only `index.expected.qmd` was rewritten, by design.
 
 ### 2026-08-25 — 0.5, U0: pin, baseline and the before picture
 
@@ -207,6 +235,33 @@ absent (see the log). Medium overall for the idea, going by 0.1.
 Upstream: https://github.com/gortazar/title-slides — released as
 [v0.2](https://github.com/gortazar/title-slides/releases/tag/v0.2), submodule pointer and
 flake input both at that tagged commit.
+
+## What "done" covers for 0.5
+
+- **The index is built from slide-level headings** — `##` at Quarto's default — in document
+  order, each listed with the text the author wrote.
+- **`#` is reserved for the title slide**: never listed, never given an index slide.
+- **The reporter's deck gets its index** — `tests/fixtures/real-deck/` stops emitting 0.4's
+  warning, renders 28 slides with 28 distinct identifiers, and its own fourteen slides come
+  through untouched. That outline is pinned as the acceptance test.
+- **The emphasis still moves** — `Strong` plus the `title-slides-index-current` span,
+  unchanged from 0.2.
+- **Repeated adjacent titles are listed once**, emphasised for every slide in the run;
+  a title returning later in the deck keeps its own entry.
+- **Generated headings are neither indexed nor anchors**, with a test that fails without
+  the check.
+- **Hidden slides stay hidden** — `.unlisted` or `visibility="hidden"` keeps a slide off
+  the index and gives it no index slide.
+- **`show-index: true` is still never silent** — the warning survives, re-aimed at decks
+  with no slide-level headings, all of them hidden, or `slide-level: 0`.
+- **Docs and screenshots match the new rule**, including that a deck doubles in length so
+  `slide-number: c/t` totals move, and the rewritten vertical-stack note.
+- **Released and installable** — `_extension.yml` at 0.5.0, `v0.5` tagged with
+  `title-slides-0.5.zip` attached. Both install paths verified from clean directories
+  against the real deck: 28 slides, 14 index slides, 9 entries, no warning — and a deck
+  with `#` headings still gets them left alone.
+
+114 unit tests, 4 golden cases, the smoke test, the real-deck test and the install test.
 
 ## What "done" covers for 0.4
 
@@ -431,7 +486,19 @@ Two mechanics worth recording, both feeding later units:
 - [x] U4 — README, `_extension.yml` at 0.4.0, v0.4 released, both install paths verified
       from clean directories, pin moved here
 
-Next: nothing — 0.4 is done. 104 unit tests, 4 golden cases, the smoke test, the real-deck
+### 0.5 — index the `##` headings, not the `#` ones
+- [x] U0 — pin verified, 0.4 baseline green, and the before picture recorded from real
+      renders of all three decks
+- [x] U1/U2 — expectations rewritten first, then the predicate: `level == slide_level`,
+      not hidden, not generated, with adjacent repeats collapsed into one entry
+- [x] U3 — the warning re-aimed and every degenerate case re-pinned as a decision
+- [x] U4 — README, screenshots, `_extension.yml` at 0.5.0, v0.5 released, both install
+      paths verified from clean directories, pin moved here
+
+Next: nothing — 0.5 is done. 114 unit tests, 4 golden cases, the smoke test, the real-deck
+test and the install test, all green.
+
+Previously: 0.4 was done. 104 unit tests, 4 golden cases, the smoke test, the real-deck
 test and the install test, all green.
 
 Previously: 0.3 was done. 89 unit tests, 4 golden cases, the smoke test, the real-deck
