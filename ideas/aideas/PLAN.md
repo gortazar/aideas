@@ -226,7 +226,7 @@ Units, each one commit, tests first:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **Should `POST /cycle` accept a request when no `HEARTBEAT_SHARED_SECRET` is configured?**
+- [x] **Should `POST /cycle` accept a request when no `HEARTBEAT_SHARED_SECRET` is configured?**
       `POST /heartbeat` does — `_authorized()` returns true when the secret is empty
       (`heartbeat_server.py:97-100`) — and this deployment runs without one, so the plan assumes
       `/cycle` behaves identically: authenticated when a secret is set, open when it is not.
@@ -235,7 +235,7 @@ Units, each one commit, tests first:
       that starting a paid cycle is a bigger deal than recording a heartbeat, at the cost of the
       button not working in the current setup until `HEARTBEAT_SHARED_SECRET` is added to the
       heartbeat server's environment and to the extension's preferences.
-- [ ] **Should "Run a cycle" be able to override the gates?** The plan assumes **not**: the button
+- [x] **Should "Run a cycle" be able to override the gates?** The plan assumes **not**: the button
       asks for a cycle under exactly the rules a timer-fired cycle obeys, and its whole value when
       refused is naming the gate — so a cycle outside `allowed_hours`, over budget, or with a
       Claude Code session open on the laptop is reported, not forced. The alternative is a second,
@@ -243,14 +243,14 @@ Units, each one commit, tests first:
       modifier-click) that skips the hours and heartbeat gates but never the stop file, the budget
       or the lock. That is a real convenience — "I am at the laptop, I want it to build now" is the
       likeliest reason to click at all — and a real way to spend money outside the window that was
-      set on purpose.
-- [ ] **Should clicking "Run a cycle" ask for confirmation first?** The plan assumes one click
+      set on purpose. Yes should be able to override it.
+- [x] **Should clicking "Run a cycle" ask for confirmation first?** The plan assumes one click
       starts it, with the running state and the outcome line as the feedback, because that is the
       GNOME idiom and a confirmation dialogue from a panel menu is heavy. The alternative is a
       two-step in the menu itself — the item becoming `Really run a cycle?` for a few seconds
       before it will fire — which costs one click and removes the mis-click that launches a cycle
-      and up to `max_cycle_cost_usd` per agent.
-- [ ] **May this entry change `orchestrator/systemd/idea-heartbeat.service`?** The plan assumes
+      and up to `max_cycle_cost_usd` per agent. One click
+- [x] **May this entry change `orchestrator/systemd/idea-heartbeat.service`?** The plan assumes
       **no**: the units are read, not relaxed, and the box instead sets
       `ORCHESTRATOR_CYCLE_COMMAND` to a `systemctl start idea-orchestrator.service` so systemd
       supplies the cycle's environment — which means a non-root service user needs a polkit rule or

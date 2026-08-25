@@ -167,15 +167,16 @@ Units, each one commit, tests first:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] Where does the agenda go in a section-less deck? Ticking this line as-is puts **one index slide
+- [x] Where does the agenda go in a section-less deck? Ticking this line as-is puts **one index slide
       at the very top of the deck**, listing every slide, with nothing emboldened since no single
       slide is "next". The alternative — an index before *every* slide, mirroring the section rule —
-      turns a fourteen-slide deck into twenty-eight and is rejected unless the reporter wants it.
-- [ ] Should the fallback be automatic, or an opt-in `index-level: 2` key? Ticking this line as-is
+      turns a fourteen-slide deck into twenty-eight and is rejected unless the reporter wants it. 
+      In a section-less deck no agenda is inserted.
+- [x] Should the fallback be automatic, or an opt-in `index-level: 2` key? Ticking this line as-is
       makes it **automatic**, on the grounds that a key the user would have to discover does not fix
       a silent no-op. An explicit key is the cleaner semver story and could still be added later as
       the way to index a level other than the default.
-- [ ] Is the reporter's deck really `T4-funciones.qmd`? Ticking this line as-is **assumes it is** and
+- [x] Is the reporter's deck really `T4-funciones.qmd`? Ticking this line as-is **assumes it is** and
       treats that fixture's outline as the acceptance criterion. If the failing deck does have `#`
       sections, candidate 4 (generated but unreachable) becomes the likely cause and U0's findings
       redirect the entry.
