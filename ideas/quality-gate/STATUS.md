@@ -7,6 +7,36 @@ last_run:
 ## Log
 <!-- Newest entries on top. The orchestrator prepends here after each cycle. -->
 
+### 2026-08-25 — Blocked on the SonarQube Cloud token; docs written meanwhile
+
+**U3 onwards cannot start.** Everything after U2 needs an analysis to have run, and no
+analysis can run: no repository has a `SONAR_TOKEN`, and GitHub Actions secrets cannot be
+copied from one repository to another. A new open question in `PLAN.md` answers the two
+questions the first answer came back with, and asks for the one thing still missing.
+
+What I could establish without a token, so the next session does not re-derive it:
+
+- The SonarQube Cloud organisation `gortazar` **exists**, and holds one project,
+  `gortazar_casaos` — which confirms the plan's assumption that the key format is
+  `gortazar_<repo-name>`.
+- None of this entry's six projects exist in it yet.
+- None of the six repositories has any Actions secret set at all (`gh secret list` is empty
+  for each), so the token is not yet in `aideas` either.
+- `gortazar` is a GitHub **User**, not an Organization, so there is no account-level secret
+  to share one copy of the token from. Each repository needs its own copy.
+
+Written while blocked, because neither needs a measurement:
+
+- `README.md` — the five lines that wire an idea up, the input table, what the token is and
+  why every repository holds its own, what `v1` means and how it moves, and the anonymous
+  API calls that re-read the baseline. This is the "installation" for a reusable workflow;
+  there is no binary to ship.
+- `baseline.md` — the method, and the two sections that are already final: `title-slides`
+  is out of scope because SonarQube Cloud does not analyse Lua, and `vacas`/`wg` have no
+  repository yet. The six measured sections are deliberately absent rather than stubbed:
+  `check-wiring.sh` treats a section here as evidence the analysis ran, so a placeholder
+  would be a lie it could not catch.
+
 ### 2026-08-25 — U2: the reusable workflow and the tag that carries it
 
 `.github/workflows/sonar.yml` is the workflow `AGENTS.md` has been telling every idea to
@@ -57,7 +87,10 @@ project up and reads its first gate, not in advance.
 - [ ] U3 — wire `gortazar/recap` end to end, read its gate
 - [ ] U4 — this repo's own Sonar project, submodule exclusions, badges in `aideas`/`gnome-tasks`
 - [ ] U5 — `gnome-shell-pwgen`, `recap-gs`, `restore-wss`, `lo-pert`
-- [ ] U6 — `baseline.md` from the real analyses
-- [ ] U7 — idea `README.md`, `v1` tag, `quality-gate-v0.1` release
+- [ ] U6 — `baseline.md` from the real analyses (method and out-of-scope sections written;
+      the six measured sections need an analysis)
+- [ ] U7 — `v1` tag, `quality-gate-v0.1` release (idea `README.md` written)
 
-Next: U3 — wire `gortazar/recap` to it and read the first real gate.
+Next: **blocked.** U3 — wire `gortazar/recap`, push twice, read its gate — needs a
+`SONAR_TOKEN` in that repository. See the third open question in `PLAN.md`: the only thing
+missing is the token value, and with it U3-U7 are one session's work.
