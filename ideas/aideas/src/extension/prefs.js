@@ -43,8 +43,11 @@ export default class AideasPreferences extends ExtensionPreferences {
     _orchestratorGroup(settings) {
         const group = new Adw.PreferencesGroup({
             title: 'Orchestrator',
-            description: 'The box running the idea-builder, reachable over the VPN. ' +
-                'aideas reads GET /state from it over plain HTTP and sends nothing.',
+            description: 'The box running the idea-builder, reachable over the VPN. Reading ' +
+                'the queue needs no secret; starting a cycle needs the box\'s ' +
+                'HEARTBEAT_SHARED_SECRET, if it has one. The secret is kept in GSettings, ' +
+                'where anything in your session can read it — the same secret the heartbeat ' +
+                'hook already holds in its environment.',
         });
 
         const host = new Adw.EntryRow({
@@ -68,6 +71,14 @@ export default class AideasPreferences extends ExtensionPreferences {
         port.connect('notify::value', () =>
             settings.set_int('orchestrator-port', port.get_value()));
         group.add(port);
+
+        const secret = new Adw.PasswordEntryRow({
+            title: 'Shared secret',
+            text: settings.get_string('orchestrator-secret'),
+        });
+        secret.connect('changed', () =>
+            settings.set_string('orchestrator-secret', secret.get_text()));
+        group.add(secret);
 
         group.add(this._testRow(settings));
         return group;

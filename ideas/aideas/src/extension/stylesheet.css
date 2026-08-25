@@ -25,6 +25,12 @@
     opacity: 0.6;
 }
 
+/* An item that acts. Nothing loud: it is a menu item, and the one thing worth saying visually
+   is that its detail line is a detail line. */
+.aideas-action .aideas-detail {
+    max-width: 26em;
+}
+
 /* A question sits under the idea it belongs to: indented, quieter than the row above it, and
    narrow enough that a long one wraps instead of stretching the menu. */
 .aideas-question {

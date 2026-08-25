@@ -95,11 +95,22 @@ failure modes are environmental — and therefore invisible to every headless te
       it is convenient (`allowed-hours`, `heartbeat`) and is asserted absent for all eleven
       other gates, including `budget` and `stop-file`. 21 tests; four existing layout
       expectations updated, since the menu genuinely gained items. 297 unit tests green.
-- [ ] U5 — the widgets, and the secret in preferences.
+- [x] **U5 — the widgets, and the secret.** `indicator.js` gained one `action` case. **The menu
+      stays open**: GNOME closes a popup when an item emits `activate`, and both of these items
+      exist to show what happened — a refresh that dismisses the menu hides the very line it was
+      clicked for. So the item's `activate` *method* is replaced rather than its signal
+      connected: pointer and keyboard both still reach it, and nothing tells the menu to go
+      away. `extension.js` wires `refresh` to `scheduler.pollNow()` (which resets the backoff)
+      and `cycle`/`override` to the client, keeping the in-flight state the menu is built from,
+      and — after a launch — polls briskly for 45 s and says
+      `The cycle exited without starting — check the journal on the box` if the queue never
+      shows it, which is the honest reading of `started: true`. `orchestrator-secret` joins the
+      schema and preferences as a password field, with the exposure stated plainly rather than
+      dressed up. 297 unit tests green; flake check green.
 - [ ] U6 — the compositor: activating both items for real.
 - [ ] U7 — the bump to 0.4 and the docs.
 
-Next: U5 — the widgets, and the secret.
+Next: U6 — the compositor.
 
 ### Answered questions, as read
 

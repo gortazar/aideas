@@ -107,6 +107,42 @@ function questionItem(descriptor) {
     return item;
 }
 
+/**
+ * One item that does something: a label, an optional reason beneath it, and a click.
+ *
+ * **The menu stays open.** GNOME's default is for an activated item to dismiss the popup, and
+ * both of these items exist to show what happened — a refresh that closes the menu hides the
+ * very line it was clicked for. `PopupBaseMenuItem.activate()` is what emits the signal the menu
+ * closes on, so this replaces the method rather than connecting to the signal: the pointer and
+ * the keyboard both still reach it, and nothing tells the menu to go away.
+ */
+function actionItem(descriptor, onActivate) {
+    const item = new PopupMenu.PopupBaseMenuItem({
+        style_class: 'popup-menu-item aideas-action',
+    });
+
+    const box = new St.BoxLayout({ vertical: true, x_expand: true });
+    box.add_child(new St.Label({ text: descriptor.text }));
+    if (descriptor.detail) {
+        const detail = new St.Label({
+            text: descriptor.detail,
+            style_class: 'aideas-detail',
+        });
+        detail.clutter_text.line_wrap = true;
+        detail.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+        detail.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        box.add_child(detail);
+    }
+    item.add_child(box);
+
+    item.setSensitive(descriptor.sensitive);
+    item.activate = () => {
+        if (descriptor.sensitive)
+            onActivate(descriptor.action);
+    };
+    return item;
+}
+
 export const AideasIndicator = GObject.registerClass(
 class AideasIndicator extends PanelMenu.Button {
     /**
@@ -118,14 +154,20 @@ class AideasIndicator extends PanelMenu.Button {
      *     smoke test can hold time still
      * @param {?string} [options.iconsPath]  where this extension's own icons live. Without it
      *     a bulb cannot be found, and the button falls back to asking the icon theme.
+     * @param {function(string):void} [options.onAction]  what a `refresh`, `cycle` or
+     *     `override` item does when clicked
      */
-    _init({ onOpenPreferences, onMenuOpenChanged = null, clock = null, iconsPath = null } = {}) {
+    _init({
+        onOpenPreferences, onMenuOpenChanged = null, clock = null, iconsPath = null,
+        onAction = null,
+    } = {}) {
         super._init(0.5, 'aideas', false);
 
         this._onOpenPreferences = onOpenPreferences;
         this._onMenuOpenChanged = onMenuOpenChanged;
         this._clock = clock ?? (() => Date.now() / 1000);
         this._iconsPath = iconsPath;
+        this._onAction = onAction;
 
         this._icon = new St.Icon({ style_class: 'system-status-icon' });
         this._badge = new St.Label({
@@ -160,7 +202,10 @@ class AideasIndicator extends PanelMenu.Button {
      * @param {?string} state.host  what was tried, for the unreachable message
      * @param {boolean} state.alwaysShow  the preference
      */
-    update({ reading, fetchedAt = null, lastGood = null, host = null, alwaysShow = false }) {
+    update({
+        reading, fetchedAt = null, lastGood = null, host = null, alwaysShow = false,
+        actions = null,
+    }) {
         const now = this._clock();
 
         const panel = buildIndicator({ reading, now, lastGood, alwaysShow });
@@ -170,7 +215,7 @@ class AideasIndicator extends PanelMenu.Button {
         this._badge.visible = panel.badge !== null;
         this.accessible_name = panel.accessibleName;
 
-        this._rebuildMenu(buildMenu({ reading, now, fetchedAt, lastGood, host }));
+        this._rebuildMenu(buildMenu({ reading, now, fetchedAt, lastGood, host, actions }));
     }
 
     /**
@@ -233,6 +278,9 @@ class AideasIndicator extends PanelMenu.Button {
                 case 'footer':
                     this.menu.addMenuItem(infoItem(item.text, null, { dim: true }));
                     break;
+                case 'action':
+                    this.menu.addMenuItem(actionItem(item, name => this._onAction?.(name)));
+                    break;
                 case 'preferences': {
                     const preferences = new PopupMenu.PopupMenuItem(item.text);
                     preferences.connect('activate', () => this._onOpenPreferences?.());
@@ -250,6 +298,7 @@ class AideasIndicator extends PanelMenu.Button {
         }
         this._onMenuOpenChanged = null;
         this._onOpenPreferences = null;
+        this._onAction = null;
         super.destroy();
     }
 });
