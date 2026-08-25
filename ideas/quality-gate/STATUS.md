@@ -11,6 +11,59 @@ last_cycle_cost_usd: 18.3907995
 
 
 
+### 2026-08-25 — U6: all six measured, and the gate says something uncomfortable
+
+The merge moved `v1` past the `pull-requests: read` fix, the four red runs were re-run, and
+all six projects now have two analyses and a computed gate. `baseline.md` is written from
+them, one section each, with the numbers, the dashboard links and what they actually mean.
+
+**All six gates pass, and all six pass vacuously — 0 new lines each**, so Sonar evaluated
+three ratings plus hotspots-reviewed over an empty set and silently dropped the coverage and
+duplication conditions. That is partly an artefact of how a second analysis of the same
+commit is what it takes to get a gate at all, but it is also the real risk: Sonar skips both
+conditions whenever a period has under 20 new lines and reports `OK` while doing it.
+
+The numbers a future blocking gate has to be chosen from are the whole-project ones:
+
+| Project | Lines | Coverage | Dup | Bugs | Vulns | Smells | Rel/Sec/Maint |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `aideas` | 8,239 | 0.0% | 1.7% | 3 | 8 | 107 | E / C / A |
+| `restore-wss` | 4,557 | 62.4% | 0.0% | 0 | 0 | 42 | A / A / A |
+| `recap` | 3,053 | 86.0% | 3.0% | 0 | 0 | 12 | A / A / A |
+| `recap-gs` | 1,874 | 0.0% | 0.0% | 2 | 0 | 9 | E / A / A |
+| `lo-pert` | 1,039 | 58.9% | 0.0% | 1 | 0 | 9 | C / A / A |
+| `gnome-shell-pwgen` | 321 | 0.0% | 0.0% | 0 | 0 | 13 | A / A / A |
+
+**Only `recap` clears the 80% coverage threshold.** The other two instrumented projects sit
+at 62.4% and 58.9%, and the three GJS projects cannot be instrumented at all.
+
+**Every rating below A is worth discounting**, which is the other thing entry 5 needs to
+know. `recap-gs` is E because Sonar reports `spacing` in `src/stylesheet.css` as an unknown
+CSS property, twice, at BLOCKER — GNOME Shell stylesheets are St's dialect, not CSS. This
+repository is E for one GJS false positive too (`Gio.FileEnumerator.next_file()` read as a
+loop variable that is never modified) and C for two `curl` calls that do not enforce HTTPS.
+`lo-pert` is C for an assertion in a hypothesis property test — Sonar rates issues in
+`sonar.tests` sources alongside production ones. The plan's GJS worry turned out to be
+misplaced in one direction and right in another: `imports.gi.*` and `resource:///` produced
+no findings at all across three GJS projects, but the **stylesheet** did.
+
+Also unanticipated: **Sonar analyses shell scripts** — 662 lines of them in this repository,
+and half its security findings.
+
+`scripts/read-measures.sh` prints all of the above for any project, without a token, so the
+baseline can be re-checked by anyone.
+
+`check-wiring.sh` now owns all six rows and passes, which needed the `recap-gs` and
+`lo-pert` pins bumping. Both were *already* drifted before this entry — gitlink and flake
+input at different commits, so `check-pin.sh` was failing in both wrappers — and both now
+agree, verified with `nix flake check` in each wrapper rather than assumed.
+
+Two pre-existing failures on `main` that are not this idea's and were not touched:
+`CI - recap` has been red since 2026-08-24 on the same `ideas/vacas/upstream` gitlink that
+broke `ci-quality-gate.yml`, and `CI - aideas` fails a state-contract test
+(`test_status_blocked_is_blocked_without_a_question_count`, `'ready' != 'blocked'`) that
+started failing before this session.
+
 ### 2026-08-25 — U3, U4 and U5: six projects created, six repositories wired, one measured
 
 The token arrived, so the whole of U3-U5 was doable. All six SonarQube Cloud projects now
@@ -164,11 +217,8 @@ project up and reads its first gate, not in advance.
       (wired; its first analysis runs after the merge)
 - [x] U5 — `gnome-shell-pwgen`, `recap-gs`, `restore-wss`, `lo-pert` wired and pushed
       (their first analyses run after the merge moves `v1`)
-- [ ] U6 — `baseline.md`: method, onboarding, out-of-scope and `recap` written from the real
-      analysis; five projects still to measure
-- [ ] U7 — `quality-gate-v0.1` release (`v1` tag exists, idea `README.md` and
-      `release-quality-gate.yml` written; the release fires when `STATUS.md` says `done`)
+- [x] U6 — `baseline.md` written from six real analyses, plus `read-measures.sh` to re-read
+      them; `check-wiring.sh` owns all six rows and passes
+- [ ] U7 — `quality-gate-v0.1` release
 
-Next: **U6.** The four red runs need `gh run rerun --repo gortazar/<repo>` once the merge
-has moved `v1` past the `pull-requests: read` fix, and this repository's own analysis runs
-on that same push. Then five `baseline.md` sections, then U7.
+Next: **U7** — the release.
