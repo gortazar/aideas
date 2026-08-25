@@ -71,6 +71,8 @@ makes position a safe identity: the active list only ever holds work still to do
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel. 
 
+3. [title-slides](ideas/title-slides/) - The index must be extracted from level 2 titles ("##"), not from level 1 ("#"). Level 1 is reserved for the title slide. Sections use level 2 instead. Minor version.
+
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
