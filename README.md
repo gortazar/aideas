@@ -71,9 +71,7 @@ makes position a safe identity: the active list only ever holds work still to do
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel. 
 
-3. [aideas](ideas/aideas/) - Add two buttons to aideas gnome shell extension: one to re-check the status on demand, and another to run a cycle. Minor version.
-
-4. [title-slides](ideas/title-slides/) - The index is never shown despite the show-index:true variable is set in frontmatter. Patch version (0.3 -> 0.3.1)
+3. [title-slides](ideas/title-slides/) - The index is never shown despite the show-index:true variable is set in frontmatter. Patch version (0.3 -> 0.3.1)
 
 ## Finished
 
@@ -188,3 +186,5 @@ makes position a safe identity: the active list only ever holds work still to do
         /opt/quarto/share/filters/main.lua:1332: in upvalue 'run_emulated_filter_chain'
         /opt/quarto/share/filters/main.lua:1368: in function </opt/quarto/share/filters/main.lua:1365>
    WARN: Error encountered when rendering files
+
+19. [aideas](ideas/aideas/) - Add two buttons to aideas gnome shell extension: one to re-check the status on demand, and another to run a cycle. Minor version. (finished 2026-08-25, v0.4)
