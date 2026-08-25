@@ -66,6 +66,16 @@ repository's own project.
 'ideas/vacas/upstream'"* — a gitlink in the index with no `.gitmodules` entry, belonging to
 another idea. It now initialises exactly the submodules `.gitmodules` declares.
 
+`release-quality-gate.yml` is written and lints clean, gated on `status: done` so it
+publishes nothing until the entry is finished. It creates its own tag, as it must —
+`quality-gate-v<version>`, with `sonar.yml`, `baseline.md` and the idea's `README.md` as
+assets, since there is nothing to compile.
+
+The Python coverage command was run locally rather than assumed: `restore-wss` reports
+**73.6%** over 247 unit tests, and writes a `coverage.xml` whose paths resolve against the
+workspace the same way in the scan job as in the coverage job. `lo-pert` uses the identical
+pattern.
+
 Submodule pointers: bumped for `recap`, `gnome-shell-pwgen` and `restore-wss`, where the
 commit pushed is the only one ahead of the pin, each with its `flake.lock` in the same commit
 so `check-pin.sh` stays green. **Not** bumped for `recap-gs` and `lo-pert`: their upstreams
@@ -154,7 +164,8 @@ project up and reads its first gate, not in advance.
       (their first analyses run after the merge moves `v1`)
 - [ ] U6 — `baseline.md`: method, onboarding, out-of-scope and `recap` written from the real
       analysis; five projects still to measure
-- [ ] U7 — `quality-gate-v0.1` release (`v1` tag exists; idea `README.md` written)
+- [ ] U7 — `quality-gate-v0.1` release (`v1` tag exists, idea `README.md` and
+      `release-quality-gate.yml` written; the release fires when `STATUS.md` says `done`)
 
 Next: **U6.** The four red runs need `gh run rerun --repo gortazar/<repo>` once the merge
 has moved `v1` past the `pull-requests: read` fix, and this repository's own analysis runs
