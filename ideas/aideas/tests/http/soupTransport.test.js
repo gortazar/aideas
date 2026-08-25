@@ -10,6 +10,11 @@ import Gio from 'gi://Gio';
 
 import { suite, test, assert, assertEquals, assertMatch } from '../harness.js';
 
+import { SoupTransport, reasonFor } from '../../src/lib/soupTransport.js';
+import { StateClient } from '../../src/lib/stateClient.js';
+import { Status } from '../../src/lib/state.js';
+import { withServer } from './serverHarness.js';
+
 /**
  * Every phrase soupTransport.js can produce.
  *
@@ -30,10 +35,6 @@ const KNOWN_REASONS = [
     'the TLS handshake failed',
     'the request failed',
 ];
-import { SoupTransport, reasonFor } from '../../src/lib/soupTransport.js';
-import { StateClient } from '../../src/lib/stateClient.js';
-import { Status } from '../../src/lib/state.js';
-import { withServer } from './serverHarness.js';
 
 /** A transport that is always destroyed, so no session outlives its test. */
 async function withTransport(fn) {
@@ -73,6 +74,16 @@ suite('a real request', () => {
             const { status } = await transport.send(server.url('/state-500'), 10);
 
             assertEquals(status, 500, 'a 500 is a reply; the client decides what it means');
+        }));
+    });
+
+    test('a status outside libsoup\'s enumeration is a number, not a hang', async () => {
+        // 429 is not in Soup.Status. get_status() throws on it, inside the async callback,
+        // where the throw settles no promise at all and the request never returns.
+        await withServer({}, server => withTransport(async transport => {
+            const { status } = await transport.send(server.url('/state-429'), 10);
+
+            assertEquals(status, 429);
         }));
     });
 

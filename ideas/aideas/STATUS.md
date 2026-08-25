@@ -66,13 +66,28 @@ failure modes are environmental — and therefore invisible to every headless te
       `docs/state-contract.md` is now the orchestrator's HTTP contract rather than just
       `/state`'s: the request shape, the two-field response, the whole gate vocabulary, the
       statuses, the rate limit, and what actually gets started. 79 python tests green.
-- [ ] U3 — POST in the transport, and the phrases a failure maps to.
+- [x] **U3 — POST, and the phrases a failure maps to.** `soupTransport.js` grew a `post()` with
+      a JSON body, sharing the GET path's two deadlines and its code-to-phrase mapping, because
+      the failures are the same failures. `src/lib/cycleClient.js` turns one attempt into
+      `{started, gate, reason}`, never rejects, refuses to have two posts outstanding, and keeps
+      the two answers that must never be confused apart: a box that *refused* (its own words,
+      passed through, unfamiliar gates included) and a box that never heard (worded here, from
+      statuses and GError codes — 404 as `this box does not support starting cycles`, since that
+      is an un-updated box and not the user's mistake).
+      23 unit tests and **10 new http tests** against the stub, which gained `POST /cycle` in six
+      modes and a `/cycles` log so a test can see what the button actually sent.
+      **The http tests found a bug in the code this entry only touched in passing:** 429 is not a
+      member of libsoup's `Status` enumeration, so `message.get_status()` threw inside the async
+      callback — where a throw settles no promise — and the request hung for ever. That was
+      already true of every GET, so a proxy answering 429 would have wedged the poller silently.
+      It reads `message.status_code` now, with a regression test on the GET path. 276 unit + 39
+      http tests green.
 - [ ] U4 — the two items, as data.
 - [ ] U5 — the widgets, and the secret in preferences.
 - [ ] U6 — the compositor: activating both items for real.
 - [ ] U7 — the bump to 0.4 and the docs.
 
-Next: U3 — POST in the transport.
+Next: U4 — the two items, as data.
 
 ### Answered questions, as read
 
