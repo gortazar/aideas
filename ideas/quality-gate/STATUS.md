@@ -1,11 +1,13 @@
-status: in_progress
+status: blocked
 version: 0.1
 started_at: 2026-08-25
-last_session_id:
-last_run:
+last_session_id: 0c56aa7b-8858-406c-8f49-2c49a15d0727
+last_run: 2026-08-25T13:11:09+02:00
+last_cycle_cost_usd: 3.1778349999999995
 
 ## Log
-<!-- Newest entries on top. The orchestrator prepends here after each cycle. -->
+- 2026-08-25T13:11:09+02:00 — blocked ($3.1778349999999995)
+
 
 ### 2026-08-25 — Blocked on the SonarQube Cloud token; docs written meanwhile
 
@@ -79,9 +81,6 @@ project's analysis is actually running, so rows are added by the unit that wires
 project up and reads its first gate, not in advance.
 
 ## Units
-<!-- The honest progress report: one line per unit of work, ticked only once it is
-     committed with its tests passing. Refresh this at every unit, not at session end.
-     Keep "next" to the single unit being started now. -->
 - [x] U1 — `flake.nix` + `scripts/check-wiring.sh` (empty table) + `ci-quality-gate.yml` green
 - [x] U2 — `.github/workflows/sonar.yml` (reusable) and `tag-sonar.yml` (moves `v1`)
 - [ ] U3 — wire `gortazar/recap` end to end, read its gate
