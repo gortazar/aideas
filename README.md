@@ -78,6 +78,13 @@ makes position a safe identity: the active list only ever holds work still to do
    turns and wall-clock inside a 45-minute cycle; a red gate mid-cycle leaves an entry unfinishable, so define what an agent does then rather than letting it stall; and releases
    are cut from `main`, so the release path moves behind the pull request too. Where the baseline shows a condition no idea can meet — 80% coverage on GJS or LibreOffice UNO code
    is the likely one — set a custom gate at a number that is honest, and say in the plan why.
+   **First, publish the missing `quality-gate-v0.1` release.** The previous entry was retired as done
+   without one, through no fault of its agent: the orchestrator overwrote `status: done` in the same
+   commit that carried it, so `release-quality-gate.yml` read `not_started` and published nothing.
+   Orchestrator 1.5 fixed that for future entries, but 0.1 still has no release and `AGENTS.md` says
+   an entry without one is not done. The workflow takes a `force` input for exactly this case:
+   `gh workflow run "Release - quality-gate" --repo gortazar/aideas -f force=true`. Verify the
+   release and its assets exist before starting on the blocking work, and record it in `STATUS.md`.
 
 ## Finished
 
