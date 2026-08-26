@@ -54,9 +54,10 @@ That is deliberate — a gate an agent can wave through is advice with extra ste
    request number, its URL, and what it is waiting for. The next session's first unit is:
    confirm the merge, bump the pin, verify the release. **This is a legitimate end state**,
    not a failure.
-8. **`status: done` now requires the pull request to be merged**, the gate green, and the
-   release published *and verified* with the idea's own `check-release.sh`. An open pull
-   request is not done.
+8. **`status: done` now requires the pull request to be merged**, the gate green, the
+   release published *and verified* with the idea's own `check-release.sh`, and **every open
+   BLOCKER either fixed or documented in `STATUS.md` as a false positive**. An open pull
+   request is not done; nor is an undocumented BLOCKER.
 
 ### When the quality gate goes red
 
@@ -72,13 +73,68 @@ no token. Then, in order:
   no runner can reach — → a **narrow** exclusion in that repository's
   `sonar-project.properties`, in the same pull request, with the reason in the commit
   message and a row appended to `ideas/quality-gate/exclusions.md`. Never a blanket
-  exclusion; never a rule turned off organisation-wide.
+  exclusion, and never a change to the organisation's default profile. If the rule is wrong
+  about the whole technology rather than these files, a custom profile is the better remedy
+  — see **Issues: fix them, configure around them, never re-label them**.
 - **Cannot be cleared this cycle → land nothing and say so.** Leave the pull request open
   *without* auto-merge, `status: in_progress`, and `STATUS.md` naming the condition and the
   measured numbers. If the gate itself is the problem — a threshold no honest change can
   meet — append an `- [ ]` open question to the idea's `PLAN.md` and stop. An entry left
   visibly unfinishable is a result; an agent re-running the same red analysis every cycle is
   not.
+
+### Issues: fix them, configure around them, never re-label them
+
+**You must not change an issue's status.** The token can: Sonar offers `accept`, `confirm`,
+`falsepositive` and `wontfix` on every issue, and an accepted or false-positive issue is
+dropped from the ratings and from the gate. That is precisely why it is off limits — a gate
+you can turn green by re-labelling what it found is not a gate, and an agent racing to
+`status: done` is the last party who should be judging its own findings. Read issues as much
+as you like (`api/issues/search`) to decide what to fix. Never call `api/issues/do_transition`
+or `api/issues/bulk_change`. If an issue genuinely should be dismissed, that is the user's
+call: put it in `STATUS.md` and, if it blocks you, an open question in `PLAN.md`.
+
+**Configuration first.** A rule that is *systematically* wrong for a technology — not wrong
+about one line, but wrong about the whole language — gets turned off in a quality profile
+once, rather than dismissed issue by issue. Dismissal is invisible in git, has to be
+repeated for every new occurrence, and cannot be reviewed in a diff; a profile change is a
+decision, recorded.
+
+`css:S4654` ("CSS properties should be valid") is the model. It fires BLOCKER on
+`Unknown property "spacing"` in GNOME Shell stylesheets, which are St's dialect and not CSS
+at all, so it will misfire on every GJS project forever. Two such issues are enough to drag
+a healthy project to a reliability rating of E.
+
+The built-in profiles are read-only — `Sonar way` and `Sonar way essentials` both report
+`builtIn=true` — so the route is to copy one, deactivate the rule in the copy, and assign
+the copy to the affected projects. **Never change the organisation default profile.**
+
+```
+api/qualityprofiles/copy             fromKey=<built-in key>&toName=<name>
+api/qualityprofiles/deactivate_rule  key=<profile key>&rule=<rule key>
+api/qualityprofiles/add_project      qualityProfile=<name>&language=<lang>&project=<key>
+```
+
+Record it in `ideas/quality-gate/exclusions.md` with the reason, as for any exclusion. Which
+of the two remedies to reach for:
+
+| The problem is | The remedy |
+| --- | --- |
+| this rule is wrong for this whole technology | a custom quality profile, applied to the affected projects |
+| this rule is right, but not about these files | a narrow `sonar.exclusions` in that repository |
+
+**Open BLOCKER issues gate `done`.** Every one on the idea's project is either:
+
+- **fixed**, in the pull request, before the entry is finished; or
+- **written down in `STATUS.md` as a false positive** — naming the issue key, the rule, the
+  file and line, and why the analyser is wrong about it.
+
+A BLOCKER documented that way needs no fixing and does not hold the entry back. A BLOCKER
+that is neither fixed nor documented does: `status: done` with one outstanding is not done,
+in exactly the way a missing release is not done. And writing "false positive" about
+something you merely do not want to fix is the one dishonest move this arrangement cannot
+survive — **if you are not sure, it is not a false positive**: fix it, or leave it open and
+say so.
 
 ## Workflow
 - Work within `ideas/<this-idea>/` and its `upstream` submodule. Never touch other idea
