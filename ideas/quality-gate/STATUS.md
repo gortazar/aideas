@@ -1,5 +1,5 @@
-status: not_started
-version: 0.1
+status: done
+version: 1.0
 started_at: 2026-08-25
 last_session_id: 0c56aa7b-8858-406c-8f49-2c49a15d0727
 last_run: 2026-08-25T18:44:49+02:00
@@ -12,6 +12,278 @@ last_cycle_cost_usd: 12.180309000000001
 
 
 
+
+### 2026-08-26 — U7: done at 1.0
+
+**What `done` covers.** Every feature in this entry's `PLAN.md` is delivered and green.
+
+- **The gate blocks**, and it takes all three of these, none of which works alone:
+  `sonar.qualitygate.wait=true` so the job's verdict *is* the gate's verdict; a branch
+  ruleset requiring both a pull request and that check, because a required check alone lets
+  a direct push land and go red afterwards; and no bypass actors.
+- **Two custom gates**, created and reconciled from the API, every project assigned and read
+  back. `gate.md` justifies 60% rather than 80%, an absent coverage condition rather than a
+  0% one, and dropping `Security hotspots reviewed`.
+- **Six repositories gated**, each with contexts read off a live run. `gortazar/aideas` is
+  ungated on purpose and `check-wiring.sh` asserts that too.
+- **`AGENTS.md` rewritten** around the pull request, with a defined ladder for a red gate.
+- **`check-wiring.sh` grew three assertions** that can now rot silently — ruleset, gate
+  assignment, and pin reachability — and all three were negative-tested by breaking the
+  expectation and watching them fail.
+- `README.md` rewritten; `exclusions.md` and `gate.md` added to the release assets, with
+  `check-release.sh` updated to require them.
+
+**The release publishes on the merge**, as `quality-gate-v1.0`. Confirm it afterwards with
+`ideas/quality-gate/scripts/check-release.sh 1.0`, which also checks the released
+`sonar.yml` is byte-identical to the one `v1` resolves to. **If the sweep overwrites
+`status: done` again** — it did last time, which is why U0 existed — the recovery is
+`gh workflow run "Release - quality-gate" --repo gortazar/aideas -f force=true`.
+
+### Two things a reader should not have to discover for themselves
+
+**`fail-on-gate` has not yet blocked anything.** Callers pin `@v1`, and `v1` only moves when
+`tag-sonar.yml` runs on `main` after this branch is merged. Every pull request in this entry
+was therefore analysed by the *old* workflow, which returns before the gate is known. The
+rulesets are live and the gates are live; the *waiting* reaches the five callers one cycle
+later. This was predicted in the plan's risks and is not a defect — but it does mean the
+wall-clock cost of `sonar.qualitygate.wait` is still unmeasured, and the first entry to run
+under it should record it in `gate.md`.
+
+**The orchestrator entry has still not landed**, so `settle_submodules` still pushes rescued
+work to `HEAD:refs/heads/main`, which the six gated repositories now reject. Consequences,
+read from the code rather than assumed: `submodule_paths()` filters to `ideas/<slug>/`, so
+only the built idea's own submodule is affected; the push is skipped entirely when the
+commit is already on a remote branch, which the new "push after every unit" rule makes the
+normal case; and when it does fail, the objects are rescued into `.git/modules/<path>` under
+`refs/aideas/rescued/<slug>/<sha>` with a WARNING rather than being lost. So the failure
+mode is "work is somewhere awkward and loudly reported", not "work is gone". The
+`ideas/orchestrator` entry is ahead of this one in `README.md` and fixes it properly.
+
+### 2026-08-26 — U6: the rules every agent works by, rewritten around the pull request
+
+`AGENTS.md` last, on purpose, so it describes a flow that has actually been run rather than
+one that was planned. What changed:
+
+- **"Push there freely" is gone.** Push access is to *branches*; every idea repository's
+  `main` is behind a ruleset with no bypass actors.
+- A new **Landing a change upstream** section: eight numbered rules. Branch as
+  `agent/<slug>/<YYYY-MM-DD>`, draft pull request at the *first* unit rather than the last,
+  push after every unit, then `gh pr ready` and
+  `gh pr merge --auto --squash --delete-branch` — **GitHub does the waiting, not you**,
+  which is the answer to the wall-clock problem and costs zero turns. Check once, never
+  poll. Bump the pin to the **new `main` commit**, never to a branch tip a squash merge
+  orphans. And: a pull request still open at session end is `status: in_progress` with its
+  number and URL in `STATUS.md` — **a legitimate end state**, not a failure.
+- **A red gate has a defined ladder**, not a hope: read it with `pr-gate.sh`; fix a real
+  finding in the same pull request; give a catalogued false positive a narrow exclusion plus
+  a row in `exclusions.md`, in the same pull request; or land nothing and say which
+  condition and what the numbers were. Bypassing is not on the ladder, and the rules say so
+  in as many words.
+- `status: done` now requires the pull request **merged**.
+- The Shipping section stops calling the gate advisory and says it blocks.
+- A three-command checklist for a brand-new idea repository — secret, project, ruleset — with
+  the ruleset last and the warning to read its contexts off a live pull request, since
+  `gnome-shell-pwgen` proved they are not guessable.
+
+`scripts/pr-gate.sh <repo> <pr>` prints every condition with its measured value and
+threshold, the new-code issues behind the failing ones, and the ladder. It needs no token.
+Tested both ways: on `recap` #1 it reports the gate green, three conditions evaluated and
+**"under 20 new lines, so Sonar did not evaluate coverage or duplication at all"**; on a
+pull request that does not exist it explains the three reasons that happens and exits 1.
+Its output is also the first independent confirmation that the custom gate is really in
+force — `new_security_hotspots_reviewed` is absent from the conditions, which is exactly the
+condition `ensure-quality-gate.sh` drops.
+
+`exclusions.md` was written in U3, when the first two exclusions needed it.
+
+### 2026-08-26 — U4 and U5: six repositories gated, and the loop proven end to end
+
+`scripts/ensure-branch-ruleset.sh <repo> <context>...` creates or updates a `main protected`
+ruleset on `~DEFAULT_BRANCH`: a `pull_request` rule at **0 required approvals** (a solo owner
+cannot approve their own pull request, so anything higher is a permanent deadlock), a
+`required_status_checks` rule, `non_fast_forward`, `deletion`,
+`strict_required_status_checks_policy: false` (requiring the branch to be up to date turns
+two open pull requests in one repository into a rebase loop), and **no bypass actors at
+all**. It also sets `allow_auto_merge`, which `gh pr merge --auto` refuses to work without.
+One repository per call, deliberately: this is the script that can lock a `main` against
+everybody, so there is no bulk mode.
+
+**recap first, end to end, and all three steps verified:**
+
+1. Contexts read off a live pull request — `test`, `coverage`, `sonar / Analysis` — not
+   guessed.
+2. **A direct push to `main` is rejected**: `GH013: Repository rule violations found ...
+   Changes must be made through a pull request ... 3 of 3 required status checks are
+   expected`, and `main` did not move.
+3. **A green pull request auto-merges**: [recap #1](https://github.com/gortazar/recap/pull/1)
+   merged itself at 09:48 UTC while this session did something else. `gh pr merge --auto`
+   was set once, checked once. No polling, no `--watch`.
+
+Then the other five. Every set of contexts was read from a real run rather than assumed, and
+that caught the trap the plan warned about:
+
+| Repository | Required checks |
+| --- | --- |
+| `recap` | `test`, `coverage`, `sonar / Analysis` |
+| `recap-gs` | `check`, `package`, `sonar / Analysis` |
+| `restore-wss` | `check`, `coverage`, `sonar / Analysis` |
+| `lo-pert` | `nix flake check`, `coverage`, `sonar / Analysis` |
+| `gnome-shell-pwgen` | 3 lint/test jobs, 5 GNOME Shell legs, **`SonarQube Cloud / Analysis`** |
+| `title-slides` | `test` — no Sonar project, because Lua |
+
+**`gnome-shell-pwgen` does not report `sonar / Analysis`.** Its caller job carries
+`name: SonarQube Cloud`, so the context is `SonarQube Cloud / Analysis`. Requiring the
+former across all six — which is exactly what the plan's own expectation said — would have
+left that repository's `main` unmergeable forever, with no bypass actor to undo it.
+
+Two judgement calls worth recording. `gnome-shell-pwgen`'s **`GNOME Shell (fedora:rawhide)`
+leg is deliberately not required**: it is `continue-on-error` upstream precisely because
+rawhide breaks for unrelated reasons, and requiring it would hand a merge veto to Fedora's
+development branch. The five stable legs are required. And **`SonarCloud Code Analysis`**,
+the SonarQube Cloud GitHub App's own check, is reported on every repository but required on
+none — which repositories the App is installed on is not knowable from here, and a check
+that stops being reported is a `main` nobody can merge to.
+
+**`gortazar/aideas` is deliberately left ungated**, per the first answered open question: the
+orchestrator pushes `main` here directly every cycle, and a pull-request rule would stop
+every cycle dead until the orchestrator learns to open and merge one itself. Its analysis
+stays reported-not-enforced. `--status aideas` confirms there is no ruleset.
+
+Recovery, if a context is ever wrong: `gh api -X DELETE repos/{owner}/{repo}/rulesets/{id}`
+still works, because a ruleset is repository configuration rather than a branch. `--status`
+prints the id.
+
+Pins bumped for all three merged pull requests, each to the **new `main` commit** and each
+checked with `merge-base --is-ancestor` — a squash merge with `--delete-branch` orphans the
+branch tip, and a gitlink pointing at it resolves nowhere.
+
+### 2026-08-26 — U3: the exclusions that make 60% mean something
+
+Three repositories, and the entry's first use of its own pull-request rule. Both changes
+went through a pull request in their own repository, with `gh pr merge --auto --squash
+--delete-branch` doing the waiting — merged 09:40 UTC, and the pins bumped afterwards to the
+**new `main` commits**, never to the branch tips a squash merge orphans.
+
+The exclusions were chosen from measured per-file coverage rather than from the plan's
+guess, and they are `sonar.coverage.exclusions` only — every excluded file is still analysed
+for bugs, smells and duplication:
+
+| Project | Excluded | Lines | Coverage before | after |
+| --- | --- | ---: | ---: | ---: |
+| [`restore-wss` #1](https://github.com/gortazar/restore-wss/pull/1) | `src/extension/**`, `src/browser-extension/**` | 360 | 62.4% | **73.6%** |
+| [`lo-pert` #1](https://github.com/gortazar/lo-pert/pull/1) | the four UNO-facing modules | 285 | 58.9% | **98.4%** |
+| `recap` | nothing | 0 | 86.0% | 86.0% |
+
+`recap` was checked and deliberately left alone: 17 uncovered lines across four small files,
+only one structurally unreachable (a `!unix` build tag), and excluding one line to tidy an
+86.0% figure is not worth the precedent.
+
+Two things were **not** excluded although they read 0%, and `exclusions.md` says why under
+*Considered and rejected*: `restore-wss`'s `daemon.py` and native messaging host are both
+reachable from Python, so they are genuine coverage gaps rather than structural ones.
+Excluding them would turn the gate green by making it blind.
+
+`exclusions.md` is the ledger that keeps this honest — every exclusion any repository
+carries, what it hides, and why, with the rule that adding one means adding a row in the
+same pull request.
+
+**Both pull-request gates were vacuous, and instructively so.** Each diff touched only
+`sonar-project.properties`, which is configuration rather than an analysed source, so
+neither had a single new line of code: three rating conditions evaluated over an empty set,
+coverage and duplication skipped, `OK`. Recorded as the first two rows of `gate.md`'s
+readings table.
+
+Also learned, by reading the contexts off a live pull request exactly as the plan insists:
+`restore-wss` reports `check`, `coverage` and `sonar / Analysis`, and `lo-pert` reports
+`nix flake check`, `coverage` and `sonar / Analysis` — but `gnome-shell-pwgen` will report
+**`SonarQube Cloud / Analysis`**, because its caller job carries a `name:`. Guessing
+`sonar / Analysis` for all six would have locked that repository's `main` against everybody.
+A fourth context exists on every repository too, `SonarCloud Code Analysis`, from the
+SonarQube Cloud GitHub App; it is deliberately not required, since which repositories the
+App is installed on is not knowable from here.
+
+### 2026-08-26 — U2: two custom gates, live and assigned
+
+`scripts/ensure-quality-gate.sh` creates both gates from the API and reconciles them
+condition by condition, so editing the table in the script and re-running it is how a
+threshold changes. `--status` is a check rather than a report: it exits non-zero when the
+live gates disagree with the script, which is what U7 will wire into `check-wiring.sh`.
+
+Both created and all six projects assigned, each **verified by reading
+`get_by_project` back** rather than trusting the exit status — a project silently left on
+`Sonar way` would have made this entry a no-op:
+
+- **`aideas instrumented`** (id 159028) — `recap`, `restore-wss`, `lo-pert`: reliability,
+  security and maintainability A on new code, duplication ≤ 3%, **coverage ≥ 60%**.
+- **`aideas uninstrumented`** (id 159029) — `recap-gs`, `gnome-shell-pwgen`, `aideas`: the
+  same four, and no coverage condition at all.
+
+Re-running `--status` afterwards reports every condition `ok` and every project on the right
+gate, so it is idempotent in fact and not just in intent.
+
+`gate.md` carries the reasoning, and is the file to argue with: why 60% rather than 80%
+(only `recap` clears 80% today, and the other two are short for structural reasons —
+764 lines of GJS inside `restore-wss`, and `lo-pert`'s UNO modules that only run inside
+soffice's interpreter — so the exclusions in U3 come first and the threshold second); why an
+absent coverage condition rather than a 0% one; and why `Security hotspots reviewed = 100%`
+is the one default deliberately dropped, since clearing it is a human action in the UI and an
+agent could only satisfy it by rubber-stamping. It also records what the gate still cannot
+see: under 20 new lines Sonar skips coverage and duplication silently, which is how every
+reading in `baseline.md` came back green.
+
+### 2026-08-26 — U1: sonar.yml waits for the gate and fails on red
+
+`fail-on-gate`, a new boolean input defaulting to `true`, adds
+`-Dsonar.qualitygate.wait=true` to the scanner. Without it the scan exits as soon as the
+report is uploaded, long before the compute engine has decided anything, and the job goes
+green whatever the gate says — which is exactly why every gate has looked green so far.
+With it, "`sonar / Analysis` passed" and "the gate is green" become the same statement, and
+that is the one a branch ruleset can require.
+
+Two behaviours preserved on purpose:
+
+- **A missing `SONAR_TOKEN` still prints one notice and succeeds.** Its wording no longer
+  says the gate is advisory, because it will not be; it now says no analysis ran, so no gate
+  was evaluated, and that the job succeeding is not evidence anything passed. On a fork pull
+  request the gate is unenforced by construction — GitHub gives the run no secret — and
+  failing instead would not close that hole, only stop fork pull requests from ever merging.
+- **The step summary is rewritten and now runs on `always()`**, because it matters most when
+  the gate is red. On red it names `pr-gate.sh`, and states the three permitted moves: fix
+  it here, add a narrow catalogued exclusion here, or land nothing. Not bypass.
+
+`release-quality-gate.yml`'s notes stop saying the gate is advisory too. actionlint is clean
+on all five workflows and `check-wiring.sh` still passes.
+
+The input reaches the five callers only when the merge moves `v1`, so expect one cycle in
+which a pull request is required but a red gate still passes.
+
+### 2026-08-26 — U0: quality-gate-v0.1 finally exists
+
+The 0.1 entry set `status: done` and the orchestrator's sweep then wrote `not_started` back
+into the same `STATUS.md` in the commit it merged, so `release-quality-gate.yml` read
+`not_started` and published nothing. Recovered with the `force` input the workflow already
+had:
+
+```sh
+gh workflow run "Release - quality-gate" --repo gortazar/aideas -f force=true
+ideas/quality-gate/scripts/check-release.sh 0.1
+```
+
+**[quality-gate-v0.1](https://github.com/gortazar/aideas/releases/tag/quality-gate-v0.1),
+published 2026-08-26 09:30 UTC.** `check-release.sh 0.1` passes: all three assets present
+(`sonar.yml`, `baseline.md`, `README.md`) and the released `sonar.yml` byte-identical to the
+one `v1` resolves to (`856feb1`). `version:` stays at `0.1` until this entry finishes, so
+that a bump cannot publish `1.0` and leave 0.1 missing forever.
+
+**The orchestrator entry has not landed.** `ideas/orchestrator` is `not_started`, so
+`settle_submodules` still pushes rescued work to `HEAD:refs/heads/main`, which a gated
+repository rejects. Reading it rather than assuming: `submodule_paths()` filters to
+`ideas/<slug>/`, so a sweep only ever touches the submodule of the idea being built — gating
+`gortazar/recap` degrades the **recap** idea's sweep and nothing else. And the degradation is
+bounded: the push failure falls through to rescuing the objects into
+`.git/modules/<path>` under `refs/aideas/rescued/<slug>/<sha>` with a WARNING, so work is not
+lost, only left somewhere awkward. Which repositories that makes it safe to gate is settled
+in U4/U5 and recorded there.
 
 ### 2026-08-25 — U7: done at 0.1
 
@@ -251,6 +523,22 @@ project's analysis is actually running, so rows are added by the unit that wires
 project up and reads its first gate, not in advance.
 
 ## Units
+<!-- This entry: make the gate blocking, and rewrite how every agent lands a change. -->
+- [x] U0 — `quality-gate-v0.1` published and verified (the 0.1 entry's missing release)
+- [x] U1 — `fail-on-gate` in `sonar.yml`, plus the rewritten step summary
+- [x] U2 — `ensure-quality-gate.sh` and the two custom gates; `gate.md`
+- [x] U3 — coverage exclusions in the three instrumented repositories, one PR each
+- [x] U4 — `ensure-branch-ruleset.sh`, and `recap` gated end to end
+- [x] U5 — the remaining four, plus `title-slides`
+- [x] U6 — `AGENTS.md`, `pr-gate.sh`, `exclusions.md`
+- [x] U7 — `check-wiring.sh`'s new assertions, `README.md`, the release at `1.0`
+
+Next: nothing — the entry is finished at 1.0. The follow-up for whoever comes next is in
+`gate.md`: no pull request has yet produced a real new-code coverage reading, and the 60%
+floor is meant to rise once one does.
+
+<details><summary>The 0.1 entry's units, all delivered</summary>
+
 - [x] U1 — `flake.nix` + `scripts/check-wiring.sh` (empty table) + `ci-quality-gate.yml` green
 - [x] U2 — `.github/workflows/sonar.yml` (reusable) and `tag-sonar.yml` (moves `v1`)
 - [x] U3 — wire `gortazar/recap` end to end, read its gate (OK, vacuously — 0 new lines)
@@ -263,6 +551,5 @@ project up and reads its first gate, not in advance.
 - [x] U7 — `quality-gate-v0.1` release: `release-quality-gate.yml` fires on the merge that
       carries `status: done`; `scripts/check-release.sh` confirms it afterwards
 
-Next: nothing — the entry is finished at 0.1. The one follow-up for whoever makes the gate
-blocking is in `baseline.md`: all six gates pass vacuously at 0 new lines, and only `recap`
-clears 80% coverage.
+
+</details>

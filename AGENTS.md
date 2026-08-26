@@ -17,11 +17,68 @@ This repo is the workshop — the queue, the plans, the status — not the home 
 - **All source, tests, CI and releases live upstream.** `ideas/<this-idea>/` keeps only the
   wrapper: `PLAN.md`, `STATUS.md`, `plans/`, and whatever thin glue helps (a `flake.nix`
   that consumes the submodule, a pin-check script).
-- You have push access to the idea's own repository over the SSH key you run under. Push
-  there freely — that is where the work belongs.
-- **Commit the submodule pointer here whenever you push upstream.** The pointer is how this
-  repo records which upstream commit the idea is at; leave it stale and the work looks
-  lost from here even though it is safely pushed.
+- You have push access to the idea's own repository over the SSH key you run under — to
+  **branches**. Its `main` is protected by a ruleset with no bypass actors: every change
+  lands through a pull request. See **Landing a change upstream**.
+- **Commit the submodule pointer here whenever an upstream change merges.** The pointer is
+  how this repo records which upstream commit the idea is at; leave it stale and the work
+  looks lost from here even though it is safely pushed.
+
+## Landing a change upstream
+
+Every idea repository's `main` is behind a branch ruleset: a pull request is required, the
+repository's own checks and `sonar / Analysis` must pass, and **there are no bypass actors**.
+That is deliberate — a gate an agent can wave through is advice with extra steps.
+
+1. **Never push an idea repository's `main`**, and never `--admin`, never `--force`, never
+   disable, delete or edit a ruleset. If you think the gate is wrong, the answer is a narrow
+   documented exclusion or an open question in `PLAN.md`. Never a bypass.
+2. **Branch as `agent/<slug>/<YYYY-MM-DD>` and open the pull request as a draft at your
+   first unit**, not at the end. CI and the quality gate run on drafts, so a problem shows
+   up in minute five rather than minute forty.
+3. **Push after every unit.** The usual reason, and one specific to this setup: the
+   orchestrator's end-of-cycle sweep tries to push rescued submodule work straight to
+   `main`, which a gated repository now rejects — but it skips that push entirely when the
+   commit is already on a remote branch.
+4. **When the work is done:** `gh pr ready`, then
+   `gh pr merge --auto --squash --delete-branch`. **GitHub does the waiting, not you.** That
+   is the answer to "the checks take six minutes", and it costs zero turns.
+5. **Check once; never poll.** One `gh pr checks <n>` or
+   `gh pr view <n> --json state,mergedAt` late in the session. No `--watch`, no sleep loop:
+   they get interrupted and they burn the cycle.
+6. **Merged in-session** → bump the submodule pointer to the **new `main` commit** and
+   commit it with `STATUS.md`. **Never pin a commit that only exists on a branch**: a squash
+   merge plus `--delete-branch` orphans it and the gitlink then resolves nowhere. Check with
+   `git -C upstream merge-base --is-ancestor <pin> origin/main`.
+7. **Not merged by session end** → `status: in_progress`, and `STATUS.md` names the pull
+   request number, its URL, and what it is waiting for. The next session's first unit is:
+   confirm the merge, bump the pin, verify the release. **This is a legitimate end state**,
+   not a failure.
+8. **`status: done` now requires the pull request to be merged**, the gate green, and the
+   release published *and verified* with the idea's own `check-release.sh`. An open pull
+   request is not done.
+
+### When the quality gate goes red
+
+**Read what failed first**, with
+`ideas/quality-gate/scripts/pr-gate.sh <repo> <pr-number>`. It prints every condition with
+its measured value and threshold, and the new-code issues behind the failing ones. It needs
+no token. Then, in order:
+
+- **A real finding → fix it in the same pull request.** This is what the gate is for, and
+  the expected outcome.
+- **A false positive of a class `ideas/quality-gate/baseline.md` already catalogues** — a
+  GNOME Shell stylesheet parsed as CSS, an issue in a `sonar.tests` source, coverage of code
+  no runner can reach — → a **narrow** exclusion in that repository's
+  `sonar-project.properties`, in the same pull request, with the reason in the commit
+  message and a row appended to `ideas/quality-gate/exclusions.md`. Never a blanket
+  exclusion; never a rule turned off organisation-wide.
+- **Cannot be cleared this cycle → land nothing and say so.** Leave the pull request open
+  *without* auto-merge, `status: in_progress`, and `STATUS.md` naming the condition and the
+  measured numbers. If the gate itself is the problem — a threshold no honest change can
+  meet — append an `- [ ]` open question to the idea's `PLAN.md` and stop. An entry left
+  visibly unfinishable is a result; an agent re-running the same red analysis every cycle is
+  not.
 
 ## Workflow
 - Work within `ideas/<this-idea>/` and its `upstream` submodule. Never touch other idea
@@ -35,8 +92,9 @@ This repo is the workshop — the queue, the plans, the status — not the home 
 - You are working in a git worktree on a branch of your own, because another agent may be
   building a different idea at the same time. Commit freely, but do **not** push *this*
   repo, switch branches, rebase, or merge — the orchestrator merges your branch and pushes
-  once you finish. Pushing your idea's **own** repository is expected and encouraged; this
-  rule is only about the ideas repo.
+  once you finish. Pushing a **branch** of your idea's own repository is expected and
+  encouraged; this rule is only about the ideas repo. Its `main`, and every idea
+  repository's `main`, is behind a pull request — see **Landing a change upstream**.
 - Keep everything you produce inside your idea folder or its upstream repo. If a task needs
   a scratch clone of something else, put it under `ideas/<this-idea>/` — not in `/tmp`,
   which is not committed and can be wiped between cycles, silently losing a session's work.
@@ -49,7 +107,8 @@ This repo is the workshop — the queue, the plans, the status — not the home 
   2. Update `STATUS.md` explaining what's blocked and why.
   3. End the session — do not keep working on this idea until the question is answered.
 - Never delete or reword an already-answered question in `PLAN.md`. Only append new ones.
-- When every feature in `PLAN.md` is delivered, tested, green, **released and installable**
+- When every feature in `PLAN.md` is delivered, tested, green, **merged** (see **Landing a
+  change upstream** — an open pull request is not done), **released and installable**
   (see **Shipping**), set `status: done` in `STATUS.md` and say in the body what "done"
   covered. That is the only way to finish an
   idea: the orchestrator keeps picking an `in_progress` idea and rebuilding it every cycle
@@ -168,6 +227,19 @@ request, so that a change which worsens the codebase is visible before it lands.
   agent env file and prints only the name. `scripts/set-repo-secret.sh --list` says which
   credentials are configured, again without values. The same script distributes
   `AMO_JWT_ISSUER` and `AMO_JWT_SECRET` for extensions that need signing.
+- **A brand-new idea repository needs three commands**, none of which needs a browser:
+
+  ```sh
+  scripts/set-repo-secret.sh <repo> SONAR_TOKEN
+  ideas/quality-gate/scripts/ensure-sonar-project.sh <repo>
+  ideas/quality-gate/scripts/ensure-branch-ruleset.sh <repo> <check> [<check> ...]
+  ```
+
+  Run the ruleset one **last**, and read its check contexts off a live pull request first —
+  `gh api repos/gortazar/<repo>/commits/<sha>/check-runs --jq '.check_runs[].name'`. A
+  required check that is never reported blocks every merge forever, and there is no bypass
+  actor to rescue it. The contexts are not guessable: a caller job with a `name:` reports
+  `<name> / Analysis`, not `sonar / Analysis`.
 - **Never read, echo, or write a credential's value.** Not into a file, a commit message,
   `STATUS.md`, a log or a question. If a credential you need is missing, the script says so
   and the answer is to ask the user to add it to that env file — never to work around it by
@@ -177,8 +249,11 @@ request, so that a change which worsens the codebase is visible before it lands.
 - **Lua is not supported**, which today means `title-slides`. An unsupported language is a
   reason to skip this deliverable and say so in `STATUS.md` — not a reason to invent a
   substitute linter and call it the same thing.
-- The gate is **advisory** until the entry that makes it blocking says otherwise. A red
-  gate is information you must report in `STATUS.md`; it does not yet stop you finishing.
+- **The gate blocks.** The `sonar / Analysis` job waits for the analysis to finish and fails
+  on a red gate, and every idea repository's `main` requires that check on a ruleset with no
+  bypass actors. A red gate stops the merge, and therefore stops the entry. What to do about
+  one is the ladder under **Landing a change upstream**; `ideas/quality-gate/gate.md` records
+  the two custom gates and why their thresholds are what they are.
 
 ## Required per-idea deliverables
 

@@ -11,8 +11,9 @@
 # repository the workflow lives in.
 #
 # There is nothing to compile. The assets are the artefacts themselves: the workflow other
-# repositories call, the baseline it was written to produce, and the instructions for wiring
-# a new idea up.
+# repositories call, the baseline it was written to produce, the two gates that replaced the
+# default and the reasoning behind their thresholds, the ledger of everything those gates have
+# been told not to look at, and the instructions for wiring a new idea up.
 name: Release - quality-gate
 
 on:
@@ -110,8 +111,8 @@ jobs:
           set -euo pipefail
           {
             echo "One reusable SonarQube Cloud analysis, called by every idea in this"
-            echo "repository, plus the measured baseline of what the default quality gate"
-            echo "says about each project today."
+            echo "repository; two custom quality gates; and a branch ruleset on every idea"
+            echo "repository that requires a pull request and a green gate to merge."
             echo
             echo "Wire an idea up with five lines in its own CI:"
             echo
@@ -126,16 +127,23 @@ jobs:
             echo "main that touches the workflow, so a fix reaches every caller without any"
             echo "of them being edited."
             echo
-            echo "The gate is advisory: a red gate is reported, not enforced."
+            echo "**The gate blocks.** The scan waits for the analysis to finish and fails on a"
+            echo "red gate, and the idea repositories require that check on a branch ruleset that"
+            echo "also requires a pull request. What an agent does about a red gate — fix it,"
+            echo "narrowly exclude a catalogued false positive, or land nothing and say so — is in"
+            echo "AGENTS.md, and \`gate.md\` records the two custom gates and why their numbers are"
+            echo "what they are."
             echo
             echo "Assets are the artefacts themselves — there is nothing to compile."
           } > release-notes.md
 
           gh release create "$TAG" \
             --target "$GITHUB_SHA" \
-            --title "quality-gate $VERSION - one Sonar workflow, six projects, an honest baseline" \
+            --title "quality-gate $VERSION - the gate blocks, and every change lands by pull request" \
             --notes-file release-notes.md \
             ".github/workflows/sonar.yml#sonar.yml" \
             "ideas/quality-gate/baseline.md#baseline.md" \
+            "ideas/quality-gate/gate.md#gate.md" \
+            "ideas/quality-gate/exclusions.md#exclusions.md" \
             "ideas/quality-gate/README.md#README.md"
           echo "published $TAG"

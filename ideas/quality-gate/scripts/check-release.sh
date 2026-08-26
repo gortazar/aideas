@@ -47,9 +47,10 @@ fi
 echo "  release: $(printf '%s' "$release" | jq -r '.name') published $(printf '%s' "$release" | jq -r '.published_at')"
 
 # 3. Its assets. There is nothing to compile here, so the assets *are* the deliverable: the
-#    workflow other repositories call, the measurement it was written to produce, and how to
-#    wire an idea up.
-for asset in sonar.yml baseline.md README.md; do
+#    workflow other repositories call, the measurement it was written to produce, the gates
+#    that replaced the default and why, the ledger of everything they have been told not to
+#    look at, and how to wire an idea up.
+for asset in sonar.yml baseline.md gate.md exclusions.md README.md; do
     if printf '%s' "$release" | jq -e --arg a "$asset" '.assets[] | select(.name == $a)' >/dev/null; then
         echo "  asset: $asset"
     else

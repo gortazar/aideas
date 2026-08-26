@@ -56,4 +56,11 @@ jobs:
       # actionlint over the workflows this idea owns, and check-wiring.sh over the
       # whole checkout — both read files above ideas/quality-gate/, which the
       # sandboxed check cannot see.
+      #
+      # GH_TOKEN is not needed for correctness: check-wiring.sh reads only public APIs.
+      # It is needed for reliability — unauthenticated api.github.com allows 60 requests
+      # an hour per IP, shared across every job on a GitHub-hosted runner, and a
+      # rate-limited response is indistinguishable from a missing ruleset.
       - run: nix run .#lint
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
