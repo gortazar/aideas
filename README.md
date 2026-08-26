@@ -82,21 +82,6 @@ makes position a safe identity: the active list only ever holds work still to do
    has no upstream repository and must not get one: it is the thing that runs the cycles, so it lives here. Its release is a `orchestrator-v1.6` tag on this repo carrying a tarball
    of `orchestrator/` that `orchestrator/install.sh` can install without a clone.
 
-4. [quality-gate](ideas/quality-gate) - Make the gate blocking, using the baseline from the previous entry to choose the conditions. Major update. Each supported idea repository
-   gets a branch ruleset on `main` requiring a pull request and requiring the SonarQube Cloud check to pass, which is the only combination that reliably stops a change landing —
-   required checks alone do not clearly block a direct push. This changes how every agent works, so it also rewrites the workflow rules in AGENTS.md: an agent stops pushing its
-   idea's `main` directly and instead pushes a branch, opens a pull request, waits for CI and the gate, and merges when green. Address the three things this breaks: the wait costs
-   turns and wall-clock inside a 45-minute cycle; a red gate mid-cycle leaves an entry unfinishable, so define what an agent does then rather than letting it stall; and releases
-   are cut from `main`, so the release path moves behind the pull request too. Where the baseline shows a condition no idea can meet — 80% coverage on GJS or LibreOffice UNO code
-   is the likely one — set a custom gate at a number that is honest, and say in the plan why.
-   **First, publish the missing `quality-gate-v0.1` release.** The previous entry was retired as done
-   without one, through no fault of its agent: the orchestrator overwrote `status: done` in the same
-   commit that carried it, so `release-quality-gate.yml` read `not_started` and published nothing.
-   Orchestrator 1.5 fixed that for future entries, but 0.1 still has no release and `AGENTS.md` says
-   an entry without one is not done. The workflow takes a `force` input for exactly this case:
-   `gh workflow run "Release - quality-gate" --repo gortazar/aideas -f force=true`. Verify the
-   release and its assets exist before starting on the blocking work, and record it in `STATUS.md`.
-
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
@@ -224,3 +209,18 @@ makes position a safe identity: the active list only ever holds work still to do
    blocking in this entry. Instead produce `ideas/quality-gate/baseline.md`: for every repository, what the gate says today and how far each condition is from passing, with the
    numbers, so the next entry can choose its conditions from evidence rather than from the defaults. `title-slides` is Lua, which Sonar does not analyse — record that as out of
    scope rather than substituting a different tool. This project must be done within this repo. Do not create an external repo for this.
+
+23. [quality-gate](ideas/quality-gate) - Make the gate blocking, using the baseline from the previous entry to choose the conditions. Major update. Each supported idea repository (finished 2026-08-26, v1.0)
+   gets a branch ruleset on `main` requiring a pull request and requiring the SonarQube Cloud check to pass, which is the only combination that reliably stops a change landing —
+   required checks alone do not clearly block a direct push. This changes how every agent works, so it also rewrites the workflow rules in AGENTS.md: an agent stops pushing its
+   idea's `main` directly and instead pushes a branch, opens a pull request, waits for CI and the gate, and merges when green. Address the three things this breaks: the wait costs
+   turns and wall-clock inside a 45-minute cycle; a red gate mid-cycle leaves an entry unfinishable, so define what an agent does then rather than letting it stall; and releases
+   are cut from `main`, so the release path moves behind the pull request too. Where the baseline shows a condition no idea can meet — 80% coverage on GJS or LibreOffice UNO code
+   is the likely one — set a custom gate at a number that is honest, and say in the plan why.
+   **First, publish the missing `quality-gate-v0.1` release.** The previous entry was retired as done
+   without one, through no fault of its agent: the orchestrator overwrote `status: done` in the same
+   commit that carried it, so `release-quality-gate.yml` read `not_started` and published nothing.
+   Orchestrator 1.5 fixed that for future entries, but 0.1 still has no release and `AGENTS.md` says
+   an entry without one is not done. The workflow takes a `force` input for exactly this case:
+   `gh workflow run "Release - quality-gate" --repo gortazar/aideas -f force=true`. Verify the
+   release and its assets exist before starting on the blocking work, and record it in `STATUS.md`.
