@@ -13,6 +13,43 @@ last_cycle_cost_usd: 12.180309000000001
 
 
 
+### 2026-08-26 — U6: the rules every agent works by, rewritten around the pull request
+
+`AGENTS.md` last, on purpose, so it describes a flow that has actually been run rather than
+one that was planned. What changed:
+
+- **"Push there freely" is gone.** Push access is to *branches*; every idea repository's
+  `main` is behind a ruleset with no bypass actors.
+- A new **Landing a change upstream** section: eight numbered rules. Branch as
+  `agent/<slug>/<YYYY-MM-DD>`, draft pull request at the *first* unit rather than the last,
+  push after every unit, then `gh pr ready` and
+  `gh pr merge --auto --squash --delete-branch` — **GitHub does the waiting, not you**,
+  which is the answer to the wall-clock problem and costs zero turns. Check once, never
+  poll. Bump the pin to the **new `main` commit**, never to a branch tip a squash merge
+  orphans. And: a pull request still open at session end is `status: in_progress` with its
+  number and URL in `STATUS.md` — **a legitimate end state**, not a failure.
+- **A red gate has a defined ladder**, not a hope: read it with `pr-gate.sh`; fix a real
+  finding in the same pull request; give a catalogued false positive a narrow exclusion plus
+  a row in `exclusions.md`, in the same pull request; or land nothing and say which
+  condition and what the numbers were. Bypassing is not on the ladder, and the rules say so
+  in as many words.
+- `status: done` now requires the pull request **merged**.
+- The Shipping section stops calling the gate advisory and says it blocks.
+- A three-command checklist for a brand-new idea repository — secret, project, ruleset — with
+  the ruleset last and the warning to read its contexts off a live pull request, since
+  `gnome-shell-pwgen` proved they are not guessable.
+
+`scripts/pr-gate.sh <repo> <pr>` prints every condition with its measured value and
+threshold, the new-code issues behind the failing ones, and the ladder. It needs no token.
+Tested both ways: on `recap` #1 it reports the gate green, three conditions evaluated and
+**"under 20 new lines, so Sonar did not evaluate coverage or duplication at all"**; on a
+pull request that does not exist it explains the three reasons that happens and exits 1.
+Its output is also the first independent confirmation that the custom gate is really in
+force — `new_security_hotspots_reviewed` is absent from the conditions, which is exactly the
+condition `ensure-quality-gate.sh` drops.
+
+`exclusions.md` was written in U3, when the first two exclusions needed it.
+
 ### 2026-08-26 — U4 and U5: six repositories gated, and the loop proven end to end
 
 `scripts/ensure-branch-ruleset.sh <repo> <context>...` creates or updates a `main protected`
@@ -447,10 +484,10 @@ project up and reads its first gate, not in advance.
 - [x] U3 — coverage exclusions in the three instrumented repositories, one PR each
 - [x] U4 — `ensure-branch-ruleset.sh`, and `recap` gated end to end
 - [x] U5 — the remaining four, plus `title-slides`
-- [ ] U6 — `AGENTS.md`, `pr-gate.sh`, `exclusions.md`
+- [x] U6 — `AGENTS.md`, `pr-gate.sh`, `exclusions.md`
 - [ ] U7 — `check-wiring.sh`'s new assertions, `README.md`, the release at `1.0`
 
-Next: U6 — `AGENTS.md`, `pr-gate.sh`, `exclusions.md`.
+Next: U7 — `check-wiring.sh`'s new assertions, `README.md`, and the release at 1.0.
 
 <details><summary>The 0.1 entry's units, all delivered</summary>
 
