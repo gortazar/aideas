@@ -53,8 +53,9 @@ from pathlib import Path
 # no longer strands an agent when a sibling fails to start. 1.3 stops the superproject
 # sweep from reverting submodule pins. 1.4 unblocks an idea once its questions are
 # answered, which nothing did before. 1.5 pushes `status: done` before the queue
-# advances, so release workflows can see it, and reports a missing release.
-ORCHESTRATOR_VERSION = "1.5"
+# advances, so release workflows can see it, and reports a missing release. 1.6 stops
+# "aideas/" being read as an "ideas/" link.
+ORCHESTRATOR_VERSION = "1.6"
 
 UNLIMITED = {"unlimited", "none", "off"}
 
@@ -74,7 +75,12 @@ LOG_ENTRY_RE = re.compile(
 # The trailing slash is optional: requiring it silently swallowed every entry written as
 # `(ideas/recap)` rather than `(ideas/recap/)` — no error, the idea simply never existed.
 # The negative lookahead stops `recap` from also matching inside `ideas/recap-gs`.
-SLUG_RE = re.compile(r"(?<=ideas/)[a-z0-9][a-z0-9-]*(?![a-z0-9-])")
+# A slug is the folder in an `ideas/<slug>` link. Both boundaries matter. Without the
+# left one, any path *ending* in "ideas/" matched — and "aideas/" does, so a mention of
+# `refs/aideas/rescued/...` in an entry's own prose scaffolded a phantom idea called
+# `rescued` and paid to plan it. Without the right one, `ideas/recap` also matched
+# `ideas/recap-gs`. Group 1 is the slug; `.findall` returns it, `.search` needs `.group(1)`.
+SLUG_RE = re.compile(r"(?<![a-z0-9-])ideas/([a-z0-9][a-z0-9-]*)(?![a-z0-9-])")
 
 
 def log(message: str) -> None:
@@ -165,7 +171,7 @@ def parse_entries(section: str) -> list[Entry]:
     for block in blocks:
         match = SLUG_RE.search("\n".join(block))
         if match:
-            entries.append(Entry(match.group(0), block))
+            entries.append(Entry(match.group(1), block))
     return entries
 
 

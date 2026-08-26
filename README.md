@@ -73,7 +73,7 @@ makes position a safe identity: the active list only ever holds work still to do
 
 3. [orchestrator](ideas/orchestrator) - A quality gate on `main` will reject the orchestrator's own end-of-cycle pushes, and the rescue path it falls back to keeps the work only on this
    laptop. `settle_submodules` pushes an agent's submodule commits straight to the submodule's default branch; on a repository whose ruleset requires a pull request that push is
-   refused, and the fallback merely fetches the objects into `.git/modules/<path>` under a `refs/aideas/rescued/...` ref — local, ignored by git, gone with the clone. Rescued work
+   refused, and the fallback merely fetches the objects into the superproject's module directory under a rescue ref — local, ignored by git, gone with the clone. Rescued work
    would silently stop reaching any gated repository. Fix it: when the direct push is refused, push to a branch the ruleset does not protect (`agent/<slug>-sweep` or similar) and
    say so loudly enough that the next cycle, or a person, can turn it into a pull request; only fall back to the local rescue when even that fails. Keep the change inside
    `orchestrator/`. This entry also needs somewhere for its test to live: establish `orchestrator/tests/` with a plain `python3 -m unittest`-able suite and a root CI workflow that
