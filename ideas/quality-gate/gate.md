@@ -49,10 +49,28 @@ and the coverage figure then describes code that *can* be covered. Every one of 
 exclusions is listed in `exclusions.md` with what it hides — a gate that is green because it
 stopped looking has to be visible as such.
 
-With that denominator, **60% is a floor all three clear today** while still failing a new
-module that arrives with no tests at all. 80% would block `lo-pert`'s first pull request on
-structure rather than on quality, and a gate that blocks honest work is a gate that gets
-bypassed, which is worse than an advisory one.
+**Measured after the exclusions landed** (`restore-wss` PR #1, `lo-pert` PR #1, both merged
+2026-08-26):
+
+| Project | Coverage before | Coverage after | Lines removed from the denominator |
+| --- | ---: | ---: | ---: |
+| `recap` | 86.0% | 86.0% | 0 — nothing structural to exclude |
+| `restore-wss` | 62.4% | **73.6%** | 360 (the two JavaScript halves) |
+| `lo-pert` | 58.9% | **98.4%** | 285 (the four UNO-facing modules) |
+
+`recap` was checked and left alone: its 17 uncovered lines are four small files, only one of
+which (`internal/render/width_other.go`, behind a `!unix` build tag) is structurally
+unreachable, and excluding one line to tidy an 86.0% figure is not worth the precedent.
+
+With that denominator, **60% is a floor all three clear comfortably** while still failing a
+new module that arrives with no tests at all. 80% would have blocked `lo-pert`'s first pull
+request on structure rather than on quality, and a gate that blocks honest work is a gate
+that gets bypassed, which is worse than an advisory one.
+
+The headroom is now large — 73.6% and 98.4% against a 60% floor — which is an argument for
+raising it. Deliberately not raised in the same entry that introduced it: the numbers above
+are *overall* coverage, and no pull request has yet produced a real **new-code** coverage
+reading. The table at the bottom is where that evidence accumulates.
 
 **The number is meant to rise.** The table at the bottom of this file records the new-code
 coverage of every real pull request, so the next raise can be argued from evidence rather
@@ -98,4 +116,14 @@ One row per pull request that reached a gate, so the next threshold change is ev
 
 | Date | Project | PR | New lines | Coverage on new code | Duplication on new code | Result |
 | --- | --- | --- | ---: | ---: | ---: | --- |
-| | | | | | | |
+| 2026-08-26 | `restore-wss` | [#1](https://github.com/gortazar/restore-wss/pull/1) | 0 | not evaluated | not evaluated | OK — 3 rating conditions only |
+| 2026-08-26 | `lo-pert` | [#1](https://github.com/gortazar/lo-pert/pull/1) | 0 | not evaluated | not evaluated | OK — 3 rating conditions only |
+
+Both of those are the vacuous case again, and for a reason worth naming: each pull request
+changed only `sonar-project.properties`, which is configuration rather than an analysed
+source, so the diff contained **no new lines of code at all**. Not one of the five
+conditions that could have been evaluated was — the gate returned `OK` on three ratings over
+an empty set.
+
+That is two more data points for the same finding `baseline.md` opened with, and the reason
+the first row with a real new-code coverage figure matters more than any of them.

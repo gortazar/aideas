@@ -13,6 +13,51 @@ last_cycle_cost_usd: 12.180309000000001
 
 
 
+### 2026-08-26 — U3: the exclusions that make 60% mean something
+
+Three repositories, and the entry's first use of its own pull-request rule. Both changes
+went through a pull request in their own repository, with `gh pr merge --auto --squash
+--delete-branch` doing the waiting — merged 09:40 UTC, and the pins bumped afterwards to the
+**new `main` commits**, never to the branch tips a squash merge orphans.
+
+The exclusions were chosen from measured per-file coverage rather than from the plan's
+guess, and they are `sonar.coverage.exclusions` only — every excluded file is still analysed
+for bugs, smells and duplication:
+
+| Project | Excluded | Lines | Coverage before | after |
+| --- | --- | ---: | ---: | ---: |
+| [`restore-wss` #1](https://github.com/gortazar/restore-wss/pull/1) | `src/extension/**`, `src/browser-extension/**` | 360 | 62.4% | **73.6%** |
+| [`lo-pert` #1](https://github.com/gortazar/lo-pert/pull/1) | the four UNO-facing modules | 285 | 58.9% | **98.4%** |
+| `recap` | nothing | 0 | 86.0% | 86.0% |
+
+`recap` was checked and deliberately left alone: 17 uncovered lines across four small files,
+only one structurally unreachable (a `!unix` build tag), and excluding one line to tidy an
+86.0% figure is not worth the precedent.
+
+Two things were **not** excluded although they read 0%, and `exclusions.md` says why under
+*Considered and rejected*: `restore-wss`'s `daemon.py` and native messaging host are both
+reachable from Python, so they are genuine coverage gaps rather than structural ones.
+Excluding them would turn the gate green by making it blind.
+
+`exclusions.md` is the ledger that keeps this honest — every exclusion any repository
+carries, what it hides, and why, with the rule that adding one means adding a row in the
+same pull request.
+
+**Both pull-request gates were vacuous, and instructively so.** Each diff touched only
+`sonar-project.properties`, which is configuration rather than an analysed source, so
+neither had a single new line of code: three rating conditions evaluated over an empty set,
+coverage and duplication skipped, `OK`. Recorded as the first two rows of `gate.md`'s
+readings table.
+
+Also learned, by reading the contexts off a live pull request exactly as the plan insists:
+`restore-wss` reports `check`, `coverage` and `sonar / Analysis`, and `lo-pert` reports
+`nix flake check`, `coverage` and `sonar / Analysis` — but `gnome-shell-pwgen` will report
+**`SonarQube Cloud / Analysis`**, because its caller job carries a `name:`. Guessing
+`sonar / Analysis` for all six would have locked that repository's `main` against everybody.
+A fourth context exists on every repository too, `SonarCloud Code Analysis`, from the
+SonarQube Cloud GitHub App; it is deliberately not required, since which repositories the
+App is installed on is not knowable from here.
+
 ### 2026-08-26 — U2: two custom gates, live and assigned
 
 `scripts/ensure-quality-gate.sh` creates both gates from the API and reconciles them
@@ -338,13 +383,13 @@ project up and reads its first gate, not in advance.
 - [x] U0 — `quality-gate-v0.1` published and verified (the 0.1 entry's missing release)
 - [x] U1 — `fail-on-gate` in `sonar.yml`, plus the rewritten step summary
 - [x] U2 — `ensure-quality-gate.sh` and the two custom gates; `gate.md`
-- [ ] U3 — coverage exclusions in the three instrumented repositories, one PR each
+- [x] U3 — coverage exclusions in the three instrumented repositories, one PR each
 - [ ] U4 — `ensure-branch-ruleset.sh`, and `recap` gated end to end
 - [ ] U5 — the remaining four, plus `title-slides`
 - [ ] U6 — `AGENTS.md`, `pr-gate.sh`, `exclusions.md`
 - [ ] U7 — `check-wiring.sh`'s new assertions, `README.md`, the release at `1.0`
 
-Next: U3 — coverage exclusions in the three instrumented repositories, one PR each.
+Next: U4 — `ensure-branch-ruleset.sh`, and `recap` gated end to end.
 
 <details><summary>The 0.1 entry's units, all delivered</summary>
 

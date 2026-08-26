@@ -21,11 +21,11 @@
     "lo-pert-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1787670537,
-        "narHash": "sha256-gkbpAkOy4BLPU40JCPzpiDkCDzJ2R1Ny5X84fEIb3xM=",
+        "lastModified": 1787737215,
+        "narHash": "sha256-vXWkdCvERtuw0+t5dTGDoWnjJ1dfGRASgPM0+DYzmns=",
         "owner": "gortazar",
         "repo": "lo-pert",
-        "rev": "06df0ba0000e3c85b64f77ff3f8ecc961b404815",
+        "rev": "b7998b8118e262050ec05857ee5ba0cd64172558",
         "type": "github"
       },
       "original": {
