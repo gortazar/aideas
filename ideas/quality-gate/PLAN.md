@@ -279,7 +279,7 @@ in that repository — this entry is the first user of its own rules.
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **Does `gortazar/aideas` itself get the ruleset?** It holds a Sonar project and two
+- [x] **Does `gortazar/aideas` itself get the ruleset?** It holds a Sonar project and two
       ideas, so by the entry's wording it qualifies — but it is also the workshop: the
       orchestrator merges each agent's branch and pushes `main` directly every cycle, and a
       pull-request rule there stops every cycle dead until the orchestrator learns to open and
