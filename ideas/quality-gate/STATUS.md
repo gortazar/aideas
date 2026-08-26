@@ -1,4 +1,4 @@
-status: not_started
+status: in_progress
 version: 0.1
 started_at: 2026-08-25
 last_session_id: 0c56aa7b-8858-406c-8f49-2c49a15d0727
@@ -12,6 +12,34 @@ last_cycle_cost_usd: 12.180309000000001
 
 
 
+
+### 2026-08-26 — U0: quality-gate-v0.1 finally exists
+
+The 0.1 entry set `status: done` and the orchestrator's sweep then wrote `not_started` back
+into the same `STATUS.md` in the commit it merged, so `release-quality-gate.yml` read
+`not_started` and published nothing. Recovered with the `force` input the workflow already
+had:
+
+```sh
+gh workflow run "Release - quality-gate" --repo gortazar/aideas -f force=true
+ideas/quality-gate/scripts/check-release.sh 0.1
+```
+
+**[quality-gate-v0.1](https://github.com/gortazar/aideas/releases/tag/quality-gate-v0.1),
+published 2026-08-26 09:30 UTC.** `check-release.sh 0.1` passes: all three assets present
+(`sonar.yml`, `baseline.md`, `README.md`) and the released `sonar.yml` byte-identical to the
+one `v1` resolves to (`856feb1`). `version:` stays at `0.1` until this entry finishes, so
+that a bump cannot publish `1.0` and leave 0.1 missing forever.
+
+**The orchestrator entry has not landed.** `ideas/orchestrator` is `not_started`, so
+`settle_submodules` still pushes rescued work to `HEAD:refs/heads/main`, which a gated
+repository rejects. Reading it rather than assuming: `submodule_paths()` filters to
+`ideas/<slug>/`, so a sweep only ever touches the submodule of the idea being built — gating
+`gortazar/recap` degrades the **recap** idea's sweep and nothing else. And the degradation is
+bounded: the push failure falls through to rescuing the objects into
+`.git/modules/<path>` under `refs/aideas/rescued/<slug>/<sha>` with a WARNING, so work is not
+lost, only left somewhere awkward. Which repositories that makes it safe to gate is settled
+in U4/U5 and recorded there.
 
 ### 2026-08-25 — U7: done at 0.1
 
@@ -251,6 +279,20 @@ project's analysis is actually running, so rows are added by the unit that wires
 project up and reads its first gate, not in advance.
 
 ## Units
+<!-- This entry: make the gate blocking, and rewrite how every agent lands a change. -->
+- [x] U0 — `quality-gate-v0.1` published and verified (the 0.1 entry's missing release)
+- [ ] U1 — `fail-on-gate` in `sonar.yml`, plus the rewritten step summary
+- [ ] U2 — `ensure-quality-gate.sh` and the two custom gates; `gate.md`
+- [ ] U3 — coverage exclusions in the three instrumented repositories, one PR each
+- [ ] U4 — `ensure-branch-ruleset.sh`, and `recap` gated end to end
+- [ ] U5 — the remaining four, plus `title-slides`
+- [ ] U6 — `AGENTS.md`, `pr-gate.sh`, `exclusions.md`
+- [ ] U7 — `check-wiring.sh`'s new assertions, `README.md`, the release at `1.0`
+
+Next: U1 — `fail-on-gate` in `sonar.yml`.
+
+<details><summary>The 0.1 entry's units, all delivered</summary>
+
 - [x] U1 — `flake.nix` + `scripts/check-wiring.sh` (empty table) + `ci-quality-gate.yml` green
 - [x] U2 — `.github/workflows/sonar.yml` (reusable) and `tag-sonar.yml` (moves `v1`)
 - [x] U3 — wire `gortazar/recap` end to end, read its gate (OK, vacuously — 0 new lines)
@@ -263,6 +305,5 @@ project up and reads its first gate, not in advance.
 - [x] U7 — `quality-gate-v0.1` release: `release-quality-gate.yml` fires on the merge that
       carries `status: done`; `scripts/check-release.sh` confirms it afterwards
 
-Next: nothing — the entry is finished at 0.1. The one follow-up for whoever makes the gate
-blocking is in `baseline.md`: all six gates pass vacuously at 0 new lines, and only `recap`
-clears 80% coverage.
+
+</details>
