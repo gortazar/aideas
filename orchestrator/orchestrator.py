@@ -52,8 +52,9 @@ from pathlib import Path
 # leaving the work for the next cycle. 1.2 survives a leftover worktree directory and
 # no longer strands an agent when a sibling fails to start. 1.3 stops the superproject
 # sweep from reverting submodule pins. 1.4 unblocks an idea once its questions are
-# answered, which nothing did before.
-ORCHESTRATOR_VERSION = "1.4"
+# answered, which nothing did before. 1.5 pushes `status: done` before the queue
+# advances, so release workflows can see it, and reports a missing release.
+ORCHESTRATOR_VERSION = "1.5"
 
 UNLIMITED = {"unlimited", "none", "off"}
 
@@ -1390,6 +1391,71 @@ class Orchestrator:
                    "The commits exist ONLY in the worktree and will be lost when it is "
                    "removed — resolve this before the next cycle."))
 
+    def release_repo(self, slug: str) -> str:
+        """Which GitHub repository should hold this idea's release.
+
+        Normally the idea's own upstream. A few ideas have no upstream — the aideas Shell
+        extension and quality-gate both ship things that live in this repository — and
+        those release from here.
+        """
+        url = git("config", "-f", ".gitmodules",
+                  f"submodule.ideas/{slug}/upstream.url", cwd=self.repo).stdout.strip()
+        if not url:
+            url = git("remote", "get-url", "origin", cwd=self.repo).stdout.strip()
+            slug_in_tag = True
+        else:
+            slug_in_tag = False
+        url = re.sub(r"\.git$", "", url).rstrip("/")
+        owner, name = url.replace(":", "/").split("/")[-2:]
+        return f"{owner}/{name}", slug_in_tag
+
+    def verify_release(self, slug: str, version: str | None) -> None:
+        """Say loudly when an idea claims done with no release for that version.
+
+        AGENTS.md is explicit that `status: done` with no release is not done, and nothing
+        checked it — which is how three entries reached '## Finished' without one.
+
+        Matched against the repository's actual release list rather than one guessed tag:
+        conventions differ (`v0.5`, `aideas-shell-v0.4`, `quality-gate-v0.1`) and guessing
+        produced a false warning for aideas on the first try. A tag qualifies when it ends
+        in the version; when several ideas release from this same repository it must also
+        name the idea, so quality-gate 0.4 can never be satisfied by aideas-shell-v0.4.
+
+        This reports rather than refuses. The release workflow fires on the push that just
+        happened, so a legitimate release may be seconds from existing, and blocking here
+        would fail the honest case as often as the dishonest one.
+        """
+        if not version:
+            return
+        repo, slug_in_tag = self.release_repo(slug)
+        probe = subprocess.run(
+            ["gh", "release", "list", "--repo", repo, "--limit", "60",
+             "--json", "tagName", "-q", ".[].tagName"],
+            capture_output=True, text=True, timeout=30)
+        if probe.returncode != 0:
+            log(f"{slug}: could not list releases in {repo} to check for {version} "
+                f"({probe.stderr.strip().splitlines()[:1]}); not verified.")
+            return
+
+        wanted = re.compile(rf"(^|[-/])v?{re.escape(version)}$")
+        for tag in probe.stdout.split():
+            if not wanted.search(tag):
+                continue
+            if slug_in_tag and slug not in tag:
+                continue
+            log(f"{slug}: release {tag} is published in {repo}.")
+            return
+
+        log(f"WARNING: {slug}: claims done at {version} but {repo} has no release whose "
+            f"tag ends in v{version}.")
+        log(f"WARNING: {slug}: AGENTS.md requires one. A workflow triggered by this push "
+            f"may publish it shortly — check: gh release list --repo {repo}")
+        note = self.repo / "ideas" / slug / "STATUS.md"
+        if note.is_file():
+            note.write_text(note.read_text().rstrip("\n") +
+                            f"\n\n<!-- orchestrator: no v{version} release in {repo} when "
+                            f"this entry was retired. -->\n")
+
     def finalize(self, agent: Agent) -> None:
         slug = agent.slug
         result = agent.load_result()
@@ -1449,7 +1515,19 @@ class Orchestrator:
         # has one more finished entry, and version_plan would compute the *next* bump.
         version = self.settle_version(agent) if new_status == "done" else None
         self.rewrite_status(slug, new_status, session_id, cost, version)
+
         if new_status == "done":
+            # Commit `status: done` on its own, BEFORE the queue advances. An idea with a
+            # queued follow-up entry gets its status reset to not_started by
+            # reopen_for_next_entry, and that used to happen in the same commit — so the
+            # only commit that ever reached the remote said not_started, and `done` existed
+            # nowhere a workflow could see it. quality-gate's release workflow woke on that
+            # push, read not_started, printed "nothing to publish" and exited green in nine
+            # seconds. The agent had done everything right; the signal was destroyed in
+            # transit. Two commits cost nothing and make the state observable.
+            self.sweep_repo(f"{slug}: {version or 'done'} — done")
+            self.push_if_ahead(f" [{slug} done]")
+            self.verify_release(slug, version)
             self.advance_queue(slug, version)
 
         note = "blocked on new question" if new_status == "blocked" else "progress"
