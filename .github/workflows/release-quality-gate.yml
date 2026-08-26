@@ -126,7 +126,12 @@ jobs:
             echo "main that touches the workflow, so a fix reaches every caller without any"
             echo "of them being edited."
             echo
-            echo "The gate is advisory: a red gate is reported, not enforced."
+            echo "**The gate blocks.** The scan waits for the analysis to finish and fails on a"
+            echo "red gate, and the idea repositories require that check on a branch ruleset that"
+            echo "also requires a pull request. What an agent does about a red gate — fix it,"
+            echo "narrowly exclude a catalogued false positive, or land nothing and say so — is in"
+            echo "AGENTS.md, and \`gate.md\` records the two custom gates and why their numbers are"
+            echo "what they are."
             echo
             echo "Assets are the artefacts themselves — there is nothing to compile."
           } > release-notes.md

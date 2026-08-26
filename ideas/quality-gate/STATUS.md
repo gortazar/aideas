@@ -13,6 +13,32 @@ last_cycle_cost_usd: 12.180309000000001
 
 
 
+### 2026-08-26 — U1: sonar.yml waits for the gate and fails on red
+
+`fail-on-gate`, a new boolean input defaulting to `true`, adds
+`-Dsonar.qualitygate.wait=true` to the scanner. Without it the scan exits as soon as the
+report is uploaded, long before the compute engine has decided anything, and the job goes
+green whatever the gate says — which is exactly why every gate has looked green so far.
+With it, "`sonar / Analysis` passed" and "the gate is green" become the same statement, and
+that is the one a branch ruleset can require.
+
+Two behaviours preserved on purpose:
+
+- **A missing `SONAR_TOKEN` still prints one notice and succeeds.** Its wording no longer
+  says the gate is advisory, because it will not be; it now says no analysis ran, so no gate
+  was evaluated, and that the job succeeding is not evidence anything passed. On a fork pull
+  request the gate is unenforced by construction — GitHub gives the run no secret — and
+  failing instead would not close that hole, only stop fork pull requests from ever merging.
+- **The step summary is rewritten and now runs on `always()`**, because it matters most when
+  the gate is red. On red it names `pr-gate.sh`, and states the three permitted moves: fix
+  it here, add a narrow catalogued exclusion here, or land nothing. Not bypass.
+
+`release-quality-gate.yml`'s notes stop saying the gate is advisory too. actionlint is clean
+on all five workflows and `check-wiring.sh` still passes.
+
+The input reaches the five callers only when the merge moves `v1`, so expect one cycle in
+which a pull request is required but a red gate still passes.
+
 ### 2026-08-26 — U0: quality-gate-v0.1 finally exists
 
 The 0.1 entry set `status: done` and the orchestrator's sweep then wrote `not_started` back
@@ -281,7 +307,7 @@ project up and reads its first gate, not in advance.
 ## Units
 <!-- This entry: make the gate blocking, and rewrite how every agent lands a change. -->
 - [x] U0 — `quality-gate-v0.1` published and verified (the 0.1 entry's missing release)
-- [ ] U1 — `fail-on-gate` in `sonar.yml`, plus the rewritten step summary
+- [x] U1 — `fail-on-gate` in `sonar.yml`, plus the rewritten step summary
 - [ ] U2 — `ensure-quality-gate.sh` and the two custom gates; `gate.md`
 - [ ] U3 — coverage exclusions in the three instrumented repositories, one PR each
 - [ ] U4 — `ensure-branch-ruleset.sh`, and `recap` gated end to end
@@ -289,7 +315,7 @@ project up and reads its first gate, not in advance.
 - [ ] U6 — `AGENTS.md`, `pr-gate.sh`, `exclusions.md`
 - [ ] U7 — `check-wiring.sh`'s new assertions, `README.md`, the release at `1.0`
 
-Next: U1 — `fail-on-gate` in `sonar.yml`.
+Next: U2 — the two custom quality gates, and `gate.md`.
 
 <details><summary>The 0.1 entry's units, all delivered</summary>
 

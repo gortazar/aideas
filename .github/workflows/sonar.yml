@@ -21,6 +21,13 @@
 # `v1` is a moving major tag, force-updated by tag-sonar.yml on every push to main
 # that touches this file, so a fix here reaches all six callers without any of them
 # being edited.
+#
+# **This job blocks.** `fail-on-gate` defaults to true, which makes the scanner wait for
+# the analysis to finish and exit non-zero on a red gate, so this job's `sonar / Analysis`
+# check run is a truthful statement about the gate — and that is the check the branch
+# rulesets on the idea repositories require. An agent that meets a red gate has a defined
+# move, spelled out in AGENTS.md and summarised in this job's step summary; "bypass" is not
+# among them.
 name: SonarQube Cloud
 
 on:
@@ -67,12 +74,21 @@ on:
         type: string
         required: false
         default: ubuntu-latest
+      fail-on-gate:
+        description: >
+          Wait for the analysis to finish and fail the job if the quality gate is red.
+          On by default: this job's check run is what branch rulesets require, so a
+          scan that returns before the gate is known would make the requirement
+          meaningless. Set false only for a repository being onboarded, and say why.
+        type: boolean
+        required: false
+        default: true
     secrets:
       SONAR_TOKEN:
         # Not required, so that the skip path below is reachable. A pull request from
         # a fork gets no secrets at all, and a repository can be wired up before its
-        # token is set: neither should turn the build red for a gate that is still
-        # advisory.
+        # token is set: neither should turn a build red over a gate that could not be
+        # evaluated in the first place.
         required: false
 
 jobs:
@@ -89,10 +105,14 @@ jobs:
     permissions:
       contents: read
     steps:
-      # First, because everything after it is conditional on the answer. An empty
-      # secret is the normal state for a fork PR, so this says so once, clearly, and
-      # succeeds — an advisory gate that turned every fork PR red would be switched
-      # off within a week.
+      # First, because everything after it is conditional on the answer. An empty secret
+      # is the normal state for a pull request from a fork, and for a repository being
+      # wired up before its token is set. This says so once, clearly, and **succeeds**.
+      #
+      # That is a deliberate hole in an otherwise blocking gate, and worth being honest
+      # about: on a fork pull request the gate is unenforced by construction, because
+      # GitHub gives the run no secret to analyse with. Failing instead would not close
+      # the hole — it would only stop fork pull requests from ever being mergeable.
       - name: Is there a token?
         id: token
         env:
@@ -103,11 +123,16 @@ jobs:
             echo "have-token=yes" >> "$GITHUB_OUTPUT"
           else
             echo "have-token=no" >> "$GITHUB_OUTPUT"
-            echo "::notice title=SonarQube Cloud analysis skipped::No SONAR_TOKEN is available to this run (pull requests from forks get no secrets, and a repository can be wired up before its token is set). Skipping the analysis rather than failing: the quality gate is advisory."
+            echo "::notice title=SonarQube Cloud analysis skipped::No SONAR_TOKEN is available to this run (pull requests from forks get no secrets, and a repository can be wired up before its token is set). Skipping the analysis rather than failing, because there is nothing to enforce a gate against."
             {
               echo "### SonarQube Cloud analysis skipped"
               echo
-              echo "No \`SONAR_TOKEN\` was available to this run. The gate is advisory, so this is not a failure."
+              echo "No \`SONAR_TOKEN\` was available to this run — a pull request from a fork gets"
+              echo "no secrets, and a repository can be wired up before its token is set."
+              echo
+              echo "**No analysis ran, so no gate was evaluated.** This job succeeds so the run is"
+              echo "not blocked on a check that could never have been made; it is not evidence that"
+              echo "anything passed."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -150,6 +175,7 @@ jobs:
           path: ${{ inputs.coverage-path }}
 
       - name: Scan
+        id: scan
         if: steps.token.outputs.have-token == 'yes'
         uses: SonarSource/sonarqube-scan-action@v8.2.1
         env:
@@ -167,24 +193,54 @@ jobs:
           # Everything else — sources, tests, exclusions — comes from the caller's
           # sonar-project.properties, which is version-controlled beside the code it
           # describes rather than buried in a workflow input.
+          #
+          # sonar.qualitygate.wait is what makes this job's check run mean anything.
+          # Without it the scanner exits as soon as the report is uploaded, long before
+          # the compute engine has decided anything, and the job goes green whatever the
+          # gate says. With it the scanner polls the task to completion and exits
+          # non-zero on a red gate — so "sonar / Analysis passed" and "the gate is green"
+          # become the same statement, which is the one a ruleset can require.
           args: >
             -Dsonar.projectKey=${{ steps.project.outputs.key }}
             -Dsonar.organization=${{ inputs.organization }}
+            -Dsonar.qualitygate.wait=${{ inputs.fail-on-gate }}
             ${{ inputs.extra-args }}
 
-      # The gate result is on the dashboard, not in this log — the scan step returns
-      # as soon as the analysis is submitted. So leave a link, because "where do I
-      # read what the gate said" is the question this whole idea exists to answer.
+      # Runs whether the scan passed or failed — `if: always()` on the step, guarded by
+      # the token check — because the summary matters most when the gate is red and the
+      # question is "what do I do now".
       - name: Where to read the result
-        if: steps.token.outputs.have-token == 'yes'
+        if: always() && steps.token.outputs.have-token == 'yes'
         env:
           KEY: ${{ steps.project.outputs.key }}
+          BLOCKING: ${{ inputs.fail-on-gate }}
+          OUTCOME: ${{ steps.scan.outcome }}
         run: |
           set -euo pipefail
           {
             echo "### SonarQube Cloud"
             echo
-            echo "[\`$KEY\` dashboard](https://sonarcloud.io/dashboard?id=$KEY)"
+            echo "[\`$KEY\` dashboard](https://sonarcloud.io/summary/new_code?id=$KEY)"
             echo
-            echo "The quality gate is advisory: a red gate is reported, not enforced."
+            if [ "$BLOCKING" != "true" ]; then
+              echo "The quality gate is **not enforced** in this run: \`fail-on-gate\` is off,"
+              echo "so the scan returned as soon as the analysis was submitted and this job"
+              echo "says nothing about what the gate decided."
+            elif [ "$OUTCOME" = "failure" ]; then
+              echo "**The quality gate is red, and that is why this job failed.**"
+              echo
+              echo "Read what failed, from a checkout of the aideas repository:"
+              echo
+              echo '```sh'
+              echo "ideas/quality-gate/scripts/pr-gate.sh ${GITHUB_REPOSITORY##*/} <pr-number>"
+              echo '```'
+              echo
+              echo "A real finding is fixed in this same pull request. A false positive of a"
+              echo "class \`ideas/quality-gate/baseline.md\` already catalogues gets a narrow"
+              echo "exclusion in this repository's \`sonar-project.properties\`, in this same"
+              echo "pull request, with a row appended to \`ideas/quality-gate/exclusions.md\`."
+              echo "Never a blanket exclusion, and never a bypass."
+            else
+              echo "The quality gate is green, and this job waited for it to say so."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
