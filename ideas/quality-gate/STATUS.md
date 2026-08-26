@@ -1,5 +1,5 @@
-status: in_progress
-version: 0.1
+status: done
+version: 1.0
 started_at: 2026-08-25
 last_session_id: 0c56aa7b-8858-406c-8f49-2c49a15d0727
 last_run: 2026-08-25T18:44:49+02:00
@@ -12,6 +12,52 @@ last_cycle_cost_usd: 12.180309000000001
 
 
 
+
+### 2026-08-26 — U7: done at 1.0
+
+**What `done` covers.** Every feature in this entry's `PLAN.md` is delivered and green.
+
+- **The gate blocks**, and it takes all three of these, none of which works alone:
+  `sonar.qualitygate.wait=true` so the job's verdict *is* the gate's verdict; a branch
+  ruleset requiring both a pull request and that check, because a required check alone lets
+  a direct push land and go red afterwards; and no bypass actors.
+- **Two custom gates**, created and reconciled from the API, every project assigned and read
+  back. `gate.md` justifies 60% rather than 80%, an absent coverage condition rather than a
+  0% one, and dropping `Security hotspots reviewed`.
+- **Six repositories gated**, each with contexts read off a live run. `gortazar/aideas` is
+  ungated on purpose and `check-wiring.sh` asserts that too.
+- **`AGENTS.md` rewritten** around the pull request, with a defined ladder for a red gate.
+- **`check-wiring.sh` grew three assertions** that can now rot silently — ruleset, gate
+  assignment, and pin reachability — and all three were negative-tested by breaking the
+  expectation and watching them fail.
+- `README.md` rewritten; `exclusions.md` and `gate.md` added to the release assets, with
+  `check-release.sh` updated to require them.
+
+**The release publishes on the merge**, as `quality-gate-v1.0`. Confirm it afterwards with
+`ideas/quality-gate/scripts/check-release.sh 1.0`, which also checks the released
+`sonar.yml` is byte-identical to the one `v1` resolves to. **If the sweep overwrites
+`status: done` again** — it did last time, which is why U0 existed — the recovery is
+`gh workflow run "Release - quality-gate" --repo gortazar/aideas -f force=true`.
+
+### Two things a reader should not have to discover for themselves
+
+**`fail-on-gate` has not yet blocked anything.** Callers pin `@v1`, and `v1` only moves when
+`tag-sonar.yml` runs on `main` after this branch is merged. Every pull request in this entry
+was therefore analysed by the *old* workflow, which returns before the gate is known. The
+rulesets are live and the gates are live; the *waiting* reaches the five callers one cycle
+later. This was predicted in the plan's risks and is not a defect — but it does mean the
+wall-clock cost of `sonar.qualitygate.wait` is still unmeasured, and the first entry to run
+under it should record it in `gate.md`.
+
+**The orchestrator entry has still not landed**, so `settle_submodules` still pushes rescued
+work to `HEAD:refs/heads/main`, which the six gated repositories now reject. Consequences,
+read from the code rather than assumed: `submodule_paths()` filters to `ideas/<slug>/`, so
+only the built idea's own submodule is affected; the push is skipped entirely when the
+commit is already on a remote branch, which the new "push after every unit" rule makes the
+normal case; and when it does fail, the objects are rescued into `.git/modules/<path>` under
+`refs/aideas/rescued/<slug>/<sha>` with a WARNING rather than being lost. So the failure
+mode is "work is somewhere awkward and loudly reported", not "work is gone". The
+`ideas/orchestrator` entry is ahead of this one in `README.md` and fixes it properly.
 
 ### 2026-08-26 — U6: the rules every agent works by, rewritten around the pull request
 
@@ -485,9 +531,11 @@ project up and reads its first gate, not in advance.
 - [x] U4 — `ensure-branch-ruleset.sh`, and `recap` gated end to end
 - [x] U5 — the remaining four, plus `title-slides`
 - [x] U6 — `AGENTS.md`, `pr-gate.sh`, `exclusions.md`
-- [ ] U7 — `check-wiring.sh`'s new assertions, `README.md`, the release at `1.0`
+- [x] U7 — `check-wiring.sh`'s new assertions, `README.md`, the release at `1.0`
 
-Next: U7 — `check-wiring.sh`'s new assertions, `README.md`, and the release at 1.0.
+Next: nothing — the entry is finished at 1.0. The follow-up for whoever comes next is in
+`gate.md`: no pull request has yet produced a real new-code coverage reading, and the 60%
+floor is meant to rise once one does.
 
 <details><summary>The 0.1 entry's units, all delivered</summary>
 
