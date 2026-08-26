@@ -2,13 +2,15 @@ status: done
 version: 1.0
 started_at: 2026-08-25
 last_session_id: 0c56aa7b-8858-406c-8f49-2c49a15d0727
-last_run: 2026-08-25T18:44:49+02:00
-last_cycle_cost_usd: 12.180309000000001
+last_run: 2026-08-26T12:02:51+02:00
+last_cycle_cost_usd: 35.160258499999976
 
 ## Log
+- 2026-08-26T12:02:51+02:00 — done ($35.160258499999976)
 - 2026-08-25T18:44:49+02:00 — done ($12.180309000000001)
 - 2026-08-25T17:21:00+02:00 — in_progress ($18.3907995)
 - 2026-08-25T13:11:09+02:00 — blocked ($3.1778349999999995)
+
 
 
 
@@ -523,7 +525,6 @@ project's analysis is actually running, so rows are added by the unit that wires
 project up and reads its first gate, not in advance.
 
 ## Units
-<!-- This entry: make the gate blocking, and rewrite how every agent lands a change. -->
 - [x] U0 — `quality-gate-v0.1` published and verified (the 0.1 entry's missing release)
 - [x] U1 — `fail-on-gate` in `sonar.yml`, plus the rewritten step summary
 - [x] U2 — `ensure-quality-gate.sh` and the two custom gates; `gate.md`
