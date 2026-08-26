@@ -13,6 +13,67 @@ last_cycle_cost_usd: 12.180309000000001
 
 
 
+### 2026-08-26 — U4 and U5: six repositories gated, and the loop proven end to end
+
+`scripts/ensure-branch-ruleset.sh <repo> <context>...` creates or updates a `main protected`
+ruleset on `~DEFAULT_BRANCH`: a `pull_request` rule at **0 required approvals** (a solo owner
+cannot approve their own pull request, so anything higher is a permanent deadlock), a
+`required_status_checks` rule, `non_fast_forward`, `deletion`,
+`strict_required_status_checks_policy: false` (requiring the branch to be up to date turns
+two open pull requests in one repository into a rebase loop), and **no bypass actors at
+all**. It also sets `allow_auto_merge`, which `gh pr merge --auto` refuses to work without.
+One repository per call, deliberately: this is the script that can lock a `main` against
+everybody, so there is no bulk mode.
+
+**recap first, end to end, and all three steps verified:**
+
+1. Contexts read off a live pull request — `test`, `coverage`, `sonar / Analysis` — not
+   guessed.
+2. **A direct push to `main` is rejected**: `GH013: Repository rule violations found ...
+   Changes must be made through a pull request ... 3 of 3 required status checks are
+   expected`, and `main` did not move.
+3. **A green pull request auto-merges**: [recap #1](https://github.com/gortazar/recap/pull/1)
+   merged itself at 09:48 UTC while this session did something else. `gh pr merge --auto`
+   was set once, checked once. No polling, no `--watch`.
+
+Then the other five. Every set of contexts was read from a real run rather than assumed, and
+that caught the trap the plan warned about:
+
+| Repository | Required checks |
+| --- | --- |
+| `recap` | `test`, `coverage`, `sonar / Analysis` |
+| `recap-gs` | `check`, `package`, `sonar / Analysis` |
+| `restore-wss` | `check`, `coverage`, `sonar / Analysis` |
+| `lo-pert` | `nix flake check`, `coverage`, `sonar / Analysis` |
+| `gnome-shell-pwgen` | 3 lint/test jobs, 5 GNOME Shell legs, **`SonarQube Cloud / Analysis`** |
+| `title-slides` | `test` — no Sonar project, because Lua |
+
+**`gnome-shell-pwgen` does not report `sonar / Analysis`.** Its caller job carries
+`name: SonarQube Cloud`, so the context is `SonarQube Cloud / Analysis`. Requiring the
+former across all six — which is exactly what the plan's own expectation said — would have
+left that repository's `main` unmergeable forever, with no bypass actor to undo it.
+
+Two judgement calls worth recording. `gnome-shell-pwgen`'s **`GNOME Shell (fedora:rawhide)`
+leg is deliberately not required**: it is `continue-on-error` upstream precisely because
+rawhide breaks for unrelated reasons, and requiring it would hand a merge veto to Fedora's
+development branch. The five stable legs are required. And **`SonarCloud Code Analysis`**,
+the SonarQube Cloud GitHub App's own check, is reported on every repository but required on
+none — which repositories the App is installed on is not knowable from here, and a check
+that stops being reported is a `main` nobody can merge to.
+
+**`gortazar/aideas` is deliberately left ungated**, per the first answered open question: the
+orchestrator pushes `main` here directly every cycle, and a pull-request rule would stop
+every cycle dead until the orchestrator learns to open and merge one itself. Its analysis
+stays reported-not-enforced. `--status aideas` confirms there is no ruleset.
+
+Recovery, if a context is ever wrong: `gh api -X DELETE repos/{owner}/{repo}/rulesets/{id}`
+still works, because a ruleset is repository configuration rather than a branch. `--status`
+prints the id.
+
+Pins bumped for all three merged pull requests, each to the **new `main` commit** and each
+checked with `merge-base --is-ancestor` — a squash merge with `--delete-branch` orphans the
+branch tip, and a gitlink pointing at it resolves nowhere.
+
 ### 2026-08-26 — U3: the exclusions that make 60% mean something
 
 Three repositories, and the entry's first use of its own pull-request rule. Both changes
@@ -384,12 +445,12 @@ project up and reads its first gate, not in advance.
 - [x] U1 — `fail-on-gate` in `sonar.yml`, plus the rewritten step summary
 - [x] U2 — `ensure-quality-gate.sh` and the two custom gates; `gate.md`
 - [x] U3 — coverage exclusions in the three instrumented repositories, one PR each
-- [ ] U4 — `ensure-branch-ruleset.sh`, and `recap` gated end to end
-- [ ] U5 — the remaining four, plus `title-slides`
+- [x] U4 — `ensure-branch-ruleset.sh`, and `recap` gated end to end
+- [x] U5 — the remaining four, plus `title-slides`
 - [ ] U6 — `AGENTS.md`, `pr-gate.sh`, `exclusions.md`
 - [ ] U7 — `check-wiring.sh`'s new assertions, `README.md`, the release at `1.0`
 
-Next: U4 — `ensure-branch-ruleset.sh`, and `recap` gated end to end.
+Next: U6 — `AGENTS.md`, `pr-gate.sh`, `exclusions.md`.
 
 <details><summary>The 0.1 entry's units, all delivered</summary>
 
