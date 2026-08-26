@@ -13,6 +13,35 @@ last_cycle_cost_usd: 12.180309000000001
 
 
 
+### 2026-08-26 — U2: two custom gates, live and assigned
+
+`scripts/ensure-quality-gate.sh` creates both gates from the API and reconciles them
+condition by condition, so editing the table in the script and re-running it is how a
+threshold changes. `--status` is a check rather than a report: it exits non-zero when the
+live gates disagree with the script, which is what U7 will wire into `check-wiring.sh`.
+
+Both created and all six projects assigned, each **verified by reading
+`get_by_project` back** rather than trusting the exit status — a project silently left on
+`Sonar way` would have made this entry a no-op:
+
+- **`aideas instrumented`** (id 159028) — `recap`, `restore-wss`, `lo-pert`: reliability,
+  security and maintainability A on new code, duplication ≤ 3%, **coverage ≥ 60%**.
+- **`aideas uninstrumented`** (id 159029) — `recap-gs`, `gnome-shell-pwgen`, `aideas`: the
+  same four, and no coverage condition at all.
+
+Re-running `--status` afterwards reports every condition `ok` and every project on the right
+gate, so it is idempotent in fact and not just in intent.
+
+`gate.md` carries the reasoning, and is the file to argue with: why 60% rather than 80%
+(only `recap` clears 80% today, and the other two are short for structural reasons —
+764 lines of GJS inside `restore-wss`, and `lo-pert`'s UNO modules that only run inside
+soffice's interpreter — so the exclusions in U3 come first and the threshold second); why an
+absent coverage condition rather than a 0% one; and why `Security hotspots reviewed = 100%`
+is the one default deliberately dropped, since clearing it is a human action in the UI and an
+agent could only satisfy it by rubber-stamping. It also records what the gate still cannot
+see: under 20 new lines Sonar skips coverage and duplication silently, which is how every
+reading in `baseline.md` came back green.
+
 ### 2026-08-26 — U1: sonar.yml waits for the gate and fails on red
 
 `fail-on-gate`, a new boolean input defaulting to `true`, adds
@@ -308,14 +337,14 @@ project up and reads its first gate, not in advance.
 <!-- This entry: make the gate blocking, and rewrite how every agent lands a change. -->
 - [x] U0 — `quality-gate-v0.1` published and verified (the 0.1 entry's missing release)
 - [x] U1 — `fail-on-gate` in `sonar.yml`, plus the rewritten step summary
-- [ ] U2 — `ensure-quality-gate.sh` and the two custom gates; `gate.md`
+- [x] U2 — `ensure-quality-gate.sh` and the two custom gates; `gate.md`
 - [ ] U3 — coverage exclusions in the three instrumented repositories, one PR each
 - [ ] U4 — `ensure-branch-ruleset.sh`, and `recap` gated end to end
 - [ ] U5 — the remaining four, plus `title-slides`
 - [ ] U6 — `AGENTS.md`, `pr-gate.sh`, `exclusions.md`
 - [ ] U7 — `check-wiring.sh`'s new assertions, `README.md`, the release at `1.0`
 
-Next: U2 — the two custom quality gates, and `gate.md`.
+Next: U3 — coverage exclusions in the three instrumented repositories, one PR each.
 
 <details><summary>The 0.1 entry's units, all delivered</summary>
 
