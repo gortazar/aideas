@@ -287,7 +287,13 @@ in that repository — this entry is the first user of its own rules.
       in this entry**: its analysis stays reported-not-enforced, and `STATUS.md` records the
       exception. Confirm that, or say to gate it and treat the orchestrator change as part of
       this entry.
-- [ ] **May this entry change `orchestrator/orchestrator.py`?** One line in
+- [x] **May this entry change `orchestrator/orchestrator.py`?** ANSWERED: **no** — and you were
+      right to ask rather than assume. The fix is real and needed, so it is now its own entry,
+      `ideas/orchestrator`, placed *ahead* of this one in `README.md` precisely because gating
+      `main` is what breaks the sweep: it should land first. Do not touch `orchestrator/` here,
+      and do not rely on "push after every unit" as the mitigation either — if the orchestrator
+      entry has not landed when you start, say so in `STATUS.md` and gate the repositories whose
+      sweeps do not depend on it.       **May this entry change `orchestrator/orchestrator.py`?** One line in
       `settle_submodules` decides whether end-of-cycle rescued work is pushed to `main` (now
       rejected on every gated repository) or to `agent/<slug>-sweep` (which lands and can be
       turned into a pull request next cycle). It is a small, contained fix to a real breakage

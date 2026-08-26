@@ -71,7 +71,18 @@ makes position a safe identity: the active list only ever holds work still to do
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel. 
 
-3. [quality-gate](ideas/quality-gate) - Make the gate blocking, using the baseline from the previous entry to choose the conditions. Major update. Each supported idea repository
+3. [orchestrator](ideas/orchestrator) - A quality gate on `main` will reject the orchestrator's own end-of-cycle pushes, and the rescue path it falls back to keeps the work only on this
+   laptop. `settle_submodules` pushes an agent's submodule commits straight to the submodule's default branch; on a repository whose ruleset requires a pull request that push is
+   refused, and the fallback merely fetches the objects into `.git/modules/<path>` under a `refs/aideas/rescued/...` ref — local, ignored by git, gone with the clone. Rescued work
+   would silently stop reaching any gated repository. Fix it: when the direct push is refused, push to a branch the ruleset does not protect (`agent/<slug>-sweep` or similar) and
+   say so loudly enough that the next cycle, or a person, can turn it into a pull request; only fall back to the local rescue when even that fails. Keep the change inside
+   `orchestrator/`. This entry also needs somewhere for its test to live: establish `orchestrator/tests/` with a plain `python3 -m unittest`-able suite and a root CI workflow that
+   runs it, then port the throwaway suites that already exist for the repo-lock, the push retry, the worktree setup, the gitlink sweep and the release check — five real regressions
+   were each verified once against temporary repositories and then thrown away, which is why three of them recurred. Version 1.6, matching `ORCHESTRATOR_VERSION`. The orchestrator
+   has no upstream repository and must not get one: it is the thing that runs the cycles, so it lives here. Its release is a `orchestrator-v1.6` tag on this repo carrying a tarball
+   of `orchestrator/` that `orchestrator/install.sh` can install without a clone.
+
+4. [quality-gate](ideas/quality-gate) - Make the gate blocking, using the baseline from the previous entry to choose the conditions. Major update. Each supported idea repository
    gets a branch ruleset on `main` requiring a pull request and requiring the SonarQube Cloud check to pass, which is the only combination that reliably stops a change landing —
    required checks alone do not clearly block a direct push. This changes how every agent works, so it also rewrites the workflow rules in AGENTS.md: an agent stops pushing its
    idea's `main` directly and instead pushes a branch, opens a pull request, waits for CI and the gate, and merges when green. Address the three things this breaks: the wait costs
