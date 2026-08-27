@@ -131,23 +131,24 @@ Units, each one commit, tests first:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **Is "a new browser window" satisfied by whatever the default browser does?** The supported API hands
+- [x] **Is "a new browser window" satisfied by whatever the default browser does?** The supported API hands
       the URI to the default handler, and a running browser normally opens a tab. Guaranteeing a *window*
       means detecting the browser and passing its own flag (`--new-window`), which is browser-specific,
       breaks under Flatpak, and needs a spawn we would otherwise not have. Ticking this line as-is accepts
       the default handler's behaviour; the alternative is a best-effort `--new-window` path for a short list
       of known browsers with the plain launch as fallback.
-- [ ] **May the OpenVidu logo be vendored into a public repository and published on extensions.gnome.org?**
+- [x] **May the OpenVidu logo be vendored into a public repository and published on extensions.gnome.org?**
       It is a third-party trademark and the plan bundles it, which is redistribution. Ticking this line
       as-is says yes — the extension is an OpenVidu-adjacent tool and the mark is used to identify it. If
       that is not settled, the fallback is a generic video-call symbolic icon with the logo shipped only for
-      local installs.
-- [ ] **Colour logo in the top bar, or a monochrome/symbolic variant?** The idea says "the OpenVidu Meet
+      local installs. No, it can't. Use a symbolic icon resembling the logo.
+- [x] **Colour logo in the top bar, or a monochrome/symbolic variant?** The idea says "the OpenVidu Meet
       logo", so the plan bundles the PNG as-is. GNOME's own convention is symbolic panel icons that follow
       the theme's foreground colour, which is what makes a top bar look consistent in light and dark.
       Ticking this line as-is keeps the colour logo; the alternative is a symbolic derivative in the panel
-      with the colour logo used in the menu header.
-- [ ] **Should the two URLs be configurable?** v0.1 hard-codes them, per the idea text. A preferences page
+      with the colour logo used in the menu header. Symbolic variant.
+- [x] **Should the two URLs be configurable?** v0.1 hard-codes them, per the idea text. A preferences page
       with editable endpoints would let someone point the button at their own OpenVidu deployment, but
       `AGENTS.md` forbids inventing features, so it is asked rather than built. Ticking this line as-is
-      keeps them hard-coded.
+      keeps them hard-coded. It must be configurable. The configuration dialog must allow adding new
+      entries, but those two must appear by default (although they can be removed).
