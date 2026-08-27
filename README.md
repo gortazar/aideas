@@ -82,6 +82,9 @@ makes position a safe identity: the active list only ever holds work still to do
    has no upstream repository and must not get one: it is the thing that runs the cycles, so it lives here. Its release is a `orchestrator-v1.6` tag on this repo carrying a tarball
    of `orchestrator/` that `orchestrator/install.sh` can install without a clone.
 
+4. [meet](ideas/meet) - A gnome-shell extension that shows a button with the OpenVidu Meet logo (https://openvidu.io/assets/images/logos/logo.png). When pushed, opens a menu with two options: Meet next and Meet.  
+   Meet next opens a new browser window (the default system browser) pointing at https://meet-next.openvidu.io/. Meet opens a new browser window pointing at (meet.openvidu.io).
+
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
