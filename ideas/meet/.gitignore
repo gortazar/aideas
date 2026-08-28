@@ -1,0 +1,6 @@
+# scratch for verifying the published installer from a clean directory
+.install-check/
+
+# nix build output symlinks
+result
+result-*

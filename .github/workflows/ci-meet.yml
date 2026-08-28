@@ -1,7 +1,8 @@
 # The wrapper's own check. The extension's real test suite lives upstream, in
-# gortazar/meet, and runs there on every push and pull request — this only asserts that
-# what this repository records about the idea is coherent: the submodule pointer resolves,
-# and STATUS.md says what it is supposed to say.
+# gortazar/meet, and runs there on every push and pull request — this asserts that what
+# this repository records about the idea is coherent: the submodule pointer resolves, the
+# two pins name one commit, STATUS.md says what it is supposed to say, and upstream's own
+# checks pass at the commit this idea points at.
 name: CI - meet
 
 on:
@@ -39,3 +40,18 @@ jobs:
         run: |
           grep -Eq '^status: (not_started|in_progress|done|blocked)$' STATUS.md
           grep -Eq '^version: [0-9]+\.[0-9]+$' STATUS.md
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: "experimental-features = nix-command flakes"
+
+      # The submodule and the meet-src flake input have to name one commit. Left to drift,
+      # the check below would happily test a commit nobody is working on and report green.
+      - name: The two pins agree
+        working-directory: ideas/meet
+        run: ./scripts/check-pin.sh
+
+      # Upstream's own checks — ESLint, the headless suite, the packed zip — at that commit.
+      - name: Upstream's checks, at the pinned commit
+        working-directory: ideas/meet
+        run: nix flake check --print-build-logs
