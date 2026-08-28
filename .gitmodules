@@ -19,3 +19,6 @@
 [submodule "ideas/vacas/upstream"]
 	path = ideas/vacas/upstream
 	url = https://github.com/gortazar/vacas.git
+[submodule "ideas/meet/upstream"]
+	path = ideas/meet/upstream
+	url = https://github.com/gortazar/meet.git
