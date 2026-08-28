@@ -1,176 +1,167 @@
-# Plan: title-slides 0.5 — index the `##` headings, not the `#` ones
+# Plan: title-slides 0.6 — the two things the docs never said
 
-Difficulty estimate: medium — the code change is a couple of predicates, but it replaces the
-feature's contract, so every index fixture, screenshot and README paragraph is rewritten, and a
-guard that was decorative until now (generated headings are not indexed) becomes load-bearing.
+Difficulty estimate: easy — two paragraphs of prose, no filter code touched, and both gaps are
+verifiable by grep before and after. The only real work is the release discipline a completed entry
+still owes: PR through the gate, `v0.6` tagged with its asset, pin moved.
 
 ## Context
 
-The report: **the index must be extracted from level 2 titles (`##`), not from level 1 (`#`).
-Level 1 is reserved for the title slide; sections use level 2 instead.** Minor version, so 0.5.
+A fleet audit found two documentation gaps. Neither is a defect in the extension, and neither
+changes a single line of Lua. Minor update, so 0.5 → **0.6**.
 
-This is the other half of the 0.4 conversation. 0.4 reproduced a deck that set `show-index: true`
-and saw nothing, found the deck had fourteen `##` headings and no `#` at all, and — on the answered
-question "in a section-less deck no agenda is inserted" — shipped a *warning* saying the deck has no
-sections to index. The reporter's answer to that warning is this entry: the deck is not
-section-less. Its sections are the `##`s. `#` is where the deck's own title page goes, so keying the
-index off `#` indexes the one heading level that is guaranteed not to be a section.
+**Gap 1 — the Sonar exemption is recorded in the wrong idea's files.** `AGENTS.md` says an
+unsupported language is a reason to skip the SonarQube Cloud deliverable **and say so in
+`STATUS.md`** — the idea's own `STATUS.md`. Lua is the named example there, and `title-slides` is
+the idea it names. But this idea's `STATUS.md` does not contain the word Sonar, or Lua, or any
+mention of the analysis. The exemption exists only in `ideas/quality-gate/STATUS.md`
+("`title-slides` | `test` — no Sonar project, because Lua") and `ideas/quality-gate/baseline.md`
+(its "Out of scope" section). Someone reading this idea alone cannot tell whether the analysis was
+skipped deliberately or forgotten.
 
-So 0.4's warning was the right response to the wrong contract, and this entry moves the contract.
-`tests/fixtures/real-deck/T4-funciones.qmd` — already upstream, already rendered by
-`nix flake check` — stops warning and starts getting an index, and that diff is the proof.
+The rule is **contemporaneous with this idea's last entry** — the quality-gate entries that wrote
+it into `AGENTS.md` are 2026-08-25 and 2026-08-26, and 0.5 shipped 2026-08-25 — so this is an
+omission against a live rule, not a rule applied backwards. That is worth stating in the entry
+itself, because "was the rule even in force?" is the first thing a future reader will ask.
 
-**The rule this plan implements: the index lists the headings that start slides.** Concretely
-`is_section(block) = block.level < slide_level` becomes `block.level == slide_level`, which at
-Quarto's default `slide-level: 2` is exactly "level 2" as reported, and makes `#` — above the slide
-level — neither listed nor given an index slide. Stated as a decision rather than asked, because it
-reproduces the report at the default and disposes of the whole `slide-level` matrix that 0.4 had to
-special-case: at `slide-level: 1` the index lists `#` headings and its own heading is a `#`, at
-`slide-level: 3` it lists `###`, and only `slide-level: 0` — where no heading starts a slide — is
-left with nothing to index and keeps 0.4's warning. The alternative, hard-coding level 2 whatever
-the slide level, is in Open Questions.
+**Gap 2 — the README never says how to build.** Its `## Development` section lists `nix develop`,
+the five test scripts and `nix flake check`. The words *build*, *package* and `nix build` appear
+nowhere in the file. Meanwhile `flake.nix` exposes `packages.default` — a derivation named
+`title-slides-extension` that copies `_extensions/` into `$out` — and `.github/workflows/release.yml`
+ships the release asset with exactly `nix build .#default`, then `cp -rL result/_extensions dist/`
+and a `zip -r`. So the build exists, is the one the release uses, and is undocumented.
+`AGENTS.md`'s per-idea deliverables ask the README for "how to enter the environment
+(`nix develop`), run tests **and build**".
 
-Further assumptions, stated once:
+Assumptions, stated once rather than asked:
 
-- **This is a behaviour change, not a bug fix**, which is why it is a minor bump. A deck with `#`
-  sections and `##` slides — the shape `tests/fixtures/index.qmd` and `example/deck.qmd` have —
-  gets a different deck out of 0.5 than out of 0.4: its index slides move from before each `#` to
-  before each `##`, and list the `##` titles. The release notes lead with that rather than bury it.
-- **The carry is untouched.** The 0.1 contract stands as written, `#` still clears the carried
-  title, and `title-slides:` behaves identically with this entry applied. Only the index moves.
-- **The 0.4 warning survives, with new reasons.** Silence is still never an outcome; the deck that
-  now warns is the one with no slide-level headings at all, or with all of them hidden.
-- **No new frontmatter key**, on the same grounds as 0.4: the reporter should not have to discover a
-  key to get the level their deck already uses. `index-level:` stays in Open Questions.
+- **The documented build is the release's build, verbatim.** `nix build .#default` plus the two
+  lines that turn `result/` into `title-slides-<version>.zip`, with a sentence saying `release.yml`
+  runs precisely this. Documenting a *different* recipe that happens to work would recreate the gap
+  in a new form: the point is that a reader can reproduce the published asset.
+- **It goes in `## Development`**, as the entry asks, not in a new top-level section. The install
+  line at the top of the README stays the user's path; building is a contributor's path and belongs
+  where the test runners already are.
+- **No code, no CI job, no new test target.** `nix flake check` deliberately does not build
+  `packages.default` today; making it do so is a change to the build, not documentation of it, and
+  is out of scope. The build is verified by running it (see Testing), not by adding a check.
+- **No substitute linter.** `AGENTS.md` is explicit that an unsupported language is a reason to
+  skip the analysis, "not a reason to invent a substitute linter and call it the same thing".
+  Adding luacheck or selene under the banner of closing gap 1 would be the wrong fix, and it is
+  named here so it does not get invented mid-cycle.
 
 ## Features
 
-- **The index is built from slide-level headings** — `##` at Quarto's default — in document order,
-  each one listed with the text the author wrote.
-- **`#` is reserved for the title slide**: a level-1 heading is never listed on an index and never
-  gets an index slide put in front of it, so a deck's title page and its `#` section slides are left
-  exactly as the author wrote them.
-- **The reporter's deck gets its index** — the real-deck fixture stops emitting the 0.4 warning, its
-  fourteen accented `##` titles appear on the index, and the pinned outline changes to match. That
-  outline diff is the acceptance criterion, and the test fails if the index disappears again.
-- **The emphasis still moves** — the entry for the slide the index introduces is wrapped in `Strong`
-  and in the `title-slides-index-current` span, unchanged from 0.2, so the CSS hook and the
-  screenshots' meaning survive the level change.
-- **Generated headings are neither indexed nor anchors** — a `title-slides-continuation` heading
-  inserted by the carry sits at the slide level, which is now precisely what the index looks for.
-  Without an explicit `is_generated` check, a deck using both features would get an index slide
-  before every continuation and its title repeated down the list. A test fails when the check is
-  removed.
-- **Hidden slides stay hidden** — `.unlisted` or `visibility="hidden"` on a slide-level heading
-  keeps it off the index and gives it no index slide, the same rule 0.2 applied to sections, so
-  `show-index` still cannot leak the title of a slide the author suppressed.
-- **Duplicate and accented titles survive** — `Definición` twice and `Parámetros por defecto` three
-  times are listed as written (subject to Open Questions), and identifiers still come from the
-  shared `taken_identifiers` table, so `<slide>-index-<n>` cannot collide with a continuation or
-  with anything in the deck.
-- **`show-index: true` is still never silent** — 0.4's warning stays, re-aimed: no slide-level
-  headings at all, every one of them hidden, or `slide-level: 0`, where no heading starts a slide.
-  Named key, specific reason, once per document.
-- **Index slides are asserted to be reachable, not merely present** — reveal's vertical-stack
-  nesting changes when an index precedes a `##` instead of a `#`, so the render test checks where
-  the index `<section>` lands and that nothing hides it.
-- **Docs and screenshots match the new rule** — the README's "index rule, exactly" section, the
-  worked example, the two index screenshots and the 0.4 troubleshooting entry all describe `##`
-  indexing; the paragraph promising that no agenda of `##` slides is invented is replaced by what
-  0.5 actually does.
-- **Released and installable** — `_extension.yml` at 0.5.0, `v0.5` tagged upstream with
-  `title-slides-0.5.zip` attached and verified present, both install paths re-checked from clean
-  directories by rendering the real deck, then the gitlink and `flake.lock` moved here together with
-  `scripts/check-pin.sh` green.
+- **`STATUS.md` records the Sonar exemption where the rule asks for it** — a standing section in
+  this idea's `STATUS.md`, not a line buried in one cycle's log, so it survives the next entry and
+  answers the question for anyone reading only this idea.
+- **Lua is named as the reason.** SonarQube Cloud does not analyse Lua; the extension is a Lua
+  filter; therefore there is no Sonar project, no badge and no `sonar / Analysis` check for this
+  repository, by the `AGENTS.md` rule rather than by omission.
+- **The note points at the evidence rather than restating it** — `ideas/quality-gate/baseline.md`'s
+  "Out of scope" section and `ideas/quality-gate/STATUS.md`'s check-context table, which is where
+  the fleet-wide record lives. It also records the consequence that is easy to misread as a defect:
+  this repository's branch ruleset requires **`test` only**, where every other idea repository also
+  requires a Sonar check. Verified against the live ruleset, not copied from the other idea's prose.
+- **The note states its own expiry condition** — if SonarQube Cloud ever adds Lua, wiring this
+  repository up is the ordinary three commands, and the exemption stops applying. A skip with no
+  stated condition for un-skipping is indistinguishable from neglect.
+- **The date question is settled in writing** — the rule predates the omission, so this is recorded
+  as a real gap closed, not as a retroactive tidy-up.
+- **The README documents the build** — `nix build .#default`, what it produces (a `result/` symlink
+  containing `_extensions/title-slides/`, the extension exactly as `quarto add` installs it), and
+  the two further lines that make `title-slides-<version>.zip`.
+- **The docs name the release as the same command** — one sentence tying the snippet to
+  `.github/workflows/release.yml`, so the next person to change one knows the other exists.
+- **The reproduction is checked, not asserted** — the locally built zip is compared against the
+  published `title-slides-0.5.zip` asset, and the README only claims what that comparison supports.
+- **The Development section still reads as one list** — `nix develop`, the five runners,
+  `nix flake check`, then the build, in the order a contributor meets them.
+- **Released and installable** — `_extension.yml` at 0.6.0, `v0.6` tagged upstream with
+  `title-slides-0.6.zip` attached and verified present, the three `@v0.5` install lines in the
+  README moved to `@v0.6`, both install paths re-checked from clean directories, then the gitlink
+  and `flake.lock` moved here together with `scripts/check-pin.sh` green.
+- **The filter is provably untouched** — `git diff` for the entry covers `README.md`,
+  `_extension.yml` and nothing under `_extensions/title-slides/*.lua`; all 114 unit tests, 4 golden
+  cases, the smoke, real-deck and install tests pass unchanged.
 
 ## Approach
 
-Units, one commit each, expectation written before implementation:
+Units, one commit each:
 
-1. **U0 — pin, baseline, and the current output written down.** `git submodule update --init`,
-   `scripts/check-pin.sh`, full 0.4 suite green before any change; the sweep has reverted this
-   gitlink once already. Then record, from real renders rather than from reading the code: what the
-   real deck does today (warning, fourteen slides), and what `index.qmd` and `example/deck.qmd`
-   produce today, so the 0.5 diff is measured against evidence rather than against the goldens.
-2. **U1 — the failing expectations.** Rewrite `tests/fixtures/index.expected.qmd` for `##`
-   indexing, update the real-deck expected outline, and add unit fixtures: a deck with only `##`
-   headings, a deck with both `#` and `##`, a deck whose `#` is a title slide followed by `##`s.
-   They fail. If keeping CI green means landing them with U2, the expectations are still written
-   first.
-3. **U2 — the predicate.** `is_section` becomes `is_indexed` — `level == slide_level`, not hidden,
-   not generated — and `sections_of`, `index_slide` and `insert_indexes` follow it. Keep
-   `insert_indexes` a pure function over top-level blocks so the unit tests drive it directly. The
-   `is_generated` exclusion lands here with the test that fails without it.
-4. **U3 — the warning, re-aimed, and the degenerate cases re-pinned.** New reason strings for "no
-   `##` headings", "all hidden" and `slide-level: 0`; then every case 0.4 pinned as *warning* that
-   is now an *index* — no sections, one heading, `slide-level: 1`, a `#` nested in a div, both
-   features on together — rewritten as a decision, each perturbed once to confirm it can fail.
-5. **U4 — docs, screenshots and release.** README rule, example and troubleshooting; regenerate the
-   two index screenshots from a deck of the new shape; `_extension.yml` to 0.5.0; cut the tag and
-   confirm the tag *and its asset* landed (`git ls-remote --tags`, then look at the release — the
-   orchestrator's push carries no tag, so the workflow tags itself); verify both install paths from
-   clean directories against the real deck; move the gitlink and `flake.lock` here together and
-   check the remote CI run, not just the local one.
+1. **U0 — pin, baseline, and both gaps re-confirmed against the tree.**
+   `git submodule update --init` (never `git -C` into an empty submodule), `scripts/check-pin.sh`,
+   then the full 0.5 suite green before any change — the sweep has reverted this gitlink once
+   already and `STATUS.md` saying 0.5 is not evidence. Then verify the audit rather than trusting
+   it: grep the README for `build`/`package`/`nix build`, grep `STATUS.md` for `[Ss]onar`/`Lua`,
+   read the live branch ruleset on `gortazar/title-slides` for its required contexts, and confirm
+   `nix build .#default` succeeds and what it leaves in `result/`. If any of the four disagrees
+   with this plan, say so in `STATUS.md` before writing the fix.
+2. **U1 — the `STATUS.md` note, here.** No upstream change, no PR, no gate: this is the cheapest
+   half and it closes the rule violation immediately. A standing section with the exemption, the
+   reason, the pointers, the ruleset consequence and the expiry condition.
+3. **U2 — the README build docs, upstream.** Branch `agent/title-slides/<date>`, draft PR opened at
+   this first upstream unit, not at the end. Write the snippet from `release.yml`, run every command
+   in it, then compare the resulting zip with the published 0.5 asset and fix the prose to match
+   whatever the comparison actually shows.
+4. **U3 — release.** `_extension.yml` to 0.6.0 and the three `@v0.5` lines to `@v0.6` in the same
+   commit; merge through the gate (PR required, `test` must pass, no bypass actors); confirm the
+   tag **and its asset** landed — the workflow tags itself, the orchestrator's push carries no tag;
+   verify both install paths from clean directories; move the gitlink and `flake.lock` here
+   together; check the remote CI run, not just the local one.
 
 ## Testing
 
-- **Real deck** (`tests/run-real-deck.sh`, existing) — the acceptance test. New pinned outline, the
-  accented titles listed on the index, no warning on stderr, and the filter-off run still fourteen
-  slides so the no-op proof stays honest.
-- **Golden** — `index.qmd` is rewritten by design; `basic.qmd`, `nested.qmd` and `sections.qmd`
-  must pass **byte-identically**, because they exercise the carry, which this entry does not touch.
-  A diff there is a finding, not a fixture to update.
-- **Unit** — the transform as a pure function: `##`-only deck, `#`-and-`##` deck, title slide then
-  `##`s, hidden slide-level headings, `slide-level: 1` and `3` and `0`, carry and index together
-  with `---` continuations present, and the `is_generated` guard.
-- **Reachability** — where the index `<section>` sits in the rendered HTML now that it precedes a
-  `##`, and that no class or inline style hides it. String and structure assertions; no browser.
-- **Smoke and install** — both still run; the smoke test's index assertions move to the new level,
-  and the install test is unchanged.
-- **Every new or changed expectation is perturbed once** to prove it can fail, as in 0.3 and 0.4.
+- **Nothing new to test, everything to re-run.** 114 unit tests, 4 golden cases, smoke, real-deck
+  and install, all green at the end as at the start. Four byte-identical goldens are the proof that
+  a documentation entry stayed a documentation entry.
+- **The documented build is executed.** Every line of the new snippet is run in a clean checkout,
+  in order, and the README says only what those runs produced.
+- **The zip is compared with the published one.** Build 0.5's asset locally from the pinned commit
+  and diff its file list (and, where reproducible, its contents) against the downloaded
+  `title-slides-0.5.zip`. If they differ, the difference is documented rather than papered over.
+- **Both greps flip.** `build`/`nix build` absent → present in the README; `Sonar`/`Lua` absent →
+  present in `STATUS.md`. Cheap, and it is exactly the check the audit ran.
+- **The diff is inspected for code.** `git diff --stat` on the upstream branch must show
+  `README.md` and `_extension.yml` only.
+- **Install paths from clean directories** — `quarto add gortazar/title-slides@v0.6` and the
+  downloaded zip, each rendering the real deck: 28 slides, 14 index slides, 9 entries, no warning.
 
 ## Risks / things to verify early
 
-- **The pin.** `scripts/check-pin.sh` before anything else; `STATUS.md` claiming 0.4 is not evidence
-  that the gitlink points at it.
-- **The generated-heading guard is now load-bearing.** 0.2 recorded that the carry could not adopt an
-  index title because a `#` always followed one; 0.4 recorded that removing the guard broke fourteen
-  tests. Now the index also has to *skip* continuations. Verify by removing each check in turn.
-- **The index slide count.** Indexing the slide level means one index per slide, so the reporter's
-  fourteen-slide deck becomes twenty-eight. This is Open Question 1 and the answer decides the
-  acceptance outline; do not build past U1 without it.
-- **Reveal's nesting changes.** 0.2 documented an index being pulled into the preceding section's
-  vertical stack. An index at the same level as the heading it precedes nests differently — check
-  the rendered structure on a deck with `#` sections before assuming the caveat still reads true.
-- **Rewriting a golden is what a broken fix looks like.** `index.expected.qmd` changes here by
-  design; the other three must not, and neither may the carry unit tests.
-- **`slide-number: c/t` and any in-deck link that counts slides** shift with the extra slides. A
-  README sentence, not a surprise.
-- **`upstream/` is a detached-HEAD submodule** — `git push origin HEAD:main` and confirm with
-  `git ls-remote origin main` before calling a unit done; a plain push prints nothing and does
-  nothing.
-- **The release workflow must create its own tag**; the orchestrator's push carries none.
-- **`quarto render --quiet` hides the warning**, as 0.4 found — do not read a quiet render as proof
-  that a deck no longer warns.
+- **The pin.** `scripts/check-pin.sh` before anything else, and `git submodule update --init`
+  before any `git -C ideas/title-slides/upstream …` — on an empty submodule that command operates
+  on the parent repo and detaches the agent's branch.
+- **`upstream/` is a detached-HEAD submodule.** `git push origin HEAD:main` (or the branch), and
+  confirm with `git ls-remote` before believing anything landed; a plain `git push` prints nothing
+  and does nothing.
+- **The gate applies to a docs PR too.** `main` needs a pull request and a green `test`; there are
+  no bypass actors and none may be created. A README typo that breaks a test is still a red gate.
+- **`status: done` is overwritten by the sweep**, so a release gated on it never fires — run
+  `check-release.sh` and, if the workflow did not run, recover with its `force` input rather than
+  assuming the tag will do it.
+- **The release workflow must create its own tag.** The orchestrator's push carries none, and
+  agents cannot push tags.
+- **Bumping `_extension.yml` for a docs-only change is deliberate**, so that
+  `quarto list extensions` reports a version matching the README the user is reading. It also means
+  the published 0.6 artefact differs from 0.5 by exactly one line — worth checking, since a zip
+  that differs by more than that means something else changed.
+- **Do not close gap 1 with a tool.** The correct output is a sentence in `STATUS.md`. Adding a Lua
+  linter, a badge, or an empty Sonar project would each violate the rule this entry exists to obey.
+- **Do not close gap 2 by changing the build.** If `nix build .#default` turns out to be broken or
+  to produce something other than what `release.yml` ships, that is a finding for `STATUS.md` and
+  possibly its own entry — not a repair smuggled into a documentation change.
+- **Three `@v0.5` strings, not one.** README lines 11, 249 and 302. Missing one leaves the
+  troubleshooting section telling users to install the previous release.
 
 ## Open Questions
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [x] One index slide before **every** `##`, or a single one at the top of the deck? Ticking this
-      line as-is keeps 0.2's shape exactly one level down — an index before each indexed heading,
-      with the emphasis moving — which is what makes the `title-slides-index-current` span mean
-      anything, and turns the reporter's fourteen-slide deck into twenty-eight slides. The
-      alternative is one index slide at the top listing all fourteen with nothing emboldened (an
-      agenda), leaving the deck at fifteen: quieter, but then the current-item emphasis has no
-      purpose. A third possibility is repeated indexes only where consecutive titles differ.
-- [x] Are consecutive repeated titles listed once or every time? Ticking this line as-is lists every
-      `##` **verbatim in document order**, so the reporter's index reads `Definición`, `Definición`,
-      … `Parámetros por defecto` three times in a row — a faithful list of slides, a poor agenda.
-      The alternative collapses a run of identical adjacent titles into one entry, emphasised for
-      every slide in the run, giving that deck ten entries instead of fourteen. Collapse identical consecutive titles.
-- [x] Does the old behaviour stay reachable for decks that do use `#` sections? Ticking this line
-      as-is makes 0.5 a **straight replacement**: `#` headings are no longer indexed at all, and a
-      0.4 user with `#` sections silently gets a differently indexed deck. The alternative is an
-      `index-level:` key (defaulting to the slide level) so both conventions are expressible — more
-      surface, but it is also the answer to the level question 0.4 deferred.
+- [ ] Does a documentation-only entry cut a real release? Ticking this line as-is says **yes**:
+      `_extension.yml` goes to 0.6.0, `v0.6` is tagged with `title-slides-0.6.zip` attached, and
+      the README's install lines follow — which is what `AGENTS.md` requires ("`status: done` with
+      no release for that version is not done") and keeps the version a user sees in
+      `quarto list extensions` matching the documentation they are reading. The alternative is to
+      bump `version:` in `STATUS.md` only and ship no tag, on the grounds that the extension's
+      behaviour is byte-for-byte unchanged and a release that changes one version string is noise
+      in the release list.
