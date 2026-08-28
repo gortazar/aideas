@@ -326,15 +326,32 @@ class QueueRowsTest(ContractTestCase):
             self.assertEqual(orchestrator.count_open_questions(plan_path), len(lines),
                              f"disagreement for {body!r}")
 
-    def test_status_blocked_is_blocked_without_a_question_count(self):
+    def test_status_blocked_with_no_questions_left_is_ready(self):
+        """A blocked STATUS.md whose questions have all been answered is a stale flag.
+
+        Nothing ever cleared `status: blocked`, so answering the question that caused it
+        left the idea unbuildable forever and the table reported "STATUS.md says blocked"
+        as though it were a fact. Orchestrator 1.4 treats the questions as the source of
+        truth; this pins that, and the test below pins the case it must not swallow.
+        """
         rows = self.fixture([("alpha", "an idea")]).idea(
             "alpha", status="blocked", version="0.1", plan="# Plan\n").rows()
 
         self.assertRowShape(rows[0])
-        self.assertEqual(rows[0]["state"], "blocked")
-        self.assertEqual(rows[0]["note"], "STATUS.md says blocked")
+        self.assertEqual(rows[0]["state"], "ready")
+        self.assertEqual(rows[0]["note"], "questions answered; unblocks next cycle")
         self.assertNotIn("open_questions", rows[0],
                          "open_questions is only present when questions were counted")
+
+    def test_status_blocked_with_an_open_question_is_still_blocked(self):
+        plan = "# Plan\n\n## Open Questions\n- [ ] which colour?\n"
+        rows = self.fixture([("alpha", "an idea")]).idea(
+            "alpha", status="blocked", version="0.1", plan=plan).rows()
+
+        self.assertRowShape(rows[0])
+        self.assertEqual(rows[0]["state"], "blocked")
+        self.assertEqual(rows[0]["note"], "1 unanswered question")
+        self.assertEqual(rows[0]["open_questions"], 1)
 
     def test_an_idea_with_no_plan_is_to_be_planned(self):
         rows = self.fixture([("alpha", "an idea")]).idea(

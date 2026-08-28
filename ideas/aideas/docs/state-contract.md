@@ -144,8 +144,8 @@ assume `length == open_questions`.
 | `state`         | meaning                                                        | typical `note`                              |
 |-----------------|----------------------------------------------------------------|---------------------------------------------|
 | `running`       | an agent holds this slug in the live cycle                      | `an agent is working on it now`              |
-| `ready`         | eligible to be built                                            | `not started`, `in progress`, `minor update -> v0.3`, `finished before — reopens for this entry` |
-| `blocked`       | waiting on a human                                              | `2 unanswered questions`, `STATUS.md says blocked` |
+| `ready`         | eligible to be built                                            | `not started`, `in progress`, `minor update -> v0.3`, `finished before — reopens for this entry`, `questions answered; unblocks next cycle` |
+| `blocked`       | waiting on a human — always an unticked `- [ ]` in `PLAN.md`    | `2 unanswered questions`                     |
 | `queued`        | a second entry for a slug that appears earlier in the queue      | `behind #1`                                  |
 | `to be planned` | no `PLAN.md` yet                                                | `no PLAN.md yet`                             |
 
@@ -165,6 +165,12 @@ Row invariants a consumer may rely on, each covered by a test:
   at most `parallel_agents` rows. A running cycle returns no `will_run_next` at all.
 - **A `blocked` row never has `will_run_next`.** Blocked is the state that stays put until
   someone answers it, which is why it is worth surfacing when nothing is running.
+- **`blocked` comes from the questions, never from `STATUS.md` alone.** Until orchestrator
+  1.4 a `status: blocked` file produced a `blocked` row noted `STATUS.md says blocked`, and
+  nothing ever cleared that flag — so an idea whose question had been answered stayed
+  unbuildable and the row asserted it as a fact. Such a row is now `ready`, noted
+  `questions answered; unblocks next cycle`. An idea with an unticked `- [ ]` is still
+  `blocked` with its count, which is the case that must not be swallowed.
 
 ## What the extension must not assume
 
