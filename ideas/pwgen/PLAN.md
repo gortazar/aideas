@@ -1,98 +1,162 @@
-# Plan: pwgen — Gnome Shell extension for secure password generation
+# Plan: pwgen — close the five audit gaps against AGENTS.md
 
-Difficulty estimate: medium — the generator itself is small, but doing it *correctly* (real CSPRNG
-under GJS, unbiased character selection) plus satisfying the extensions.gnome.org review rules and
-getting a headless GJS test suite green in CI is where the work is.
+Difficulty estimate: medium — no single piece is hard, and most of the plumbing already exists in
+`recap-gs` to copy from; what makes it medium is that five separate deliverables each have to land
+through the upstream pull-request gate, and two of them (a published release, an installer) are only
+done once verified against the live release from a clean directory.
 
 ## Context
 
-`pwgen` is an existing Gnome Shell extension (upstream: `github.com/gortazar/gnome-shell-pwgen`)
-that generates a password and puts it on the clipboard. Today it shells out to the external
-`pwgen(1)` binary. The [EGO review
-guidelines](https://gjs.guide/extensions/review-guidelines/review-guidelines.html) make that a
-rejection risk: spawning external programs is only accepted when there is no alternative, the
-binary is not guaranteed to be installed on a user's system, and the current call path is a
-blocking synchronous spawn on the compositor's main loop.
+`pwgen` shipped its 0.1 entry on 2026-08-06, before several of the rules now in `AGENTS.md` existed.
+A fleet audit found five confirmed gaps. Three are missing deliverables the rules acquired later
+(release, installer, upstream `flake.nix`); two are `STATUS.md` telling readers things that are not
+true of the tree.
 
-The change: drop the subprocess entirely and generate passwords in-process, in JavaScript, from a
-cryptographically secure random source.
+Verified while writing this plan:
 
-Assumption (stated rather than asked): generated passwords keep parity with what the extension
-produces today via `pwgen` — i.e. a secure, non-pronounceable password including symbols. If
-reading the upstream source shows different flags in use, match those instead and note it in
-`STATUS.md`.
+- `https://api.github.com/repos/gortazar/gnome-shell-pwgen/releases` returns an empty list. There is
+  no release and no tag, so the `v0.1` `STATUS.md` implies has never existed.
+- `upstream/install.sh` runs `./compile-schemas.sh` and symlinks the checkout into
+  `~/.local/share/gnome-shell/extensions/`. That is clone-and-build; `AGENTS.md` says it does not
+  count as an installation method.
+- There is no `upstream/flake.nix`. The flake is `ideas/pwgen/flake.nix`, written when the wrapper was
+  where the environment lived; `AGENTS.md` now requires one in the idea's own repository.
+- `flake.lock` locks `pwgen-src` at `57b3bf6a64fd4a8109dbe4e6eae1430545a41aa5`, while `STATUS.md`
+  names `870d00e` twice as the pinned commit.
+- `STATUS.md` says "`ci-pwgen.yml` has never run on GitHub. It cannot here: this repository's `origin`
+  is a local bare repo in the sandbox." Origin is `github.com:gortazar/aideas` and the workflow has
+  run at least five times.
+
+Two things follow from that last one. The sentence is not just stale, it is the kind of claim that
+*explains away* a missing check, so the whole file needs re-reading for others of the same shape —
+that is the fifth gap's second half.
+
+Assumptions, stated rather than asked:
+
+- **The curl installer, not extensions.gnome.org, is this entry's installation path.** The entry says
+  so explicitly. Submitting to EGO stays out of scope and stays recorded in `STATUS.md` as a
+  publishing decision, not a build step.
+- **The wrapper keeps a `flake.nix`.** `AGENTS.md` allows "a `flake.nix` that consumes the submodule"
+  in the idea folder, and `recap-gs` is the model: upstream owns the checks, the wrapper re-exports
+  them so `ci-pwgen.yml` runs upstream's real checks at the pinned commit rather than a second copy
+  that drifts.
+- **The existing symlink installer is kept, moved, not deleted.** It is how the extension is developed
+  against a live session; `recap-gs` keeps the same thing at `scripts/install-local.sh`.
+- **This entry is a minor update**, so it finishes at `version: 0.2` with a `v0.2` release. What to do
+  about the `v0.1` that was never published is the open question below.
 
 ## Features
 
-- **In-process secure password generation** — no `pwgen` binary, no `GLib.spawn*`, no
-  `Gio.Subprocess`; the extension has zero runtime dependencies beyond Gnome Shell itself.
-- **CSPRNG-backed randomness** — bytes come from the OS entropy pool. Primary source:
-  `/dev/urandom` read through `Gio.File` (async, never blocking the main loop). If the targeted
-  GJS versions turn out to expose `globalThis.crypto.getRandomValues`, prefer that and keep the
-  `/dev/urandom` path as fallback. Never `Math.random()` or `GLib.random_int()` — neither is
-  cryptographically secure.
-- **Unbiased character selection** — rejection sampling over the charset rather than `byte %
-  charset.length`, so no character is more likely than another; covered by a test.
-- **Configurable password shape** — length and character classes (lowercase, uppercase, digits,
-  symbols), with a guarantee that at least one character from each enabled class appears, and the
-  guaranteed characters shuffled into random positions (Fisher–Yates over CSPRNG bytes, not a
-  fixed prefix).
-- **Clipboard copy** — generated password goes straight to the clipboard via `St.Clipboard`
-  (CLIPBOARD selection), with the existing panel/menu UX preserved.
-- **Review-rules compliance** — ESM `import` syntax and the modern `Extension`/`ExtensionPreferences`
-  base classes; every timeout, signal handler and UI object created in `enable()` torn down in
-  `disable()`; no destructive/global monkey-patching left behind; no `eval`, no remote code, no
-  bundled binaries; correct `metadata.json` (uuid, `shell-version`, url, GPL-2.0-or-later);
-  compiled GSettings schema shipped with the sources.
-- **Headless unit test suite** — the generator lives in a Shell-free module (`lib/generator.js`)
-  importing only GLib/Gio, so it runs under plain `gjs` in CI with an injectable byte source for
-  deterministic tests.
-- **Reproducible environment + green CI** — `flake.nix` providing `gjs`, `glib`, ESLint and
-  `gnome-extensions`; `nix flake check` runs lint + tests + `gnome-extensions pack` validation;
-  `.github/workflows/ci-pwgen.yml` runs it on push and PR for the branch carrying this change.
+- **A release workflow in `gortazar/gnome-shell-pwgen`** — `.github/workflows/release.yml`, running the
+  test suite and then publishing a GitHub release carrying
+  `pwgen-generator@pwgen-gs.patxi.shell-extension.zip` and its `.sha256`. It triggers on a pushed
+  `v*` tag *and* on `workflow_dispatch` with a version input, in which case **it creates the tag
+  itself** — an agent that cannot push a tag must still be able to cut a release. Release notes open
+  with the install one-liner.
+- **The tag and the extension agree** — `metadata.json` gains `version-name`, and the workflow refuses
+  to publish when the tag does not match it. A release whose asset describes a different version than
+  the notes is the failure mode this exists to prevent.
+- **A `curl`-able installer upstream** — `install.sh` becomes the recap-gs-shaped installer: downloads
+  the asset for `latest` (or `VERSION=v0.2`) from GitHub releases, verifies it against the published
+  checksum, unpacks into `${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/<uuid>`,
+  recompiles the schema if `glib-compile-schemas` is present, and tries `gnome-extensions enable`,
+  saying what to do on Wayland when that cannot work yet. No root, nothing built, nothing outside the
+  extensions directory touched.
+- **The old installer keeps working, under its real name** — the symlink-a-checkout script moves to
+  `scripts/install-local.sh`, and every reference to it follows: `README.md`, the comment in
+  `ci/smoke-test.sh`, and `tests/ci-scripts-test.js`.
+- **Upstream `README.md` opens with the install command** — the one-line `curl … | sh` before any
+  development instruction, with the local-checkout path demoted to a development section.
+- **`flake.nix` in the extension repository** — dev shell (`gjs`, `glib.dev`, `nodejs`, `python3`,
+  `zip`, `jq`, the `pwgen-pack` helper), `checks` for the headless unit suite, a `--strict` schema
+  compile and the packed zip's contents, and `packages.default` producing the uploadable zip. This is
+  a move of what `ideas/pwgen/flake.nix` already does, minus the `pwgen-src` indirection, since
+  upstream can read its own tree.
+- **The wrapper flake becomes a consumer** — `ideas/pwgen/flake.nix` takes `pwgen-src` as a *flake*
+  input and re-exports `checks` and `packages.default` from it, so `nix flake check` here runs
+  upstream's own checks at the pinned commit and there is exactly one definition of them.
+  `scripts/check-pin.sh` keeps working unchanged: the input name stays `pwgen-src`.
+- **`scripts/check-release.sh` in the wrapper** — the command that answers "is the release actually
+  there", which `AGENTS.md` makes a precondition for `status: done`: the release exists for the
+  version in `STATUS.md`, it carries the zip and the checksum, the checksum matches the downloaded
+  asset, and the zip contains `metadata.json`, `extension.js`, `prefs.js`, `lib/generator.js` and
+  `schemas/gschemas.compiled`. No token, no clone.
+- **The pins and `STATUS.md` say the same commit** — the file stops naming a commit from memory: it
+  quotes the pin, and `scripts/check-pin.sh` grows a third assertion, that the commit `STATUS.md`
+  names is the one in the gitlink. That is what stops gap 4 recurring the next time `main` moves.
+- **A `STATUS.md` that only asserts what it can show** — the two false sentences about `origin` and
+  about `ci-pwgen.yml` are corrected, and every remaining claim in the file is re-checked against the
+  tree and either re-verified, rewritten, or dropped. Specifically: the unit-test count, "upstream CI
+  is green on `main`", "no open pull requests", the `GNOME_REVIEW_RULES.md` line references, the
+  deviations list (it says `nix flake check` has three checks and why `gnome-extensions pack` is not
+  one), and the three "deliberately not done" items — of which the EGO one survives as a scope
+  decision and the `ci-pwgen.yml` one does not survive at all.
+- **The wrapper `README.md` follows** — its "Build and release" section currently says releasing means
+  uploading the zip to extensions.gnome.org by hand. After this entry, releasing is a tag.
 
 ## Approach
 
-1. **Bring the upstream extension into `ideas/pwgen/`** (see Open Questions) and get it building
-   and packing unchanged, so the diff that follows is only about the generator.
-2. **Scaffold the environment first**: `flake.nix`, ESLint with the GJS/GNOME config, and the
-   test runner wired into `nix flake check`; confirm `ci-pwgen.yml` goes green on the branch
-   *before* the behavioural change lands. A red baseline is much harder to debug later.
-3. **Write failing tests first** (per `AGENTS.md`): requested length is honoured; output only uses
-   characters from the enabled classes; each enabled class is represented; a stubbed byte source
-   producing out-of-range values proves rejection sampling rather than modulo bias; a
-   chi-square-ish distribution smoke test over many samples; guaranteed characters are not always
-   at fixed positions; invalid inputs (length below the number of enabled classes, no classes
-   enabled) are rejected explicitly.
-4. **Implement `lib/generator.js`**: `randomBytes(n)` (injectable source, defaults to the CSPRNG
-   read), `randomIntBelow(n)` with rejection sampling, `shuffle(array)`, `generate({length,
-   classes})`.
-5. **Rewire `extension.js`** to call the generator and delete the subprocess path, the `pwgen`
-   availability check, and any related error handling/notifications that no longer apply.
-6. **Audit against the review guidelines** as an explicit pass with the checklist open: session
-   modes, `disable()` completeness, no main-loop blocking I/O, metadata correctness, no leftover
-   `console.log` noise.
-7. **Document**: update `README.md` (nix develop, run tests, build/pack, install locally, publish)
-   and add `screenshots/` once it runs.
+Units, one commit each, upstream work in draft pull requests opened at the first commit:
+
+1. **U1 — `STATUS.md` honesty pass.** Run `scripts/check-pin.sh` first (the sweep can revert a
+   submodule pin, so the gitlink is the authority, not what the file remembers). Correct the pin, the
+   `origin` sentence and the `ci-pwgen.yml` sentence, and go through the rest of the file claim by
+   claim. This is first because it is what misleads a reader *today* and it depends on nothing else.
+2. **U2 — `flake.nix` upstream.** Move it, keep the outputs' names, prove `nix flake check` and
+   `nix build` green from a clean clone of the branch. Upstream CI stays as it is: apt/dnf-based jobs
+   that boot a real shell are not something to rewrite here.
+3. **U3 — the wrapper consumes it.** Only after U2 has *merged* and the pin has been bumped to that
+   commit — a wrapper pointing at a commit with no flake outputs cannot evaluate. Bump the gitlink and
+   `flake.lock` together, `check-pin.sh`, then confirm `ci-pwgen.yml` is green on the real remote
+   rather than assuming it.
+4. **U4 — the installer.** `install.sh` rewritten, old one to `scripts/install-local.sh`, references
+   and README updated. It cannot be run end-to-end yet — there is no release to fetch — so it lands
+   with its failure path tested (missing asset, missing `unzip`, checksum mismatch) and is verified
+   for real in U6.
+5. **U5 — the release workflow** plus `version-name` in `metadata.json`, and `scripts/check-release.sh`
+   in the wrapper. Both are dead code until a tag exists; the workflow's own syntax and the tag/version
+   check are what this unit can prove.
+6. **U6 — cut the first release.** Tag once U2/U4/U5 are on `main`, let the workflow publish, then:
+   `scripts/check-release.sh`, and `install.sh` run from a clean directory against the published asset,
+   with the output recorded in `STATUS.md`. An installer that was never executed is a guess.
+7. **U7 — finish the entry.** `version: 0.2`, `v0.2` released and verified the same way, wrapper
+   `README.md` updated, the submodule pointer committed at the merged `main`, `status: done` only once
+   `check-release.sh` passes for 0.2 and no BLOCKER is open on the Sonar project.
 
 ## Risks / things to verify early
 
-- **GJS entropy API availability** — whether `crypto.getRandomValues` exists depends on the GJS
-  version behind the targeted Shell releases. Verify in the spike; the `/dev/urandom` path must
-  work regardless, and its failure mode must be "refuse to produce a password", never a silent
-  fall back to a weak RNG.
-- **Async vs. sync read** — reading `/dev/urandom` synchronously is fast in practice, but review
-  prefers async I/O; use the async API and keep the menu responsive.
-- **Testing under CI without a display** — the generator module must not import `St`, `Clutter`,
-  `Shell` or `resource:///org/gnome/shell/...`, or the headless tests break. Enforce with a lint
-  rule or a grep-based check in the test suite.
-- **Packing in CI** — `gnome-extensions pack` needs a matching `metadata.json` and compiled
-  schemas; treat a pack failure as a test failure so review-blocking mistakes surface in CI.
+- **A tag on a commit that predates the workflow does nothing.** GitHub takes workflow files from the
+  triggering ref, so `v0.1` cannot be tagged at `57b3bf6`: the release must be cut from a `main` that
+  already contains `release.yml`. This is why U6 comes after U5 and not before, and it constrains the
+  answer to the open question below.
+- **The pin bump in U3 is ordering-sensitive.** `git -C upstream` on a submodule is not safe to run
+  blind — initialise it first, and never let a checkout there land on the agent branch. `check-pin.sh`
+  before and after.
+- **`main` upstream is behind a ruleset with no bypass.** Everything here lands by pull request with
+  the gate green. Read the check contexts off a live PR rather than guessing them, and if the quality
+  gate goes red, `ideas/quality-gate/scripts/pr-gate.sh` first — fix or narrowly exclude, never
+  re-label.
+- **Verify the release from outside the sandbox's assumptions.** `check-release.sh` reads the public
+  API, and the install verification must run in a throwaway directory with a throwaway `PREFIX`, not
+  against the live session's extensions directory. `ci/smoke-test.sh` has already, once, written
+  through those symlinks into a real working copy.
+- **Check the remote, not the local run.** `gh run list` / `gh pr checks` once, late — not a polling
+  loop — before believing anything is green.
+- **Two releases in one entry, if the open question is answered that way,** means the `v0.1` asset and
+  the `v0.2` asset are built from nearly the same tree. The notes must say which is which honestly
+  rather than implying `v0.1` is the August 6th extension.
 
 ## Open Questions
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [x] Where should the code live? The idea links to `github.com/gortazar/gnome-shell-pwgen` (the link *text* says `gortazar/pwgen` — which is correct?), but `AGENTS.md` requires all work to stay inside `ideas/pwgen/`. Should the upstream sources be vendored into `ideas/pwgen/` and developed here, or should this idea clone/fork the upstream repo and push a branch there? It should be worked on the upstream repo, not here. Add here just a git submodule
-- [x] What is "done"? Is it enough that this repo's `ci-pwgen.yml` is green on the branch, or does the change also need a pushed branch/PR against the upstream repo (and if so, is push access available), and/or an actual submission to extensions.gnome.org? It needs a push to the remote repo, and checks passing, then merge and see the checks passing again (in GitHub actions).
-- [x] Is a preferences UI for password length and character classes in scope, or should the extension keep whatever fixed policy it uses today? `AGENTS.md` forbids inventing features, and the upstream source is not reachable from this sandbox to check what already exists. The tool already covers preferences for length, number of passwords and a couple of character classes.
+- [ ] **Should `v0.1` be published at all, or only `v0.2`?** The entry says to publish the `v0.1`
+      `STATUS.md` claims, but that tag can only be cut from a `main` that already carries this entry's
+      release workflow, installer and flake — so a `v0.1` release published now would contain 0.2's
+      work and would not be the extension as it stood on 2026-08-06. The alternatives are (a) publish
+      `v0.1` anyway, from current `main`, with notes saying plainly that it is the 0.1 extension plus
+      the packaging that was missing, then `v0.2` at the end of the entry; or (b) publish only `v0.2`
+      and correct `STATUS.md` to say that 0.1 never had a release rather than manufacturing one after
+      the fact. Ticking this line as-is chooses (a), which is what the entry text asks for and which
+      has the side benefit of exercising the whole release path once before the entry's own release
+      depends on it.
