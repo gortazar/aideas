@@ -107,6 +107,21 @@ makes position a safe identity: the active list only ever holds work still to do
    the rule, the file and line, and why the analyser is wrong. Do not mark the issue anything in SonarQube Cloud. Then check the rest of the project's open issues for anything
    else at BLOCKER, since only this one was audited.
 
+8. [gnome-tasks](ideas/gnome-tasks) - `STATUS.md` asserts something untrue about the tree, and `STATUS.md` is the only report anyone reads to judge an idea. Minor update. Line 74
+   says "`origin` is a local bare repo, so `.github/workflows/ci-gnome-tasks.yml` has never run" — that was written on 2026-08-10 from a sandbox clone, but the workflow had already
+   run and passed on `gortazar/aideas` main seven times, including on the day the entry was declared done. Correct it with what CI actually reports, then read the whole file
+   against the tree and fix anything else that describes a checkout rather than the repository. `pwgen`'s `STATUS.md` carries the same false sentence from the same era and is being
+   fixed under its own entry; if you find the claim anywhere else, say so rather than fixing it here. This idea has no upstream repository and must not get one under this entry —
+   moving it is a separate decision, and the audit already established that nothing in its original entry authorised the current arrangement.
+
+9. [title-slides](ideas/title-slides) - Two documentation gaps a fleet audit confirmed, neither of which affects the code. Minor update. (1) `ideas/title-slides/STATUS.md` never
+   mentions Sonar or the Lua exemption at all: AGENTS.md says an unsupported language is a reason to skip the analysis **and say so in `STATUS.md`**, and the exemption is currently
+   recorded only in another idea's files (`ideas/quality-gate/STATUS.md` and `baseline.md`). Record it where the rule asks for it, naming Lua as the reason. The rule is
+   contemporaneous with this idea's last entry, so this is a real omission rather than a rule applied backwards. (2) The upstream README documents `nix develop`, the five test
+   scripts and `nix flake check`, but never how to build: the words build, package and `nix build` appear nowhere, even though `flake.nix` exposes `packages.default`
+   ("title-slides-extension") and `release.yml` ships the zip with `nix build .#default`. Document the build the release actually uses, in the section that already covers
+   development.
+
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
