@@ -18,16 +18,37 @@ last_run:
       org default `Sonar way`, whose 80% coverage-on-new-code condition no gjs project
       can meet. Draft pull request
       [#1](https://github.com/gortazar/meet/pull/1) open.
-- [ ] U2 — the destinations model: the two defaults, their order, and the https-only rule
-- [ ] U3 — the launcher, with an injected AppInfo seam
-- [ ] U4 — the symbolic panel icon, tested as an image
-- [ ] U5 — settings schema and the preferences window (add / edit / remove entries)
+- [x] U2 — the destinations model. `src/lib/destinations.js`: the two shipped rooms as
+      ordinary frozen entries, and the rule that a destination is a label plus an
+      absolute `https:` URL with a host. Nothing throws — a row broken by hand in dconf
+      costs you that row, not the menu. 22 tests.
+- [x] U3 — the launcher. `src/lib/launcher.js` over an injected launch seam, so the
+      three failure states that cannot be arranged headlessly — a handler that refuses, a
+      seam that raises on the calling frame, a machine with no browser — all have tests.
+      `open()` never throws and never rejects. 15 tests.
+- [x] U4 — the symbolic panel icon. An **original drawing** echoing the logo's
+      arrangement (two overlapping bubbles, a play triangle), since the mark may not be
+      vendored. Rasterised through the same GdkPixbuf/librsvg pair the shell draws it
+      with and checked pixel by pixel: it decodes at 16 and 32, something is drawn and it
+      is not a block, the play triangle is a hole, the two bubbles stay apart. Both pixel
+      assertions verified by mutation. 12 tests.
+- [x] U5 — configurable destinations. A GSettings `a(ss)` whose schema default is the two
+      rooms; `lib/settings.js` (the only file that knows the stored form),
+      `lib/editing.js` (what add / remove / move / restore *do*, as pure functions), and
+      `prefs.js` (the Adwaita window, holding the working list so a half-typed address
+      is not erased under the cursor). The schema is compiled under `--strict` in the
+      suite and its default read back and held against the code's. Plus
+      `hygiene.test.js`. 46 tests. **100 in all, green under `nix flake check`.**
 - [ ] U6 — the panel button and its menu
 - [ ] U7 — the nested-shell smoke test and screenshots
 - [ ] U8 — installer, README, wrapper glue and the v0.1 release
 
-Next: U2 — `src/lib/destinations.js`, with a test pinning the two default entries, their
-order, and that every URL is absolute and `https:`.
+Next: U6 — `extension.js`: the panel button carrying the symbolic icon, a menu built from
+the stored destinations, and a `disable()` that gives back every widget, signal and menu
+item it took.
+
+`main` on `gortazar/meet` is protected by the `main protected` ruleset: a pull request,
+and `check`, `package` and `sonar / Analysis` all green, with no bypass actors.
 
 ## Notes
 
