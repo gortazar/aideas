@@ -1,204 +1,186 @@
-# Plan: gnome-tasks — KDE Activities for Gnome
+# Plan: gnome-tasks 0.2 — say what CI actually reports
 
-Difficulty estimate: hard — it is not one program but four (a Shell extension, a session daemon, a
-per-app adapter layer, and a browser extension), it depends on window/session information that
-Wayland deliberately does not expose, and "which file is this window showing?" has no general
-answer on Linux, so a large part of the work is research and per-app special-casing.
+Difficulty estimate: easy — no code changes, one file to rewrite in places, and the whole job is
+reading evidence (`gh run view`, one `nix flake check`) and making prose match it; the only real
+care needed is not replacing one unverified sentence with another.
 
 ## Context
 
-KDE's Activities let a user group applications, documents and settings under a named task, and
-switch between tasks so that the desktop is restored to how that task was last left. Plasma
-implements this in `kactivitymanagerd`, a session daemon that owns activity state and exposes it
-over D-Bus (`org.kde.ActivityManager`), plus KWin rules that bind windows to activities, plus
-`KActivities` client APIs that let applications *link resources* (files, URLs) to the current
-activity. The UI is a switcher plus a settings module for creating, renaming, stopping and
-deleting activities.
+The report: `STATUS.md` line 74 says
 
-Gnome has no equivalent. Workspaces are the nearest primitive, but they are ephemeral, unnamed by
-default, hold no application set, and restore nothing across a logout. This idea builds the
-missing layer on top of Gnome Shell.
+> This checkout's `origin` is a local bare repo, so `.github/workflows/ci-gnome-tasks.yml` has
+> never run
 
-Three properties of Gnome shape the whole design, and are worth stating before the feature list:
+and that is false about this tree. `origin` is `github.com:gortazar/aideas`, and the workflow had
+already run on `main` seven times — including on 2026-08-09, the day this entry was declared done —
+when the sentence was written on 2026-08-10 from a sandbox clone. `STATUS.md` is the only report
+anyone reads to judge an idea, so a sentence describing somebody's clone as though it were the
+repository is the one kind of error that cannot be left in it.
 
-1. **The Shell extension runs inside the compositor process.** Anything slow or risky — spawning
-   processes, reading `/proc`, writing state files, talking to a browser over native messaging —
-   must not happen there, or the desktop stutters and a crash takes the session down. So the
-   architecture mirrors Plasma's: a **daemon** (`gnome-tasks-daemon`, owning
-   `org.gnome.Tasks` on the session bus) holds all state and does all work; the **extension** is a
-   thin top-bar client that additionally provides the one thing only in-process code can do, which
-   is Mutter/`Meta` window introspection and placement.
-2. **Wayland hides window state from other clients by design.** There is no `wmctrl`, no
-   `_NET_CLIENT_LIST`, no cross-client window IDs. Every piece of window knowledge must come from
-   inside the compositor (the extension, via `Meta.Window` / `Shell.WindowTracker`) and be handed
-   to the daemon over D-Bus. This is why the extension cannot be dropped in favour of a pure
-   daemon, and why an X11-only prototype would be a dead end.
-3. **Restoring a window is a guess, not a command.** Gnome can launch an app with a file, and
-   Mutter can place a window once it appears — but correlating "the window that just appeared"
-   with "the launch I requested" needs startup-notification tokens plus heuristics, and some apps
-   (single-instance apps, browsers, Electron apps, terminals) will need bespoke handling. The
-   design treats per-app support as a **capability tier**, not a boolean.
+The sentence does more damage than a stale fact, because it is load-bearing: it is the stated reason
+that **"whether GitHub runners can run a nested headless Shell is still unknown"**, which is in turn
+the answer to the last open question in `plans/01-2026-08-28.md`. The workflow carries a
+`nested-shell-smoke` job (`continue-on-error: true`) written for exactly that purpose — it boots a
+nested Shell with `tools/probe` and prints `VERDICT: a nested headless GNOME Shell runs on this
+runner` or its negation. If that job has been running for weeks, the question has a public answer and
+nobody read it. So the correction is not "delete a false sentence"; it is **go and get the verdict,
+and write down what it says**, whichever way it came out.
 
-Assumption (stated rather than asked): the target is a modern Gnome Shell on Wayland — GNOME 45+
-ESM extensions, `Extension`/`ExtensionPreferences` base classes — with X11 treated as best-effort.
-See Open Questions for the exact version floor.
+Assumptions, stated rather than asked:
+
+- **The unit of truth is a named run, not a count.** "Seven times" was true when the audit was
+  written and is already wrong by this push. The correction cites what the workflow runs, what the
+  jobs concluded, and the verdict text, each attributed to a run id and date — a form that ages into
+  "as of then" rather than into a falsehood.
+- **`status: not_started` in the header is correct and must not be "fixed".** The orchestrator
+  rewrites it when it queues an entry (`orchestrator/orchestrator.py:1258`), so it describes this
+  entry, not the finished work the body describes. The `## Log` line saying `done` is the record.
+- **Nothing gets re-verified that was verified on a machine.** `make smoke`'s eleven checks and the
+  two experiments stay as claims about 2026-08-09; they get *re-scoped* wording, not a re-run. A
+  nested-Shell run from this session would be a long blocking wait that gets interrupted, and its
+  result would not make the old sentence any truer.
+- **No upstream repository, under any interpretation of this entry.** Not created, not proposed, not
+  prepared for. The in-repo arrangement is a real deviation from AGENTS.md and gets recorded in
+  `STATUS.md` as one — recording it is not the same as fixing it, and moving the idea is a separate
+  decision the audit explicitly left open.
+- **Minor update: `version: 0.1` → `0.2`**, as the entry says, set in the same commit that finishes
+  the work.
 
 ## Features
 
-- **Top-bar task switcher** — a panel indicator showing the current task's name and icon, with a
-  menu listing all tasks, a "create task" entry, and per-task actions (switch, stop, edit,
-  delete). Keyboard shortcut to cycle tasks and a shortcut per task, following the KDE model
-  where *stopping* a task (closing its apps, keeping its definition) is distinct from *deleting*
-  it.
-- **Task model with persistent state** — each task has a UUID, name, icon, optional description,
-  and a saved *layout*: the list of applications, their documents, their window placement
-  (workspace + monitor + geometry + maximised/fullscreen state), and their declared commands.
-  Stored as versioned JSON under `~/.local/share/gnome-tasks/tasks/<uuid>.json`, written
-  atomically, with the schema documented and migrated on version bumps.
-- **Session capture** — while a task is active, the daemon keeps an up-to-date picture of it,
-  built from window events the extension forwards: `global.display::window-created`,
-  `Shell.AppSystem::app-state-changed`, `Meta.Window` `workspace-changed`, `position-changed`,
-  `size-changed`, `unmanaged`. Debounced, so a window drag does not cause a write storm.
-- **Session restore on activation** — switching to a task launches everything it remembers:
-  applications via `Gio.DesktopAppInfo.launch_uris_async()` with their documents, on the
-  workspace/monitor they were on, using a launch context from
-  `global.context.get_app_launch_context()` (i.e. carrying an `XDG_ACTIVATION_TOKEN` /
-  `DESKTOP_STARTUP_ID`) so new windows can be matched back to the slot that asked for them.
-  Windows that cannot be matched by token fall back to matching on app id, then PID, within a
-  time window.
-- **Deactivation policy** — switching away moves the outgoing task's windows out of sight and
-  optionally closes them, asking the app to quit politely (`Meta.Window.delete()`, giving
-  unsaved-work dialogs a chance) rather than killing PIDs. The exact default is an open question
-  below; the mechanism supports both "hide" and "close" per task.
-- **Document tracking, tiered by app** — the plan does not pretend one mechanism covers
-  everything. Per-app *adapters* declare what they can do:
-  - *Tier 0 — app only.* The window's `Shell.App` / desktop file id is all we know. Restore
-    launches the app with no arguments.
-  - *Tier 1 — documents.* The open file/URI is recoverable, so restore passes it on the command
-    line. Sources, in order of preference: the app's own D-Bus interface where it has one;
-    `org.gtk.Application`'s window object path (`_GTK_APPLICATION_ID` /
-    `_GTK_WINDOW_OBJECT_PATH`, exposed by `Meta.Window.get_gtk_application_id()` and friends);
-    `/proc/<pid>/fd` and `/proc/<pid>/cwd` correlated with the window's PID; the freedesktop
-    recent-files store (`~/.local/share/recently-used.xbel`) correlated by app and timestamp; and
-    last, title-parsing heuristics declared explicitly per app rather than applied globally.
-  - *Tier 2 — full inner state.* Multi-document apps (browser tabs, editor projects, terminal
-    tabs) need cooperation from the app itself, via a plugin. Tier 2 apps report their own state
-    to the daemon over D-Bus and are restored by handing that state back.
-- **Firefox adapter (tier 2)** — a WebExtension plus a native-messaging host that reports, per
-  browser window, the open tabs (URL, title, pinned, active) and restores them into a new window
-  on task activation. Includes the hard part: correlating a browser window known to the
-  WebExtension (`browser.windows` IDs) with a `Meta.Window` known to the compositor, since
-  Wayland gives the two sides no shared identifier.
-- **Managed commands** — per-task background commands (`docker compose up`, a dev server, an SSH
-  tunnel) started on activation and stopped on deactivation. Run as **transient systemd user
-  units** (`StartTransientUnit` on `org.freedesktop.systemd1`, one scope per task), so each task
-  gets its own cgroup, output lands in the journal, nothing is orphaned when the Shell restarts,
-  and stopping a task reliably stops its children. Commands are **declared by the user and shown
-  before first run** — never silently harvested from a terminal's command line and replayed.
-- **Preferences UI** — a GTK4/libadwaita `ExtensionPreferences` window to manage tasks, edit their
-  app/document/command lists, set icons and shortcuts, and control capture behaviour, with an
-  exclusion list (apps and paths never recorded) and a global "pause capture" switch.
-- **Public D-Bus API** — `org.gnome.Tasks`: list/create/delete/activate tasks, query the current
-  task, subscribe to changes, and let cooperating apps and plugins push their own state. This is
-  the extension point that makes tier-2 adapters possible without patching gnome-tasks for each
-  app, and it deliberately echoes `org.kde.ActivityManager` so the concepts map.
-- **Documented Gnome research** — the internals this depends on are written down in the idea
-  folder as first-class deliverables, not left as tribal knowledge in the code (see
-  *Documentation deliverables*).
-- **Reproducible environment + green CI** — `flake.nix` with `gjs`, `glib`, `gtk4`, `libadwaita`,
-  ESLint and `gnome-extensions`; `nix flake check` runs lint, headless unit tests and a packing
-  check; `.github/workflows/ci-gnome-tasks.yml` runs it path-filtered on push and PR.
-
-## Documentation deliverables
-
-The idea text calls this out explicitly, so these are tracked work items, each written from
-verified experiment rather than recollection, with the probe scripts kept in `tools/`:
-
-- `docs/kde-activities.md` — what Plasma actually does: the activity lifecycle (running / stopped
-  / deleted), `kactivitymanagerd`'s D-Bus surface, resource linking and scoring, KWin's
-  per-activity window rules, and an explicit table of which behaviours this port adopts, drops or
-  changes.
-- `docs/gnome-internals.md` — the Gnome side: `Shell.AppSystem`, `Shell.WindowTracker`,
-  `Meta.Window` / `Meta.Workspace` / `Meta.Display` and which of their properties survive a
-  restart; the signals that fire on app launch and window creation, in order, with timings;
-  startup notification and `XDG_ACTIVATION_TOKEN`; `Gio.DesktopAppInfo` launching; workspace
-  management under the dynamic-workspaces setting; monitor identification via
-  `org.gnome.Mutter.DisplayConfig` (connector name + EDID) so a saved layout survives replugging
-  a display; and the X11-vs-Wayland differences for each.
-- `docs/state-schema.md` — the on-disk task format, versioning and migration rules.
-- `docs/app-adapters.md` — the adapter interface, the capability tiers, and how to write a new
-  adapter; one worked example per tier.
-- `docs/limitations.md` — the honest list of what cannot be restored and why (see *Risks*).
+- **The CI sentence is replaced by what CI reports.** `.github/workflows/ci-gnome-tasks.yml` runs
+  path-filtered on every push touching `ideas/gnome-tasks/**`; the blocking `test` job runs
+  `nix flake check --print-build-logs` on `ubuntu-latest`. `STATUS.md` says so, names the runs it
+  read, and drops both halves of the false claim — the bare-repo remote *and* "has never run".
+- **The runner question is answered, or its real reason for being open is given.** The
+  `nested-shell-smoke` verdict is taken from the job's own log line and its `nested-shell-log`
+  artifact, and stated as the answer to `plans/01-2026-08-28.md`'s last open question. Three
+  outcomes, all acceptable, none of them a guess: *yes* (a runner boots a nested Shell — recorded,
+  with the job still non-blocking), *no* (recorded with the failing step and the log tail), or *the
+  job has never actually executed its verdict step* — for instance because it was added after those
+  runs, or because `apt-get` or `nested-shell.sh start` fell over first. In that third case the
+  question stays open, but with the true reason: not "the workflow has never run".
+- **The run-level green is not read as the job's verdict.** `continue-on-error: true` means the run
+  concludes `success` whatever the smoke job did, so the correction quotes the *job's* conclusion and
+  its printed verdict, and says explicitly that a green run says nothing about the nested Shell. That
+  trap is what made the original sentence survivable for three weeks.
+- **Every remaining sentence about the environment is re-scoped or removed.** A full read of the file
+  against the tree, fixing anything that describes a checkout, a machine or a sandbox as though it
+  described the repository. Known candidates, each resolved one way or the other with a reason:
+  - "Firefox and Chrome are snap-confined on **this machine**" — the verification gap is real and
+    stays; the excuse gets a date and a named machine instead of a "this" that follows the reader.
+  - "hiding `/dev/dri` needs a user namespace **this sandbox** forbids" and the two local
+    GPU-less approximation attempts — a fact about one sandbox, kept only if the CI verdict does not
+    already make it moot.
+  - "Nobody has installed this into a real session", the connector-name gap, and the dconf note at
+    the end — checked and expected to stand: they are about the world, not about a clone.
+- **The numeric and "all green" claims are re-earned or attributed.** `flake.nix` exposes `lint`,
+  `unit`, `dbus` and `bundle`; "151 unit + 56 D-Bus, all green" is a claim about the tree, so it is
+  re-measured from one `nix flake check` run in this session and corrected if the counts moved. Same
+  for the feature table's `all green` row.
+- **The twelve-feature references point at a file that exists.** `PLAN.md` is now this document;
+  the twelve features it credits live in `plans/01-2026-08-28.md`. Every `PLAN.md` reference in
+  `STATUS.md` that means *the original plan* is retargeted there, so the report's central table stops
+  citing a plan about itself.
+- **The same false sentence elsewhere is reported, not fixed.** `ideas/pwgen/STATUS.md:86-87`
+  carries it from the same era and is being fixed under its own entry; `ideas/gnome-tasks/docs/
+  testing.md:27` says "On GitHub runners: not yet known", which is the same claim one file over
+  inside this idea (see Open Questions for whether this entry corrects it). Whatever is found and not
+  touched is named in `STATUS.md` with file and line, so the next reader does not have to re-find it.
+- **The no-upstream deviation is on the record.** One short paragraph: this idea has no repository of
+  its own, its source and CI therefore live in `gortazar/aideas`, AGENTS.md expects otherwise, its
+  Sonar coverage is the whole-repo `gortazar_aideas` project (as `README.md` already says), nothing
+  in the original entry authorised the arrangement, and moving it is not this entry's decision.
+- **Version 0.2, with a log line**, and a difficulty estimate for *this* entry that does not
+  overwrite the `hard` estimate the build earned.
 
 ## Approach
 
-Sequenced so that the research that could invalidate the design happens first, and so that every
-milestone leaves something usable.
+Small units, one commit each, evidence gathered before prose is written.
 
-1. **M0 — Spike and document.** Build `tools/probe.js`, a throwaway extension that logs every
-   window/app event with all reachable metadata, and run it against a realistic desktop (GTK app,
-   Electron app, terminal, Firefox, an X11 app under XWayland). Produce
-   `docs/gnome-internals.md` from what it observes. Deliverable: knowledge, plus a go/no-go on
-   the tier-1 document sources.
-2. **M1 — Skeleton.** Flake, lint, headless test runner, CI green on an empty-but-real extension
-   and daemon that do nothing but talk to each other over D-Bus. Getting a red CI later is much
-   harder to debug than getting a green one now.
-3. **M2 — Task model and switcher.** Create/rename/delete tasks, persist them, switch between
-   them from the top bar. Restore *applications only*, no placement, no documents. This is the
-   first genuinely useful version.
-4. **M3 — Placement.** Capture and restore workspace, monitor and geometry, including
-   launch-to-window matching via activation tokens and the fallback heuristics. Handle dynamic
-   workspaces and monitor sets that changed since capture.
-5. **M4 — Documents (tier 1).** The adapter framework plus adapters for a handful of common apps,
-   chosen from what M0 showed to be tractable.
-6. **M5 — Commands.** Transient systemd units, per-task lifecycle, journal integration, plus the
-   confirmation UX before a stored command ever runs.
-7. **M6 — Firefox (tier 2).** WebExtension, native-messaging host, window correlation, restore.
-8. **M7 — Polish.** Preferences UI, shortcuts, icons, screenshots, README, `docs/limitations.md`.
+1. **U0 — get the facts, write nothing.** `git remote -v` (is `origin` the GitHub remote today?),
+   then `gh run list --workflow=ci-gnome-tasks.yml --branch main --limit 30
+   --json databaseId,headSha,conclusion,createdAt,event`. For the runs that matter,
+   `gh run view <id> --json jobs` for per-job conclusions, `gh run view <id> --log-failed` or
+   `--job <smoke-job-id>` piped to `grep -a VERDICT`, and `gh run download <id> -n nested-shell-log`
+   for the probe records. Check whether the smoke job even existed at each run's SHA with
+   `git show <sha>:.github/workflows/ci-gnome-tasks.yml`. One pass, no `--watch`, no polling loop.
+   Deliverable: a list of run ids with conclusions and verdict lines, quoted in the commit message
+   of U1 so the sentence has a traceable source.
+2. **U1 — the correction.** Rewrite the `Whether GitHub runners can run a nested headless Shell`
+   bullet from U0's evidence, and move it out of `## What is built but not verified` if the verdict
+   answers it. Nothing else in the file changes in this commit, so the diff that fixes the reported
+   line is readable on its own.
+3. **U2 — the full-file audit.** Read `STATUS.md` top to bottom against the tree, resolve each
+   candidate above, retarget the `PLAN.md` references to `plans/01-2026-08-28.md`, and add the
+   "found elsewhere" note and the no-upstream paragraph. Every changed sentence traceable to
+   something in the tree or to a command run this session.
+4. **U3 — re-earn the numbers.** `git add -A && nix flake check --print-build-logs` once (the
+   `git add` is not optional — a flake sees only tracked files), read the unit and D-Bus counts out
+   of the logs, and correct line 41 and the feature table if they moved. If a check is red, that is a
+   finding for `STATUS.md`, not something to hide.
+5. **U4 — version, log, and the run this push causes.** `version: 0.2`, a `## Log` line, this
+   entry's own difficulty estimate. Then, once pushed, check the run this change itself triggers
+   (`gh run list --workflow=ci-gnome-tasks.yml --limit 1`, one look) — it is the freshest evidence
+   for the sentence just written, and if its smoke job contradicts U1, U1 is wrong and gets amended.
 
-Testing, per the repo's tests-first rule, splits three ways: the state model, schema migration,
-adapter selection, layout matching and monitor remapping are pure logic in Shell-free modules
-runnable under plain `gjs` in CI; the daemon's D-Bus surface is tested against a private bus with
-`dbus-run-session`; and window capture/restore is tested as a smoke test in a nested headless
-Gnome Shell, which is the piece most likely to prove impractical in CI and is flagged as a risk
-rather than assumed.
+## Verification
 
-## Risks / things to verify early
+There is no code here, so "tested" means every assertion has a source:
 
-- **Wayland geometry control.** Whether Mutter will honour `move_resize_frame()` for Wayland
-  clients from an extension, for all client types, is the single biggest assumption in M3. If it
-  only holds for XWayland, placement degrades to workspace + monitor and `docs/limitations.md`
-  says so.
-- **Single-instance and Electron apps.** Apps that hand a second launch to an existing process
-  produce no new window, or a window with no usable startup token. Expect per-app handling.
-- **Terminals.** A terminal's *value* is the shell state inside it, which cannot be restored.
-  Restoring the working directory and optionally re-running a declared command is the realistic
-  ceiling.
-- **Browser window correlation.** If no reliable link between a WebExtension window ID and a
-  `Meta.Window` exists, the fallback is coarser: restore all of a task's tabs into one new window
-  and accept losing the per-window split.
-- **extensions.gnome.org review rules conflict.** EGO's guidelines are hostile to exactly what
-  this extension needs — spawning processes and running user-supplied commands. Keeping all
-  spawning in the separately-installed daemon (the extension only makes D-Bus calls) is the
-  mitigation, but whether EGO publication is even a goal is an open question below.
-- **Privacy.** Recording which documents a user opens is a surveillance-shaped feature; KDE hit
-  the same problem and answered it with explicit resource-scoring controls. Default here is
-  capture-on, exclusion lists available, everything local, nothing recorded while capture is
-  paused — but the default itself is worth confirming.
-- **Shell restarts and version churn.** The daemon must survive the extension going away
-  (`Alt+F2 r`, crash, upgrade) without losing task state, and Gnome's extension API breaks
-  between major releases; the extension side must stay as thin as possible for that reason too.
+- **A claim-to-evidence checklist** covering the whole of `STATUS.md`: each sentence that asserts
+  something about the tree, the CI or the environment, paired with the command whose output it came
+  from, and a date for anything that was true on a machine on a day. Anything left unpaired is either
+  cut or rewritten as an explicit unknown.
+- **The correction is falsifiable**: the run ids, job conclusions and verdict text are quoted, so a
+  reader can re-run `gh run view <id>` and disagree.
+- **`nix flake check` green** at the end of U3, and the remote run for this push checked once at U4
+  — not the local run alone.
+- **Nothing outside `ideas/gnome-tasks/` is modified.** `ideas/pwgen/`, `README.md` and `AGENTS.md`
+  are off-limits by AGENTS.md and by this entry; the pwgen occurrence is reported in prose only.
+
+## Risks / things to watch
+
+- **Replacing a false sentence with an unchecked one.** The obvious failure mode is to write "CI runs
+  and passes, and the nested Shell works on runners" because it sounds like the happy ending. If the
+  smoke job failed, or never reached its verdict step, that is what goes in the file.
+- **`continue-on-error` hides the answer in plain sight.** The run is green either way; only the
+  job's conclusion and its log carry the verdict. Read both.
+- **The workflow at the run's SHA is not the workflow in the tree today.** The seven runs may predate
+  the smoke job, and asserting otherwise would repeat the original mistake in the other direction.
+- **90-day log and artifact retention.** Runs from 2026-08-09 are inside the window on 2026-08-28,
+  but only just for the oldest of them; capture what U0 finds into the commit message rather than
+  relying on the logs still being there next month.
+- **Editing `STATUS.md` triggers CI but not the checks.** `flake.nix` deliberately excludes
+  `STATUS.md` and `docs/` from the check inputs, so the path filter fires the workflow while the
+  `test` job replays cached results. A green run on a docs-only push is not fresh evidence that the
+  suites pass; U3's local `nix flake check` is.
+- **`gh` needs the sandbox's credentials to see the runs at all.** If it cannot reach
+  `gortazar/aideas`, the entry cannot be finished honestly — that is a blocking open question, not a
+  licence to guess the verdict from the audit's summary.
+- **The sweep and the header.** Do not touch `status:`; do not read `not_started` as a bug to fix.
+  Also do not assume `STATUS.md`'s prose about a pin or a version matches the tree — this file is
+  being audited precisely because it drifted once.
+- **Scope pressure.** An answered "runners can boot a nested Shell" invites making the smoke job
+  blocking, or moving `make smoke` into CI. Both are new work for a new entry; this one corrects the
+  record.
 
 ## Open Questions
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [x] Which Gnome Shell versions and session types must be supported? The plan assumes GNOME 45+ (ESM extensions) on Wayland with X11 best-effort — is X11 support actually required, and is there a specific version to target (e.g. whatever ships on the development machine)? X does not need support. Supported Gnome shell version should be the one in the machine where the AI is running. 
-- [x] Is publishing to extensions.gnome.org a goal? It constrains the design hard (no subprocess spawning from the extension, review-driven release cadence, no bundled daemon), whereas a self-installed extension + daemon has no such limits. No, not at the moment.
-- [x] What should happen to a task's windows when the user switches away — leave them running but hidden on a parked workspace (fast, memory-hungry), or close them politely and reopen on return (slow, risks unsaved-work prompts)? Per-task setting with which default? It should be configurable. Some tasks may be always running, others not.
-- [x] Should the task layout be captured continuously and saved automatically on switch-away (KDE-like, "it just remembers"), or should the user explicitly "save layout", with the automatic snapshot only as a suggestion? This changes the whole UX and the amount of state churn. It should be captured continuously and saved automatically
-- [x] Where do per-task commands come from: only ones the user types into the preferences UI, or should gnome-tasks also try to detect long-running foreground commands in a task's terminals and offer to remember them? The latter is a much bigger and more invasive feature. gnome-tasks must detect any program user opens (like a browser, a libreoffice doc or a terminal). Ideally, but that is not mandatory, for terminals it would be nice to know where the user was (at which folder). But that can be put in "good to have" features, and not a mandatory one.
-- [x] Is the Firefox WebExtension in scope for this idea's "done", and if so does it need to be signed and distributed via addons.mozilla.org, or is a locally-loaded unsigned extension acceptable? Should Chrome/Chromium get the same treatment, or is Firefox the only browser in scope? Chrome and Firefox should be supported. For the moment a locally-loaded unsigned extension (if that's acceptable for both browsers) suffices.
-- [x] How much scope does "restore the file it opened" carry for apps that expose nothing? Is a best-effort heuristic (recent-files store, `/proc` inspection, title parsing) acceptable when it will sometimes restore the wrong document, or should such apps be restored with no document at all and reported as tier 0? Best-effort heuristic.
-- [x] How far should per-task theming go? KDE Activities carry a wallpaper and per-activity favourites; this plan currently carries only a name and icon. Is per-task wallpaper/favourites wanted, or explicitly out of scope? Out of scope
-- [x] Can CI run a nested headless Gnome Shell on the available GitHub runners? If not, is a unit-tests-plus-lint CI acceptable, with window capture/restore verified only manually and recorded in `STATUS.md`? I don't know what github runners can do. You might need to discover it for yourself.
+- [ ] Does this entry also correct `docs/testing.md`, which says "On GitHub runners: not yet known"
+      and "Until that job has run, window capture/restore is verified by hand"? Ticking this line
+      as-is fixes it here: it is the same claim as line 74, inside this same idea, and leaving it
+      would have `STATUS.md` and `docs/testing.md` contradicting each other on the file's central
+      correction. The alternative reading is literal — the entry names `STATUS.md`, and the
+      "say so rather than fixing it" instruction covers every other occurrence, including this one,
+      leaving `docs/testing.md` for a follow-up entry.
+- [ ] Does a documentation-only entry on an idea with no repository of its own ship a release?
+      AGENTS.md says every finished entry ships one, tagged `v<version>` from the idea's own
+      repository; this idea has none and must not get one, and 0.1 shipped none either. Ticking this
+      line as-is finishes 0.2 with **no release**, recording that reason in `STATUS.md`. The
+      alternative follows the `orchestrator` precedent — a tag on this repository
+      (`gnome-tasks-v0.2`) carrying the packed `.shell-extension.zip` — which means adding a release
+      workflow to a repository this idea does not own, and is a bigger change than the entry
+      describes.
