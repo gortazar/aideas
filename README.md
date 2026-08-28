@@ -82,10 +82,7 @@ makes position a safe identity: the active list only ever holds work still to do
    has no upstream repository and must not get one: it is the thing that runs the cycles, so it lives here. Its release is a `orchestrator-v1.6` tag on this repo carrying a tarball
    of `orchestrator/` that `orchestrator/install.sh` can install without a clone.
 
-4. [meet](ideas/meet) - A gnome-shell extension that shows a button with the OpenVidu Meet logo (https://openvidu.io/assets/images/logos/logo.png). When pushed, opens a menu with two options: Meet next and Meet.  
-   Meet next opens a new browser window (the default system browser) pointing at https://meet-next.openvidu.io/. Meet opens a new browser window pointing at (meet.openvidu.io).
-
-5. [pwgen](ideas/pwgen) - A fleet audit found five confirmed gaps against AGENTS.md, three of them because pwgen shipped before the rules existed and was never brought forward. Fix all five.
+4. [pwgen](ideas/pwgen) - A fleet audit found five confirmed gaps against AGENTS.md, three of them because pwgen shipped before the rules existed and was never brought forward. Fix all five.
    Minor update. (1) `gortazar/gnome-shell-pwgen` has **no releases and no tags at all**, so the v0.1 STATUS.md claims does not exist; publish it with the packed
    `.shell-extension.zip` as an asset, from a workflow in that repository. (2) There is no install path that downloads a prebuilt artefact — upstream `install.sh` symlinks a local
    checkout and runs `./compile-schemas.sh`, which is clone-and-build and does not count; add a `curl`-able installer that fetches the release asset, and open the upstream README
@@ -94,27 +91,27 @@ makes position a safe identity: the active list only ever holds work still to do
    It cannot here: this repository's `origin` is a local bare repo in the sandbox" — origin is `github.com:gortazar/aideas` and the workflow has run at least five times. Both of
    those sentences are false about the tree; correct them and check nothing else in that file asserts something it cannot show.
 
-6. [recap-gs](ideas/recap-gs) - Two open BLOCKER issues on `gortazar_recap-gs` are neither fixed nor documented, so v0.2 sits at `status: done` against the rule that BLOCKERs gate
+5. [recap-gs](ideas/recap-gs) - Two open BLOCKER issues on `gortazar_recap-gs` are neither fixed nor documented, so v0.2 sits at `status: done` against the rule that BLOCKERs gate
    done. Minor update. Both are `css:S4654` ("CSS properties should be valid") on `src/stylesheet.css` lines 5 and 13, reporting `Unknown property "spacing"`. `spacing` is a real
    St property: GNOME Shell stylesheets are St's own dialect, not CSS, so this rule is wrong about the whole technology and will misfire on every GJS project forever — it is the
    worked example in AGENTS.md under **Issues: fix them, configure around them, never re-label them**. Take the configuration route, not the dismissal one: copy the built-in CSS
    profile (both built-ins are read-only), deactivate `css:S4654` in the copy, and assign the copy to the affected projects — never the organisation default — then record it in
    `ideas/quality-gate/exclusions.md`. Do not change any issue's status. When the project is green, say so in this idea's own `STATUS.md`, which today never mentions Sonar at all.
 
-7. [restore-wss](ideas/restore-wss) - One open BLOCKER on `gortazar_restore-wss` is neither fixed nor documented while `STATUS.md` says `status: done`. Minor update. It is
+6. [restore-wss](ideas/restore-wss) - One open BLOCKER on `gortazar_restore-wss` is neither fixed nor documented while `STATUS.md` says `status: done`. Minor update. It is
    `python:S3516` in `src/restore_wss/cli.py` line 224 — an invariant return value, which unlike the recap-gs case is a rule Sonar is entitled to apply to Python. Decide honestly
    which it is: if the function genuinely always returns the same value, fix it; if the rule is wrong about this specific code, document it in `STATUS.md` naming the issue key,
    the rule, the file and line, and why the analyser is wrong. Do not mark the issue anything in SonarQube Cloud. Then check the rest of the project's open issues for anything
    else at BLOCKER, since only this one was audited.
 
-8. [gnome-tasks](ideas/gnome-tasks) - `STATUS.md` asserts something untrue about the tree, and `STATUS.md` is the only report anyone reads to judge an idea. Minor update. Line 74
+7. [gnome-tasks](ideas/gnome-tasks) - `STATUS.md` asserts something untrue about the tree, and `STATUS.md` is the only report anyone reads to judge an idea. Minor update. Line 74
    says "`origin` is a local bare repo, so `.github/workflows/ci-gnome-tasks.yml` has never run" — that was written on 2026-08-10 from a sandbox clone, but the workflow had already
    run and passed on `gortazar/aideas` main seven times, including on the day the entry was declared done. Correct it with what CI actually reports, then read the whole file
    against the tree and fix anything else that describes a checkout rather than the repository. `pwgen`'s `STATUS.md` carries the same false sentence from the same era and is being
    fixed under its own entry; if you find the claim anywhere else, say so rather than fixing it here. This idea has no upstream repository and must not get one under this entry —
    moving it is a separate decision, and the audit already established that nothing in its original entry authorised the current arrangement.
 
-9. [title-slides](ideas/title-slides) - Two documentation gaps a fleet audit confirmed, neither of which affects the code. Minor update. (1) `ideas/title-slides/STATUS.md` never
+8. [title-slides](ideas/title-slides) - Two documentation gaps a fleet audit confirmed, neither of which affects the code. Minor update. (1) `ideas/title-slides/STATUS.md` never
    mentions Sonar or the Lua exemption at all: AGENTS.md says an unsupported language is a reason to skip the analysis **and say so in `STATUS.md`**, and the exemption is currently
    recorded only in another idea's files (`ideas/quality-gate/STATUS.md` and `baseline.md`). Record it where the rule asks for it, naming Lua as the reason. The rule is
    contemporaneous with this idea's last entry, so this is a real omission rather than a rule applied backwards. (2) The upstream README documents `nix develop`, the five test
@@ -264,3 +261,6 @@ makes position a safe identity: the active list only ever holds work still to do
    an entry without one is not done. The workflow takes a `force` input for exactly this case:
    `gh workflow run "Release - quality-gate" --repo gortazar/aideas -f force=true`. Verify the
    release and its assets exist before starting on the blocking work, and record it in `STATUS.md`.
+
+24. [meet](ideas/meet) - A gnome-shell extension that shows a button with the OpenVidu Meet logo (https://openvidu.io/assets/images/logos/logo.png). When pushed, opens a menu with two options: Meet next and Meet. (finished 2026-08-28, v0.1)
+   Meet next opens a new browser window (the default system browser) pointing at https://meet-next.openvidu.io/. Meet opens a new browser window pointing at (meet.openvidu.io).
