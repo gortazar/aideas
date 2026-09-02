@@ -157,7 +157,7 @@ Units, one commit each:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] Does a documentation-only entry cut a real release? Ticking this line as-is says **yes**:
+- [x] Does a documentation-only entry cut a real release? Ticking this line as-is says **yes**:
       `_extension.yml` goes to 0.6.0, `v0.6` is tagged with `title-slides-0.6.zip` attached, and
       the README's install lines follow — which is what `AGENTS.md` requires ("`status: done` with
       no release for that version is not done") and keeps the version a user sees in
