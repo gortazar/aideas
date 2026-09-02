@@ -158,14 +158,14 @@ describes what happened rather than what was planned.
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] Which shape should the fix take? (a) `_list` returns `None` and `main` supplies the `0` —
+- [x] Which shape should the fix take? (a) `_list` returns `None` and `main` supplies the `0` —
       no user-visible change, matches `_print_status` two arms above, and is the recommendation; or
       (b) `list` gains a real non-zero exit for the case it currently hides — a snapshot file that
       exists but will not parse is today reported as "no snapshots yet", which is arguably a genuine
       gap worth an exit code and a printed warning. (b) fixes the rule *and* a small honesty bug, but
       it changes documented CLI behaviour in an entry billed as a minor cleanup.
-- [ ] If the audit turns up further BLOCKERs that are real but not small — something needing a
+- [x] If the audit turns up further BLOCKERs that are real but not small — something needing a
       behaviour change or a new test surface rather than a line edit — does this entry grow to fix
       them, or does it land the audited fix plus a written account of the rest and stop at
       `in_progress`? Growing keeps the project's BLOCKER count at zero; stopping keeps a minor update
-      minor and leaves a scoped entry for the queue.
+      minor and leaves a scoped entry for the queue. It grows to fix them. 
