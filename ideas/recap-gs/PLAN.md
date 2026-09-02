@@ -159,17 +159,18 @@ around it.
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] Does this entry ship a **v0.3 release**? `AGENTS.md` says every completed entry bumps the
+- [x] Does this entry ship a **v0.3 release**? `AGENTS.md` says every completed entry bumps the
       version and publishes a release, and the plan above assumes it. But the only upstream change is
       a two-line comment, so v0.3's zip is byte-for-byte v0.2's behaviour, and users get a release
       note that says nothing they can act on. The alternatives are (a) release v0.3 anyway, keeping
       the rule mechanical and the version history honest about "an entry happened here"; (b) leave
       the version at 0.2 and record in `STATUS.md` that this entry shipped no artefact because it
-      changed no artefact. Which?
-- [ ] Is the profile assigned **pre-emptively** to `gortazar_aideas` (whose
+      changed no artefact. Which? a)
+- [x] Is the profile assigned **pre-emptively** to `gortazar_aideas` (whose
       `ideas/aideas/src/extension/stylesheet.css` is also a GNOME Shell stylesheet, analysed as CSS,
       but which happens to use no St-only property today and so has no issue), or **only to projects
       actually affected**, leaving aideas to be added the day it first goes red? Pre-assigning
       prevents a future surprise BLOCKER on a rule already known to be wrong; assigning only on
       demand keeps the ledger's rows tied to real findings and keeps `css:S4654` catching genuine
-      typos everywhere it has not yet been proved wrong.
+      typos everywhere it has not yet been proved wrong. Projects can opt out if they are not supported by
+      Sonar. It has to be stated explicitly on the README of the idea.
