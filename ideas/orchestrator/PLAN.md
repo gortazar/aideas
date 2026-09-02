@@ -198,23 +198,23 @@ One commit per unit; the test suite lands before the change it protects.
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **Should the sweep open the pull request itself?** The entry asks it to push and to say so
+- [x] **Should the sweep open the pull request itself?** The entry asks it to push and to say so
       loudly, which is what the plan above does. But `gh` is on the orchestrator's PATH and one
       `gh pr create --draft --head agent/<slug>-sweep` would remove the human step entirely. The
       plan assumes **not** — it puts a network call and a GitHub credential into the wind-down
       path, which runs under a deadline and after a signal, and a failure there is one more thing
-      that can go wrong while work is unsaved. Say if you would rather it did.
-- [ ] **One sweep branch per idea, or one per cycle?** `agent/<slug>-sweep` is what the entry
+      that can go wrong while work is unsaved. Say if you would rather it did. It does the PR.
+- [x] **One sweep branch per idea, or one per cycle?** `agent/<slug>-sweep` is what the entry
       suggests and it is stable and easy to find, but a second sweep before the first is turned
       into a pull request either force-pushes over unmerged rescued work or is refused as a
       non-fast-forward. The plan assumes a **plain (non-forced) push to `agent/<slug>-sweep`**,
       falling back to `agent/<slug>-sweep-<YYYY-MM-DD>` when that is refused — never `--force`, on
       the grounds that losing rescued work to the rescue mechanism is the worst possible outcome.
-      Confirm, or name the scheme you want.
-- [ ] **How far does the "install without a clone" requirement go?** The tarball plus a rewritten
+      Confirm, or name the scheme you want. 
+- [x] **How far does the "install without a clone" requirement go?** The tarball plus a rewritten
       `install.sh` gets the code onto a machine without cloning this repository, but the
       orchestrator still needs a git clone at `--repo` to commit and push each cycle, so the
       installer cannot be clone-free end to end — it would have to clone for the user. The plan
       assumes **the tarball removes the need to clone in order to *install*, and `--repo` remains
       required** (with a clear error naming it). Confirm, or say the installer should clone the
-      ideas repo itself when `--repo` is absent.
+      ideas repo itself when `--repo` is absent. THe installer clone the repo if --repo is absent.
