@@ -150,7 +150,7 @@ Units, one commit each, upstream work in draft pull requests opened at the first
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **Should `v0.1` be published at all, or only `v0.2`?** The entry says to publish the `v0.1`
+- [x] **Should `v0.1` be published at all, or only `v0.2`?** The entry says to publish the `v0.1`
       `STATUS.md` claims, but that tag can only be cut from a `main` that already carries this entry's
       release workflow, installer and flake — so a `v0.1` release published now would contain 0.2's
       work and would not be the extension as it stood on 2026-08-06. The alternatives are (a) publish
@@ -159,4 +159,4 @@ Units, one commit each, upstream work in draft pull requests opened at the first
       and correct `STATUS.md` to say that 0.1 never had a release rather than manufacturing one after
       the fact. Ticking this line as-is chooses (a), which is what the entry text asks for and which
       has the side benefit of exercising the whole release path once before the entry's own release
-      depends on it.
+      depends on it. Do b)
