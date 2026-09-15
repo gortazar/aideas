@@ -111,7 +111,12 @@ jobs:
           cp orchestrator/install.sh install.sh
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
           cat SHA256SUMS
-          tar -tzf "$tarball" | head -20
+          # Listed via a file, not `tar ... | head`: head closes the pipe after 20 lines,
+          # tar dies of SIGPIPE, and `set -o pipefail` turns a decorative log listing into
+          # a failed release. That is exactly how 1.6 failed to publish. A genuine tar
+          # failure still fails the step, because tar's own exit status is checked.
+          tar -tzf "$tarball" > /tmp/orchestrator-tarball.list
+          head -20 /tmp/orchestrator-tarball.list
 
       - name: Publish
         if: steps.plan.outputs.publish == 'yes'
