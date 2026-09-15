@@ -4,6 +4,10 @@
 # drift, CI here would happily test a commit nobody is working on, so assert they
 # match.
 #
+# STATUS.md names the pinned commit too, on an "**Upstream pin:**" line. It once named
+# a commit from memory that neither pin was at, so that line is checked as well: a
+# report that misstates the pin is the drift this script exists to catch.
+#
 # Run from ideas/pwgen, inside `nix develop` (needs git and jq).
 set -euo pipefail
 
@@ -25,8 +29,26 @@ if [ -z "$flake_rev" ] || [ "$flake_rev" = "null" ]; then
     exit 1
 fi
 
+status_rev="$(sed -n 's/^\*\*Upstream pin:\*\*[[:space:]]*`\([0-9a-f]\{40\}\)`.*/\1/p' STATUS.md | head -1)"
+if [ -z "$status_rev" ]; then
+    echo "STATUS.md has no '**Upstream pin:** \`<40-hex sha>\`' line" >&2
+    exit 1
+fi
+
 echo "submodule upstream/ -> $submodule_rev"
 echo "flake input pwgen-src -> $flake_rev"
+echo "STATUS.md says -> $status_rev"
+
+if [ "$submodule_rev" != "$status_rev" ]; then
+    cat >&2 <<EOF
+FAIL: STATUS.md names $status_rev but upstream/ is pinned at $submodule_rev.
+
+The gitlink is the authority. Correct the "**Upstream pin:**" line in STATUS.md
+(or, if the pin itself was moved by mistake, restore it) so the report and the
+tree say the same thing.
+EOF
+    exit 1
+fi
 
 if [ "$submodule_rev" != "$flake_rev" ]; then
     cat >&2 <<EOF
@@ -41,4 +63,4 @@ EOF
     exit 1
 fi
 
-echo "PASS: both pins are at $submodule_rev"
+echo "PASS: gitlink, flake.lock and STATUS.md all name $submodule_rev"
