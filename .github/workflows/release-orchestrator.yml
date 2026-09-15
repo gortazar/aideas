@@ -1,0 +1,163 @@
+# Publish the orchestrator.
+#
+# The orchestrator has no upstream repository and must not get one: it is the thing that runs
+# the cycles, so a submodule of itself would be a clone that a cycle checks out and replaces
+# underneath the process reading it. The release is therefore a tag on *this* repo,
+# `orchestrator-v<version>` — the same arrangement as release-aideas.yml and
+# release-quality-gate.yml, and distinct from both tag namespaces, which matters because
+# verify_release() requires the slug to appear in the tag when several ideas release from one
+# repository: `orchestrator-v1.6` satisfies it and `aideas-shell-v1.6` cannot.
+#
+# **The workflow creates its own tag.** It has to: the orchestrator pushes with a plain
+# `git push`, which carries no tags, and no agent may push this repo at all. Nothing here
+# needs a secret; the automatic GITHUB_TOKEN can tag, release and upload in its own repository.
+#
+# The asset is a tarball of orchestrator/, which install.sh can now install from without any
+# clone of this repository — it clones the ideas repo itself if --repo is absent.
+name: Release - orchestrator
+
+on:
+  push:
+    branches: [main]
+    # The shipped code and its installer, not the paperwork. PLAN.md, STATUS.md and plans/
+    # do not produce a release on their own — but note that STATUS.md is what the gate below
+    # reads, so a cycle that only flips `status: done` will not fire this. That is what the
+    # force input is for.
+    paths:
+      - "orchestrator/**"
+      - ".github/workflows/release-orchestrator.yml"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Publish even if ideas/orchestrator/STATUS.md does not say status: done"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # create the tag and the release, and upload the assets
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags, so "has this been released already" is honest
+
+      - name: Is this a finished entry?
+        id: gate
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          status=$(sed -n 's/^status:[[:space:]]*//p' ideas/orchestrator/STATUS.md | head -1)
+          version=$(sed -n 's/^version:[[:space:]]*//p' ideas/orchestrator/STATUS.md | head -1)
+          [ -n "$version" ] || { echo "no version: in STATUS.md" >&2; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$status" = "done" ] || [ "$FORCE" = "true" ]; then
+            echo "proceed=yes" >> "$GITHUB_OUTPUT"
+            echo "orchestrator is $status at version $version"
+          else
+            echo "proceed=no" >> "$GITHUB_OUTPUT"
+            echo "orchestrator is '$status', not 'done' — nothing to publish."
+          fi
+
+      # The version is held in two places and the tag is made from one of them; a release
+      # tagged orchestrator-v1.6 carrying code that calls itself 1.5 would be a lie nobody
+      # could see without unpacking it.
+      - name: Do STATUS.md and ORCHESTRATOR_VERSION agree?
+        if: steps.gate.outputs.proceed == 'yes'
+        run: bash ideas/orchestrator/scripts/check-version.sh
+
+      # A release that fails its own suite is worse than no release. Stock python3 on the
+      # runner, which is the point of the suite being stdlib-only.
+      - name: The tests it is releasing
+        if: steps.gate.outputs.proceed == 'yes'
+        run: python3 -m unittest discover -s orchestrator/tests -t orchestrator -v
+
+      - name: Already published?
+        id: plan
+        if: steps.gate.outputs.proceed == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="orchestrator-v${VERSION}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "publish=no" >> "$GITHUB_OUTPUT"
+            echo "$tag already exists — nothing to do."
+          else
+            echo "publish=yes" >> "$GITHUB_OUTPUT"
+            echo "$tag does not exist yet — publishing."
+          fi
+
+      - name: Pack
+        id: pack
+        if: steps.plan.outputs.publish == 'yes'
+        env:
+          VERSION: ${{ steps.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          tarball="orchestrator-${VERSION}.tar.gz"
+          # --sort=name and a fixed mtime so the same source produces the same bytes; the
+          # checksum is then something a reader can reproduce rather than take on trust.
+          tar --sort=name --owner=0 --group=0 --numeric-owner \
+              --mtime="@${SOURCE_DATE_EPOCH:-0}" \
+              --exclude='__pycache__' --exclude='*.pyc' \
+              -czf "$tarball" orchestrator
+          sha256sum "$tarball" > SHA256SUMS
+          cp orchestrator/install.sh install.sh
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          cat SHA256SUMS
+          tar -tzf "$tarball" | head -20
+
+      - name: Publish
+        if: steps.plan.outputs.publish == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          VERSION: ${{ steps.gate.outputs.version }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        # --target pins the tag to this commit; gh creates the tag as part of the release,
+        # which is why nothing has to push one.
+        run: |
+          set -euo pipefail
+          {
+            echo "The idea-builder orchestrator: one build cycle, run on a timer."
+            echo
+            echo "Install it without cloning this repository:"
+            echo
+            echo '```sh'
+            echo "curl -fsSL https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${TARBALL} | tar xz"
+            echo "./orchestrator/install.sh"
+            echo '```'
+            echo
+            echo "\`install.sh\` clones the ideas repository into \`~/aideas\` when \`--repo\` is"
+            echo "absent, installs the user systemd units and starts the heartbeat receiver."
+            echo "Pass \`--repo PATH\` to point it at a clone you already have."
+            echo
+            echo "**What is new in ${VERSION}.** A refused push no longer strands rescued work on"
+            echo "one laptop. Every idea repository's \`main\` now requires a pull request, so the"
+            echo "end-of-cycle sweep's push to the default branch is refused; it falls back to"
+            echo "\`agent/<slug>-sweep\` on the same remote, never force-pushing, and writes a"
+            echo "notice into the idea's STATUS.md that the next cycle's agent is briefed with."
+            echo "Only a remote that refuses everything now reaches the local rescue ref."
+            echo
+            echo "This is also the first version with a test suite of its own —"
+            echo "\`python3 -m unittest discover -s orchestrator/tests -t orchestrator\`, stdlib"
+            echo "only, no network — covering the sweep ladder and the five regressions that were"
+            echo "each verified once against a temporary repository and then thrown away."
+            echo
+            echo "Verify this release with \`ideas/orchestrator/scripts/check-release.sh\`."
+          } > release-notes.md
+
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "orchestrator $VERSION - rescued work reaches the remote, and there are tests" \
+            --notes-file release-notes.md \
+            "$TARBALL" \
+            "SHA256SUMS" \
+            "install.sh"
+          echo "published $TAG"
