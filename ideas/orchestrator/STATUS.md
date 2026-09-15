@@ -117,3 +117,5 @@ block; a follow-up should add `orchestrator/tests` to `sonar.tests`.
 gitlink pointing at a commit that is not on the default branch until someone opens the pull
 request. That is the loud signal working as designed, and the STATUS.md notice is what is
 meant to get it acted on — but it depends on someone reading it.
+
+<!-- orchestrator: no v1.6 release in gortazar/aideas when this entry was retired. -->
