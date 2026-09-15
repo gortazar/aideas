@@ -1,26 +1,34 @@
-# Generated from ideas/_template/ci.yml. Edit freely — it is only created once, never
-# regenerated, so your changes to the real test command will stick.
+# The orchestrator's own test suite.
+#
+# The orchestrator has no upstream repository — it is the thing that runs the cycles, so it
+# lives in orchestrator/ here — which makes this the one idea whose CI runs the real tests
+# rather than a wrapper check. It watches orchestrator/** because that is where the code
+# under test lives; the generated template only ever watched ideas/orchestrator/, which is
+# why it could never have caught anything.
+#
+# Plain `python3 -m unittest`, stdlib only, on a stock interpreter: the orchestrator's systemd
+# unit hardcodes /usr/bin/python3, so a suite that needed pytest or nix would be testing a
+# different program from the one that runs.
 name: CI - orchestrator
 
 on:
   push:
     paths:
+      - "orchestrator/**"
       - "ideas/orchestrator/**"
       - ".github/workflows/ci-orchestrator.yml"
   pull_request:
     paths:
+      - "orchestrator/**"
       - "ideas/orchestrator/**"
       - ".github/workflows/ci-orchestrator.yml"
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ideas/orchestrator
     steps:
       - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v27
-        with:
-          extra_nix_config: "experimental-features = nix-command flakes"
-      - run: nix flake check
+      - run: python3 --version && git --version
+      - run: python3 -m unittest discover -s orchestrator/tests -t orchestrator -v
+      # The wrapper: the version STATUS.md claims is the one the code declares.
+      - run: bash ideas/orchestrator/scripts/check-version.sh
