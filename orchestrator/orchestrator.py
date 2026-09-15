@@ -864,6 +864,18 @@ class Orchestrator:
                 break
         log(f"push failed ({pending} commit(s) pending{context}) — will retry next cycle")
 
+    def claude_model_args(self) -> list[str]:
+        """`--model` for every agent, when `agent_model` is set.
+
+        Unset means "whatever the CLI defaults to", which is the right default: the model
+        that is cheapest or newest changes, and pinning one in config would quietly freeze
+        it. Setting it matters when the default model's usage limit is exhausted — every
+        agent then exits in a second with "You've reached your <model> limit", which the
+        cycle log makes look like an ordinary short run.
+        """
+        model = self.config.get("agent_model", "")
+        return ["--model", model] if model else []
+
     def claude_budget_args(self, key: str) -> list[str]:
         value = self.config.get(key, "")
         return [] if is_unlimited(value) else ["--max-budget-usd", value]
@@ -934,6 +946,7 @@ class Orchestrator:
             command = [
                 "claude", "-p", prompt,
                 *self.claude_tool_args("plan_tools", PLAN_TOOLS_DEFAULT),
+                *self.claude_model_args(),
                 "--permission-mode", "acceptEdits",
                 *self.claude_budget_args("max_plan_cost_usd"),
                 "--output-format", "json",
@@ -1066,6 +1079,7 @@ class Orchestrator:
         command = [
             "claude", "-p", "Continue implementing this idea per CLAUDE.md.",
             *self.claude_tool_args("build_tools", BUILD_TOOLS_DEFAULT),
+            *self.claude_model_args(),
             "--permission-mode", "acceptEdits",
             *self.claude_budget_args("max_cycle_cost_usd"),
             "--output-format", "json",

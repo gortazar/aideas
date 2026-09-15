@@ -94,3 +94,6 @@ lock_renew_seconds: 30
 # If the current top-priority idea has been "in_progress" for longer than this without
 # completing, allow the orchestrator to pick an easier unstarted idea instead this cycle.
 stale_idea_after_hours: 6
+
+# Model every agent runs on. Unset means the CLI default.
+agent_model: "claude-opus-5"
