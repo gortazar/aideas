@@ -22,14 +22,20 @@ Six units, one commit each; the suite lands before the change it protects.
       against the unchanged code. `ci-orchestrator.yml` rewritten to run them on
       `orchestrator/**`. `scripts/check-version.sh` asserts STATUS.md and
       `ORCHESTRATOR_VERSION` agree.
-- [ ] **U2 — `test_settle_submodules.py`**: the five cases, including the gated remote; the
-      gated case fails against the current code and is U3's specification.
+- [x] **U2 — `test_settle_submodules.py`**: 14 cases over the whole ladder — loose work is
+      committed, a commit already on a remote branch is left alone, a plain remote takes the
+      direct push, a gated remote falls to `agent/demo-sweep` with a STATUS.md notice, a
+      diverged second sweep goes to a dated branch rather than force-pushing, and a remote
+      that refuses everything falls to the local rescue ref. **Committed red on purpose:** 9
+      pass against the unchanged code and the 5 gated-remote cases fail, which is U3's
+      specification.
 - [ ] **U3 — the fallback branch**, the log ladder and the STATUS.md notice.
 - [ ] **U4 — version comment**, `install.sh` tarball / clone-free path.
 - [ ] **U5 — `release-orchestrator.yml`** and `scripts/check-release.sh`.
 - [ ] **U6 — `status: done`**, then verify the published release.
 
-Next: U2.
+Next: U3 — the fallback branch, the log ladder and the STATUS.md notice, which turns
+those 5 red cases green.
 
 Run the suite from the repo root:
 
