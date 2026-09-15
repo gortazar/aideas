@@ -1,5 +1,5 @@
-status: in_progress
-version: 0.2
+status: done
+version: 0.3
 started_at: 2026-08-16
 last_session_id: ebf1ecd2-6691-4213-9815-2f9920396ad5
 last_run: 2026-08-17T21:37:37+02:00
@@ -19,11 +19,61 @@ last_cycle_cost_usd: 38.504905
 - [x] S1 — `python:S3516` fixed, with the six tests `restore-wss list` never had
 - [x] S2 — [PR #2](https://github.com/gortazar/restore-wss/pull/2) merged as `3080060` with the
       gate green **and every condition actually evaluated**
-- [ ] S3 — paperwork: this section, the dated note in `ideas/quality-gate/baseline.md`
-- [ ] S4 — v0.3 tagged, released, verified, pin advanced, installer run from a clean directory
+- [x] S3 — paperwork: this section, and the dated note appended to
+      `ideas/quality-gate/baseline.md` (no `exclusions.md` row: no exclusion or profile change was
+      used, because the finding was real)
+- [x] S4 — v0.3 tagged on the merge commit, released, verified, pin advanced, installer run from a
+      clean directory
 
-Next: S4 — v0.3 is tagged on the merge commit and the release workflow is running; then verify the
-release, run the installer from a clean directory, and re-read the issue and the measures.
+### After the merge analysis — the numbers, and the evidence that nothing was re-labelled
+
+The `main` analysis of `3080060` ran at 17:47 UTC. Read back:
+
+| | before (`bbaf72e`) | after (`3080060`) |
+| --- | --- | --- |
+| open BLOCKERs, `severities=BLOCKER` | 1 | **0** |
+| open BLOCKERs, `impactSeverities=BLOCKER` | 1 | **0** |
+| code smells | 42 | **41** |
+| coverage | 71.2% | **71.9%** |
+| bugs / vulnerabilities / hotspots | 0 / 0 / 0 | 0 / 0 / 0 |
+| reliability / security / maintainability | A / A / A | **A / A / A** |
+| technical debt | 335 min | 333 min |
+
+And the line that matters most, because it is the one a re-labelling could not produce:
+
+```
+key: AaA5xWj-m6HMYmykxk7Q   rule: python:S3516
+status: CLOSED   resolution: FIXED   updateDate: 2026-09-15T17:47:16+0000
+```
+
+**`FIXED`, not `FALSE-POSITIVE` or `WONTFIX`** — the gate was cleared by changing the code.
+`api/issues/do_transition` and `api/issues/bulk_change` were never called.
+[Dashboard](https://sonarcloud.io/project/overview?id=gortazar_restore-wss).
+
+### The release
+
+v0.3 tagged on the merge commit `3080060` (`git rev-parse v0.3^{}` confirms it), the tag-triggered
+`Release` workflow green, and `CI` green on both the tag and `main` — checked with `gh run list`,
+not inferred from the local suite.
+
+`ideas/quality-gate/scripts/check-release.sh` was **not** the verifier used: it is specific to the
+quality-gate idea (it looks for `sonar.yml`, `baseline.md` and friends as assets, and a moving `v1`
+tag). Instead the release was verified the way this idea's own releases are — by installing it:
+
+```console
+$ HOME=/tmp/rw-v03/home XDG_DATA_HOME=… curl -fsSL …/install.sh | sh
+  checksum verified
+  CLI       …/.local/bin/restore-wss
+$ restore-wss --version   →  restore-wss 0.3
+$ restore-wss list        →  "restore-wss: no snapshots yet."   exit 0
+$ restore-wss list --json →  []                                 exit 0
+```
+
+Which is also the end-to-end proof that the fix changed nothing a user sees.
+
+`nix flake check` green upstream (253 unit tests, 9 D-Bus, ruff, extension + add-on manifest checks)
+and here (the pinned commit's unit suite plus the deliverables check); `scripts/check-pin.sh` passes
+with both pins at `3080060`.
 
 ### The gate on the way in — not a vacuous pass
 
