@@ -17,11 +17,33 @@ last_cycle_cost_usd: 38.504905
 - [x] S0 — pin checked first (it *had* been reverted: gitlink `4f286a9`, flake input `bbaf72e`),
       then the full issue audit at the revision Sonar actually analysed
 - [x] S1 — `python:S3516` fixed, with the six tests `restore-wss list` never had
-- [ ] S2 — pull request merged with the gate green, and the `main` analysis read back
+- [x] S2 — [PR #2](https://github.com/gortazar/restore-wss/pull/2) merged as `3080060` with the
+      gate green **and every condition actually evaluated**
 - [ ] S3 — paperwork: this section, the dated note in `ideas/quality-gate/baseline.md`
 - [ ] S4 — v0.3 tagged, released, verified, pin advanced, installer run from a clean directory
 
-Next: S2 — confirm PR #2's checks, mark it ready, merge, and re-read the issue and the measures.
+Next: S4 — v0.3 is tagged on the merge commit and the release workflow is running; then verify the
+release, run the installer from a clean directory, and re-read the issue and the measures.
+
+### The gate on the way in — not a vacuous pass
+
+`pr-gate.sh restore-wss 2`, read rather than guessed:
+
+```
+gate: OK
+  pass  new_reliability_rating = 1 (fails when GT 1)
+  pass  new_security_rating = 1 (fails when GT 1)
+  pass  new_maintainability_rating = 1 (fails when GT 1)
+  pass  new_coverage = 100.0 (fails when LT 60)
+  pass  new_duplicated_lines_density = 0.0 (fails when GT 3)
+  new lines in this pull request: 104
+```
+
+`PLAN.md` expected the coverage and duplication conditions to be **skipped** for having fewer than
+20 new lines — the artefact `ideas/quality-gate/baseline.md` was written to warn about. They were
+not: writing the six missing tests took the diff to **104 new lines**, over the floor, so all five
+conditions were evaluated and new code came out at **100% covered**. That is the difference between
+a gate that passed and a gate that was not asked.
 
 ### The audit
 
