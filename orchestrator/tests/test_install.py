@@ -141,6 +141,32 @@ class InstallScriptTests(support.GitSandbox):
         self.assertEqual((cloned / "README.md").read_text(), "# edited by the user\n",
                          "a re-run must not overwrite the queue the user steers with")
 
+    # -- the real tarball, packed the way the release workflow packs it -----------------
+
+    def test_installs_from_a_tarball_of_the_orchestrator_directory(self) -> None:
+        """The published shape end to end: tar czf orchestrator/, unpack, run install.sh."""
+        source_root = INSTALL_SH.resolve().parent.parent
+        tarball = self.path("orchestrator-test.tar.gz")
+        subprocess.run(["tar", "--sort=name", "--owner=0", "--group=0", "--numeric-owner",
+                        "--mtime=@0", "--exclude=__pycache__", "--exclude=*.pyc",
+                        "-czf", str(tarball), "orchestrator"],
+                       cwd=source_root, check=True, timeout=120)
+        unpacked = self.path("unpacked")
+        unpacked.mkdir()
+        subprocess.run(["tar", "xzf", str(tarball)], cwd=unpacked, check=True, timeout=120)
+
+        installer = unpacked / "orchestrator" / "install.sh"
+        self.assertTrue(installer.is_file(), "the tarball must carry its own installer")
+        self.assertTrue((unpacked / "orchestrator" / "orchestrator.py").is_file())
+        self.assertFalse((unpacked / ".git").exists(), "a tarball brings no repository")
+
+        clone = self.clone_source()
+        result = self.run_install(installer, "--repo", str(clone))
+
+        self.assertEqual(self.reported(result.stdout, "code"),
+                         str(unpacked / "orchestrator"))
+        self.assertEqual(self.reported(result.stdout, "repo"), str(clone))
+
     # -- the clone case, which SETUP.md documents --------------------------------------
 
     def test_inside_a_clone_it_still_defaults_to_that_clone(self) -> None:

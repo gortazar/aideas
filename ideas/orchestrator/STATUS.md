@@ -41,11 +41,17 @@ Six units, one commit each; the suite lands before the change it protects.
       is absent and there is no clone around the script. 8 new tests drive it through
       `ORCHESTRATOR_INSTALL_DRY_RUN`, which resolves both directories, prints them and
       stops before anything touches systemd. 60 tests green.
-- [ ] **U5 — `release-orchestrator.yml`** and `scripts/check-release.sh`.
+- [x] **U5 — `release-orchestrator.yml` and `scripts/check-release.sh`.** The workflow
+      gates on `status: done` (or the `force` input), asserts the two versions agree, runs
+      the suite again, then self-tags `orchestrator-v1.6` with `gh release create --target`
+      and uploads `orchestrator-1.6.tar.gz`, `SHA256SUMS` and `install.sh`.
+      `check-release.sh` needs no token: it downloads the tarball, checks the published
+      checksum against the bytes actually served, and asserts the packed `orchestrator.py`
+      declares 1.6. A 61st test packs the real tarball with `tar` and installs from it.
+      `ideas/orchestrator/README.md` opens with the install command.
 - [ ] **U6 — `status: done`**, then verify the published release.
 
-Next: U5 — release-orchestrator.yml (self-tagging orchestrator-v1.6, tarball + SHA256SUMS
-+ install.sh) and ideas/orchestrator/scripts/check-release.sh.
+Next: U6 — status: done, then verify the published release with scripts/check-release.sh.
 
 Run the suite from the repo root:
 
