@@ -11,13 +11,27 @@
 # `systemctl --user` is the honest shape for a laptop. orchestrator/systemd/ keeps the
 # system units for the always-on box described in SETUP.md.
 #
+# Two directories, which this used to assume were one:
+#
+#   the code    orchestrator.py and heartbeat_server.py, always beside this script — whether
+#               that is a clone's orchestrator/ or an unpacked release tarball.
+#   --repo      the clone to run cycles against. The orchestrator commits and pushes every
+#               cycle, so it genuinely needs one; a tarball install has no clone around the
+#               code, so when --repo is absent this clones the ideas repository for you.
+#
 # Options:
-#   --repo PATH       the clone to operate on (default: the repo this script lives in)
+#   --repo PATH       the clone to run cycles against
+#                     (default: the clone this script sits in, else a fresh one in ~/aideas)
 #   --port N          heartbeat port (default 8787)
 #   --bind IP         heartbeat bind address (default 127.0.0.1; use the VPN IP on a box)
 #   --enable-timer    also run cycles automatically every 5 minutes (default: off)
 #   --no-extension    skip the GNOME Shell extension
 #   --uninstall       stop and remove everything this installed
+#
+# Environment:
+#   AIDEAS_CLONE_URL               where to clone from when --repo is absent
+#   ORCHESTRATOR_INSTALL_DRY_RUN   resolve the two directories, print them and stop, before
+#                                  anything touches systemd. orchestrator/tests uses this.
 set -euo pipefail
 
 REPO=""
@@ -35,7 +49,7 @@ while [ $# -gt 0 ]; do
     --enable-timer) ENABLE_TIMER=yes; shift ;;
     --no-extension) WITH_EXTENSION=no; shift ;;
     --uninstall) UNINSTALL=yes; shift ;;
-    -h|--help) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -59,13 +73,48 @@ if [ "$UNINSTALL" = yes ]; then
   exit 0
 fi
 
-# --- where is the repo ----------------------------------------------------------------
+# --- where is the code -----------------------------------------------------------------
+# Beside this script, always. In a clone that is <clone>/orchestrator; from a release
+# tarball it is wherever it was unpacked, with no repository anywhere near it. Deriving the
+# repo from this location is what made a tarball install impossible before 1.6.
+CODE="$(cd "$(dirname "$0")" && pwd)"
+[ -f "$CODE/orchestrator.py" ] || die "orchestrator.py is not beside this script in $CODE"
+[ -f "$CODE/heartbeat_server.py" ] || die "heartbeat_server.py is not beside this script in $CODE"
+
+# --- which clone do we run cycles against ------------------------------------------------
+DEFAULT_CLONE="$HOME/aideas"
+CLONE_URL="${AIDEAS_CLONE_URL:-https://github.com/gortazar/aideas.git}"
+
 if [ -z "$REPO" ]; then
-  REPO="$(cd "$(dirname "$0")/.." && pwd)"
+  # The documented case first: this script sitting in a clone of the ideas repo, which is
+  # what SETUP.md describes and what every existing install looks like.
+  if [ -d "$CODE/../.git" ] && [ -f "$CODE/../orchestrator/orchestrator.py" ]; then
+    REPO="$(cd "$CODE/.." && pwd)"
+  elif [ -d "$DEFAULT_CLONE/.git" ]; then
+    REPO="$DEFAULT_CLONE"
+    say "using the existing clone at $REPO"
+  else
+    # A tarball install: the code is here, but the orchestrator still needs a clone to
+    # commit and push to every cycle. Make one rather than failing — and never touch it
+    # again on a re-run, because README.md in there is how you steer the queue.
+    say "no --repo given and no clone around this script; cloning $CLONE_URL"
+    git clone --quiet "$CLONE_URL" "$DEFAULT_CLONE" \
+      || die "could not clone $CLONE_URL into $DEFAULT_CLONE — pass --repo PATH instead"
+    REPO="$DEFAULT_CLONE"
+    say "cloned the ideas repo into $REPO"
+  fi
 fi
+[ -d "$REPO" ] || die "--repo $REPO does not exist"
 REPO="$(cd "$REPO" && pwd)"
-[ -f "$REPO/orchestrator/orchestrator.py" ] || die "$REPO is not an aideas clone (no orchestrator/orchestrator.py)"
-[ -d "$REPO/.git" ] || die "$REPO is not a git clone — the orchestrator commits and pushes every cycle"
+[ -d "$REPO/.git" ] || die "--repo $REPO is not a git clone — the orchestrator commits and pushes every cycle"
+
+if [ -n "${ORCHESTRATOR_INSTALL_DRY_RUN:-}" ]; then
+  # Everything below writes systemd units and starts services. Stop here, having reported
+  # the only two decisions this script makes that are worth testing.
+  echo "code=$CODE"
+  echo "repo=$REPO"
+  exit 0
+fi
 
 # --- preflight -------------------------------------------------------------------------
 command -v python3 >/dev/null || die "python3 is required"
@@ -112,7 +161,7 @@ After=network.target
 Type=simple
 EnvironmentFile=$ENV_FILE
 Environment=PATH=$UNIT_PATH
-ExecStart=/usr/bin/python3 $REPO/orchestrator/heartbeat_server.py
+ExecStart=/usr/bin/python3 $CODE/heartbeat_server.py
 Restart=always
 RestartSec=5
 
@@ -129,7 +178,7 @@ After=idea-heartbeat.service
 Type=oneshot
 EnvironmentFile=$ENV_FILE
 Environment=PATH=$UNIT_PATH
-ExecStart=/usr/bin/python3 $REPO/orchestrator/orchestrator.py
+ExecStart=/usr/bin/python3 $CODE/orchestrator.py
 
 # The cycle's own max_cycle_minutes should trip first and wind the agents down; this is
 # only a backstop. SIGTERM is trapped and treated as "wind down now", and KillMode=mixed
@@ -223,7 +272,7 @@ fi
 
 echo
 say "done. Check it with:"
-say "    python3 $REPO/orchestrator/orchestrator.py status"
+say "    python3 $CODE/orchestrator.py status"
 if [ "${XDG_SESSION_TYPE:-}" = wayland ] && [ "$WITH_EXTENSION" = yes ]; then
   say "On Wayland the Shell must be restarted to load new extension code: log out and back in."
 fi

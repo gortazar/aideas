@@ -54,7 +54,10 @@ from pathlib import Path
 # sweep from reverting submodule pins. 1.4 unblocks an idea once its questions are
 # answered, which nothing did before. 1.5 pushes `status: done` before the queue
 # advances, so release workflows can see it, and reports a missing release. 1.6 stops
-# "aideas/" being read as an "ideas/" link.
+# "aideas/" being read as an "ideas/" link; pushes rescued submodule work to
+# agent/<slug>-sweep when a ruleset refuses the default branch, instead of to a local ref
+# that dies with the clone, and says so in the idea's STATUS.md; and is the first version
+# with a test suite of its own, in orchestrator/tests/.
 ORCHESTRATOR_VERSION = "1.6"
 
 UNLIMITED = {"unlimited", "none", "off"}

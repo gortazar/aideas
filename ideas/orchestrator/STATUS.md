@@ -34,12 +34,18 @@ Six units, one commit each; the suite lands before the change it protects.
       `push_sweep_branch` (plain push to `agent/<slug>-sweep`, then a dated branch, never
       `--force`) and `note_sweep_branch` (the STATUS.md notice, written into the agent's
       worktree copy so it reaches the superproject through the branch merge).
-- [ ] **U4 — version comment**, `install.sh` tarball / clone-free path.
+- [x] **U4 — version comment and `install.sh`.** The 1.6 entry in the version comment now
+      covers this entry's work. `install.sh` separates *where the code is* (beside the
+      script — a clone's `orchestrator/` or an unpacked tarball) from *which clone to run
+      cycles against* (`--repo`), and clones the ideas repo into `~/aideas` when `--repo`
+      is absent and there is no clone around the script. 8 new tests drive it through
+      `ORCHESTRATOR_INSTALL_DRY_RUN`, which resolves both directories, prints them and
+      stops before anything touches systemd. 60 tests green.
 - [ ] **U5 — `release-orchestrator.yml`** and `scripts/check-release.sh`.
 - [ ] **U6 — `status: done`**, then verify the published release.
 
-Next: U4 — the version comment entry for 1.6, and install.sh's tarball path (it must run
-from an unpacked tarball, and clone the aideas repo itself when --repo is absent).
+Next: U5 — release-orchestrator.yml (self-tagging orchestrator-v1.6, tarball + SHA256SUMS
++ install.sh) and ideas/orchestrator/scripts/check-release.sh.
 
 Run the suite from the repo root:
 
