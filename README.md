@@ -102,6 +102,16 @@ makes position a safe identity: the active list only ever holds work still to do
    ("title-slides-extension") and `release.yml` ships the zip with `nix build .#default`. Document the build the release actually uses, in the section that already covers
    development.
 
+7. [orchestrator](ideas/orchestrator) - A failed agent is indistinguishable from an agent that had little to do, so a hard stop looks like quiet non-progress. Minor update, 1.7.
+   When the account's model limit was exhausted, both agents exited in five seconds and their result JSON said `"subtype": "success"` and `"is_error": true` **together**, with
+   `num_turns: 1`, `total_cost_usd: 0` and `"result": "You've reached your Fable limit. Switch to another model to continue."`. `finalize` reads `subtype` and never `is_error`, so it
+   recorded $0, wrote `status: in_progress` and moved on; with the timer enabled that repeats every five minutes for as long as the limit lasts, reporting nothing wrong. Read
+   `is_error`, and when it is set log the model's own `result` string — it is already a plain-English explanation — and leave the idea's status alone rather than implying progress.
+   Distinguish it from the case that already has a warning, an agent stopped with no result JSON at all. Two more failures from the same cycle belong here because they are the same
+   shape, a real error the cycle swallowed: `--resume` against a session id that no longer exists kills the agent instantly with `No conversation found with session ID: <id>`, and
+   nothing ever clears the stored id, so that idea fails identically every cycle forever — fall back to a fresh conversation and say so; and a cycle that starts agents but has every
+   one of them fail should not look like a successful cycle in the log. Cover all three in `orchestrator/tests/`, which this idea now owns.
+
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
