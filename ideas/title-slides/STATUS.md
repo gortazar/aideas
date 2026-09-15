@@ -1,16 +1,18 @@
-status: not_started
+status: in_progress
 version: 0.5
 started_at: 2026-08-16
 last_session_id: 498f8809-49e3-4e71-b8bb-3905366ad588
-last_run: 2026-08-25T13:11:09+02:00
-last_cycle_cost_usd: 16.356105999999997
+last_run: 2026-09-15T20:13:40+02:00
+last_cycle_cost_usd: 4.7124939999999995
 
 ## Log
+- 2026-09-15T20:13:40+02:00 — in_progress ($4.7124939999999995)
 - 2026-08-25T13:11:09+02:00 — done ($16.356105999999997)
 - 2026-08-25T11:01:20+02:00 — done ($13.913596000000002)
 - 2026-08-24T18:26:27+02:00 — done ($13.305927500000001)
 - 2026-08-24T08:17:45+02:00 — done ($15.026146999999996)
 - 2026-08-16T21:29:26+02:00 — done ($12.985914499999996)
+
 
 
 ### 2026-08-25 — 0.5 delivered: the index lists the headings that start slides
