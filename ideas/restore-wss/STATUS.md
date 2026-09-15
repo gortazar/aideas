@@ -1,5 +1,5 @@
-status: not_started
-version: 0.2
+status: done
+version: 0.3
 started_at: 2026-08-16
 last_session_id: ebf1ecd2-6691-4213-9815-2f9920396ad5
 last_run: 2026-08-17T21:37:37+02:00
@@ -11,6 +11,177 @@ last_cycle_cost_usd: 38.504905
 - 2026-08-16T22:39:18+02:00 — in_progress ($20.323337000000002)
 
 
+
+## Units — v0.3 (settle the open BLOCKER honestly, then audit the rest)
+
+- [x] S0 — pin checked first (it *had* been reverted: gitlink `4f286a9`, flake input `bbaf72e`),
+      then the full issue audit at the revision Sonar actually analysed
+- [x] S1 — `python:S3516` fixed, with the six tests `restore-wss list` never had
+- [x] S2 — [PR #2](https://github.com/gortazar/restore-wss/pull/2) merged as `3080060` with the
+      gate green **and every condition actually evaluated**
+- [x] S3 — paperwork: this section, and the dated note appended to
+      `ideas/quality-gate/baseline.md` (no `exclusions.md` row: no exclusion or profile change was
+      used, because the finding was real)
+- [x] S4 — v0.3 tagged on the merge commit, released, verified, pin advanced, installer run from a
+      clean directory
+
+### After the merge analysis — the numbers, and the evidence that nothing was re-labelled
+
+The `main` analysis of `3080060` ran at 17:47 UTC. Read back:
+
+| | before (`bbaf72e`) | after (`3080060`) |
+| --- | --- | --- |
+| open BLOCKERs, `severities=BLOCKER` | 1 | **0** |
+| open BLOCKERs, `impactSeverities=BLOCKER` | 1 | **0** |
+| code smells | 42 | **41** |
+| coverage | 71.2% | **71.9%** |
+| bugs / vulnerabilities / hotspots | 0 / 0 / 0 | 0 / 0 / 0 |
+| reliability / security / maintainability | A / A / A | **A / A / A** |
+| technical debt | 335 min | 333 min |
+
+And the line that matters most, because it is the one a re-labelling could not produce:
+
+```
+key: AaA5xWj-m6HMYmykxk7Q   rule: python:S3516
+status: CLOSED   resolution: FIXED   updateDate: 2026-09-15T17:47:16+0000
+```
+
+**`FIXED`, not `FALSE-POSITIVE` or `WONTFIX`** — the gate was cleared by changing the code.
+`api/issues/do_transition` and `api/issues/bulk_change` were never called.
+[Dashboard](https://sonarcloud.io/project/overview?id=gortazar_restore-wss).
+
+### The release
+
+v0.3 tagged on the merge commit `3080060` (`git rev-parse v0.3^{}` confirms it), the tag-triggered
+`Release` workflow green, and `CI` green on both the tag and `main` — checked with `gh run list`,
+not inferred from the local suite.
+
+`ideas/quality-gate/scripts/check-release.sh` was **not** the verifier used: it is specific to the
+quality-gate idea (it looks for `sonar.yml`, `baseline.md` and friends as assets, and a moving `v1`
+tag). Instead the release was verified the way this idea's own releases are — by installing it:
+
+```console
+$ HOME=/tmp/rw-v03/home XDG_DATA_HOME=… curl -fsSL …/install.sh | sh
+  checksum verified
+  CLI       …/.local/bin/restore-wss
+$ restore-wss --version   →  restore-wss 0.3
+$ restore-wss list        →  "restore-wss: no snapshots yet."   exit 0
+$ restore-wss list --json →  []                                 exit 0
+```
+
+Which is also the end-to-end proof that the fix changed nothing a user sees.
+
+`nix flake check` green upstream (253 unit tests, 9 D-Bus, ruff, extension + add-on manifest checks)
+and here (the pinned commit's unit suite plus the deliverables check); `scripts/check-pin.sh` passes
+with both pins at `3080060`.
+
+### The gate on the way in — not a vacuous pass
+
+`pr-gate.sh restore-wss 2`, read rather than guessed:
+
+```
+gate: OK
+  pass  new_reliability_rating = 1 (fails when GT 1)
+  pass  new_security_rating = 1 (fails when GT 1)
+  pass  new_maintainability_rating = 1 (fails when GT 1)
+  pass  new_coverage = 100.0 (fails when LT 60)
+  pass  new_duplicated_lines_density = 0.0 (fails when GT 3)
+  new lines in this pull request: 104
+```
+
+`PLAN.md` expected the coverage and duplication conditions to be **skipped** for having fewer than
+20 new lines — the artefact `ideas/quality-gate/baseline.md` was written to warn about. They were
+not: writing the six missing tests took the diff to **104 new lines**, over the floor, so all five
+conditions were evaluated and new code came out at **100% covered**. That is the difference between
+a gate that passed and a gate that was not asked.
+
+### The audit
+
+Read from `api/issues/search?componentKeys=gortazar_restore-wss&resolved=false`, no token (the
+project is public), at the revision the **latest analysis** covers — `bbaf72e`, analysed
+2026-08-26T09:41:10Z — not the `4f286a9` the gitlink pointed at. Both severity models were queried,
+because they do not agree on Python rules and asking only one is how an entry calls itself clean
+while a BLOCKER is open under the other:
+
+| issues, unresolved | legacy `severities=` | MQR `impactSeverities=` |
+| --- | --- | --- |
+| 42, **all `CODE_SMELL`** | 1 BLOCKER, 19 CRITICAL, 17 MAJOR, 5 MINOR | 1 BLOCKER, 20 HIGH, 17 MEDIUM, 5 LOW |
+
+**Exactly one BLOCKER, the same one under both models:**
+
+| key | rule | component | line | legacy | MQR | effort |
+| --- | --- | --- | --- | --- | --- | --- |
+| `AaA5xWj-m6HMYmykxk7Q` | `python:S3516` | `src/restore_wss/cli.py` | 224 | BLOCKER | BLOCKER (maintainability) | 2 min |
+
+This also settles the inconsistency `ideas/quality-gate/baseline.md` records: that snapshot read
+**0 bugs / reliability A**, and both are still true — `python:S3516` is a *code smell*, so it never
+touched the `bugs` measure or the reliability rating. The baseline was not stale; it was measuring
+something else. A project can carry an open BLOCKER and read A/A/A at the same time, and that is
+worth knowing before the next entry reads a rating as an all-clear.
+
+### The verdict on `python:S3516`: fixed, not documented
+
+The code at the analysed revision, quoted because the verdict rests on it — `cli.py:224` is
+`def _list(args) -> int:`, and its three exits are:
+
+```python
+    if args.json:
+        print(_json.dumps(found, indent=2)); return 0     # the --json branch
+    if not found:
+        print("restore-wss: no snapshots yet.");  return 0 # nothing on disk
+    ...
+    print("\nOnly these two are kept: ...");              return 0 # the normal listing
+```
+
+Nothing in the function can fail: `SnapshotStore._load_one` answers `None` for a missing *or* a
+torn file, and both are skipped silently. So the declared `int` was a promise the function never
+varied, and `main`'s `return _list(args)` propagated a constant. The analyser is right, and unlike
+the `css:S4654` case in `recap-gs` there is no dialect argument available — this is a Python rule
+reading Python, and the same file already shows the honest shape twice (`_print_status` and
+`_print_window_detail` return `None`; their callers supply the `0`).
+
+**Fix:** `_list(args) -> None`, its three `return 0`s become plain returns, and `main`'s `list` arm
+is `_list(args)` then `return 0` — the shape the `status` arm two above already uses. No
+user-visible change: `restore-wss list` prints the same lines and still exits 0.
+
+`PLAN.md`'s first open question was ticked without an inline answer; the plan's own text calls
+option (a) "the recommendation" and specifies it in detail, while (b) would change documented CLI
+behaviour in an entry billed as a minor cleanup. **(a) was implemented**, and this is the note that
+says so rather than leaving the choice implicit.
+
+The command had **no tests at all** — which is how an invariant return survived v0.1 and v0.2 — so
+it gains six in `tests/unit/test_cli_list.py`, including a guard that `_list` returns `None`.
+
+### Everything else the audit found, and why it is left alone
+
+Per `PLAN.md`, non-BLOCKER issues are listed so the next entry knows what is there, and not touched:
+they do not gate `done`, and this is a minor update. None is a bug or a vulnerability — all 42 are
+code smells.
+
+| rule | legacy | MQR | count |
+| --- | --- | --- | --- |
+| `python:S3776` (cognitive complexity) | CRITICAL | HIGH | 17 |
+| `python:S7632` | MAJOR | MEDIUM | 5 |
+| `python:S9073` | MAJOR | MEDIUM | 5 |
+| `python:S5778` | MAJOR | MEDIUM | 3 |
+| `python:S5713` | MINOR | LOW | 2 |
+| `python:S6353` | MINOR | LOW | 2 |
+| `python:S1192` | CRITICAL | HIGH | 1 |
+| `python:S8514` | MAJOR | HIGH | 1 |
+| `python:S1172` | MAJOR | MEDIUM | 1 |
+| `python:S1871` | MAJOR | MEDIUM | 1 |
+| `javascript:S3776` | CRITICAL | HIGH | 1 |
+| `javascript:S7785` | MAJOR | MEDIUM | 1 |
+| `javascript:S7747` | MINOR | LOW | 1 |
+
+The heaviest by far is cognitive complexity, concentrated in the modules that grew fastest in v0.2
+(`cli.py` carries 7 issues of all kinds, then `capture.py`, `documents.py` and `redaction.py` with 3
+each). That is a real shape worth an entry of its own; it is not this one.
+
+**No issue status was changed, and none will be.** `api/issues/do_transition` and
+`api/issues/bulk_change` were not called. The machine-checkable evidence is what
+`AaA5xWj-m6HMYmykxk7Q` resolves *as* after the merge analysis: `FIXED`, not `FALSE-POSITIVE` or
+`WONTFIX`.
 
 ## Units — v0.2 (browsers and the tabs inside them)
 - [x] B0 — `docs/browser-extensions-research.md`: eleven candidates read from source plus two probes
