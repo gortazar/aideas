@@ -1,4 +1,4 @@
-status: not_started
+status: in_progress
 version: 0.2
 started_at: 2026-08-16
 last_session_id: ebf1ecd2-6691-4213-9815-2f9920396ad5
@@ -11,6 +11,105 @@ last_cycle_cost_usd: 38.504905
 - 2026-08-16T22:39:18+02:00 — in_progress ($20.323337000000002)
 
 
+
+## Units — v0.3 (settle the open BLOCKER honestly, then audit the rest)
+
+- [x] S0 — pin checked first (it *had* been reverted: gitlink `4f286a9`, flake input `bbaf72e`),
+      then the full issue audit at the revision Sonar actually analysed
+- [x] S1 — `python:S3516` fixed, with the six tests `restore-wss list` never had
+- [ ] S2 — pull request merged with the gate green, and the `main` analysis read back
+- [ ] S3 — paperwork: this section, the dated note in `ideas/quality-gate/baseline.md`
+- [ ] S4 — v0.3 tagged, released, verified, pin advanced, installer run from a clean directory
+
+Next: S2 — confirm PR #2's checks, mark it ready, merge, and re-read the issue and the measures.
+
+### The audit
+
+Read from `api/issues/search?componentKeys=gortazar_restore-wss&resolved=false`, no token (the
+project is public), at the revision the **latest analysis** covers — `bbaf72e`, analysed
+2026-08-26T09:41:10Z — not the `4f286a9` the gitlink pointed at. Both severity models were queried,
+because they do not agree on Python rules and asking only one is how an entry calls itself clean
+while a BLOCKER is open under the other:
+
+| issues, unresolved | legacy `severities=` | MQR `impactSeverities=` |
+| --- | --- | --- |
+| 42, **all `CODE_SMELL`** | 1 BLOCKER, 19 CRITICAL, 17 MAJOR, 5 MINOR | 1 BLOCKER, 20 HIGH, 17 MEDIUM, 5 LOW |
+
+**Exactly one BLOCKER, the same one under both models:**
+
+| key | rule | component | line | legacy | MQR | effort |
+| --- | --- | --- | --- | --- | --- | --- |
+| `AaA5xWj-m6HMYmykxk7Q` | `python:S3516` | `src/restore_wss/cli.py` | 224 | BLOCKER | BLOCKER (maintainability) | 2 min |
+
+This also settles the inconsistency `ideas/quality-gate/baseline.md` records: that snapshot read
+**0 bugs / reliability A**, and both are still true — `python:S3516` is a *code smell*, so it never
+touched the `bugs` measure or the reliability rating. The baseline was not stale; it was measuring
+something else. A project can carry an open BLOCKER and read A/A/A at the same time, and that is
+worth knowing before the next entry reads a rating as an all-clear.
+
+### The verdict on `python:S3516`: fixed, not documented
+
+The code at the analysed revision, quoted because the verdict rests on it — `cli.py:224` is
+`def _list(args) -> int:`, and its three exits are:
+
+```python
+    if args.json:
+        print(_json.dumps(found, indent=2)); return 0     # the --json branch
+    if not found:
+        print("restore-wss: no snapshots yet.");  return 0 # nothing on disk
+    ...
+    print("\nOnly these two are kept: ...");              return 0 # the normal listing
+```
+
+Nothing in the function can fail: `SnapshotStore._load_one` answers `None` for a missing *or* a
+torn file, and both are skipped silently. So the declared `int` was a promise the function never
+varied, and `main`'s `return _list(args)` propagated a constant. The analyser is right, and unlike
+the `css:S4654` case in `recap-gs` there is no dialect argument available — this is a Python rule
+reading Python, and the same file already shows the honest shape twice (`_print_status` and
+`_print_window_detail` return `None`; their callers supply the `0`).
+
+**Fix:** `_list(args) -> None`, its three `return 0`s become plain returns, and `main`'s `list` arm
+is `_list(args)` then `return 0` — the shape the `status` arm two above already uses. No
+user-visible change: `restore-wss list` prints the same lines and still exits 0.
+
+`PLAN.md`'s first open question was ticked without an inline answer; the plan's own text calls
+option (a) "the recommendation" and specifies it in detail, while (b) would change documented CLI
+behaviour in an entry billed as a minor cleanup. **(a) was implemented**, and this is the note that
+says so rather than leaving the choice implicit.
+
+The command had **no tests at all** — which is how an invariant return survived v0.1 and v0.2 — so
+it gains six in `tests/unit/test_cli_list.py`, including a guard that `_list` returns `None`.
+
+### Everything else the audit found, and why it is left alone
+
+Per `PLAN.md`, non-BLOCKER issues are listed so the next entry knows what is there, and not touched:
+they do not gate `done`, and this is a minor update. None is a bug or a vulnerability — all 42 are
+code smells.
+
+| rule | legacy | MQR | count |
+| --- | --- | --- | --- |
+| `python:S3776` (cognitive complexity) | CRITICAL | HIGH | 17 |
+| `python:S7632` | MAJOR | MEDIUM | 5 |
+| `python:S9073` | MAJOR | MEDIUM | 5 |
+| `python:S5778` | MAJOR | MEDIUM | 3 |
+| `python:S5713` | MINOR | LOW | 2 |
+| `python:S6353` | MINOR | LOW | 2 |
+| `python:S1192` | CRITICAL | HIGH | 1 |
+| `python:S8514` | MAJOR | HIGH | 1 |
+| `python:S1172` | MAJOR | MEDIUM | 1 |
+| `python:S1871` | MAJOR | MEDIUM | 1 |
+| `javascript:S3776` | CRITICAL | HIGH | 1 |
+| `javascript:S7785` | MAJOR | MEDIUM | 1 |
+| `javascript:S7747` | MINOR | LOW | 1 |
+
+The heaviest by far is cognitive complexity, concentrated in the modules that grew fastest in v0.2
+(`cli.py` carries 7 issues of all kinds, then `capture.py`, `documents.py` and `redaction.py` with 3
+each). That is a real shape worth an entry of its own; it is not this one.
+
+**No issue status was changed, and none will be.** `api/issues/do_transition` and
+`api/issues/bulk_change` were not called. The machine-checkable evidence is what
+`AaA5xWj-m6HMYmykxk7Q` resolves *as* after the merge analysis: `FIXED`, not `FALSE-POSITIVE` or
+`WONTFIX`.
 
 ## Units — v0.2 (browsers and the tabs inside them)
 - [x] B0 — `docs/browser-extensions-research.md`: eleven candidates read from source plus two probes
