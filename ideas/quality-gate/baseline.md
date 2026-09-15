@@ -200,6 +200,19 @@ being left out of the instrumented run because it needs a session bus. Both are 
 entry made and documented, not accidents — but a blocking 80% would fail this project for
 them.
 
+**Note added 2026-09-15, by the restore-wss v0.3 entry.** The reading above is correct and
+was also incomplete in a way worth recording, because the same trap is available to every
+later entry: this project carried **one open BLOCKER** (`python:S3516`,
+`src/restore_wss/cli.py:224`, an invariant return) at the same time as **0 bugs and
+reliability A**. Both numbers are true at once — S3516 is a *code smell*, so it never touches
+the `bugs` measure or the reliability rating — so "0 bugs / A" is not an all-clear, and a
+BLOCKER audit has to query the issues, under **both** severity models (`severities=BLOCKER`
+and `impactSeverities=BLOCKER`, which disagree on many Python rules). Read at commit
+`bbaf72e` on 2026-08-26: 42 unresolved issues, all code smells, 1 BLOCKER under either model,
+17 × `python:S3776` behind it. The BLOCKER was fixed in
+[restore-wss#2](https://github.com/gortazar/restore-wss/pull/2) (merged `3080060`, released
+v0.3), not dismissed. A rewrite of this section was out of that entry's scope.
+
 ### gortazar_recap-gs — GJS
 
 [Dashboard](https://sonarcloud.io/project/overview?id=gortazar_recap-gs) ·
