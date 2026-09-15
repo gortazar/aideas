@@ -1364,8 +1364,17 @@ class Orchestrator:
         `main`, not the work.
 
         So: commit anything uncommitted in there, then get the commits somewhere that
-        outlives the worktree — the submodule's own remote first, and failing that the
-        superproject's shared module directory under a rescue ref.
+        outlives the worktree. That is a ladder, tried in order, and each rung is logged as
+        what it is — "refused because the repository is gated" and "refused because the
+        credentials expired" used to produce the same line:
+
+          1. already on a remote branch   nothing to do
+          2. the default branch           the ordinary case
+          3. agent/<slug>-sweep           the default branch is behind a ruleset requiring a
+                                          pull request, which every idea repository now is
+          4. a local rescue ref           the remote is unreachable or refuses everything
+
+        Only rung 4 keeps the work on this laptop, and only rung 4 is a real loss risk.
         """
         for path in self.submodule_paths(agent.worktree, agent.slug):
             sub = agent.worktree / path
@@ -1381,35 +1390,106 @@ class Orchestrator:
             head = git("rev-parse", "HEAD", cwd=sub).stdout.strip()
             if not head:
                 continue
-            # Already on the remote? Then nothing can be lost.
+            # Already on the remote? Then nothing can be lost. Note this reads
+            # remote-tracking refs, which can be stale in a fresh worktree checkout; the
+            # worst case is a redundant push of a commit the remote already has, which
+            # succeeds trivially. A fetch here would cost network on every submodule of
+            # every agent at the end of every cycle.
             if git("branch", "-r", "--contains", head, cwd=sub).stdout.strip():
                 continue
 
-            branch = git("rev-parse", "--abbrev-ref", "origin/HEAD", cwd=sub).stdout.strip()
-            branch = branch.split("/", 1)[1] if "/" in branch else "main"
-            if git("push", "--quiet", "origin", f"HEAD:refs/heads/{branch}", cwd=sub).returncode == 0:
-                log(f"{agent.slug}: pushed {path} to origin/{branch} ({head[:8]}).")
-                continue
+            self.push_or_rescue(agent, sub, path, head)
 
-            # Could not push — keep the objects in the superproject so the gitlink the
-            # parent is about to record still resolves after the worktree is gone.
-            shared = self.repo / ".git" / "modules" / path
-            worktree_git = (sub / ".git").read_text().split("gitdir:", 1)[-1].strip() \
-                if (sub / ".git").is_file() else str(sub / ".git")
-            source = (sub / worktree_git).resolve() if not Path(worktree_git).is_absolute() \
-                else Path(worktree_git)
-            rescued = False
-            if shared.is_dir() and source.exists():
-                if git("fetch", "--quiet", str(source), head, cwd=shared).returncode == 0:
-                    git("update-ref", f"refs/aideas/rescued/{agent.slug}/{head[:8]}", head,
-                        cwd=shared)
-                    rescued = True
-            log(f"WARNING: {agent.slug}: could not push {path} to its remote. "
-                + (f"Objects rescued into .git/modules/{path} as "
-                   f"refs/aideas/rescued/{agent.slug}/{head[:8]}."
-                   if rescued else
-                   "The commits exist ONLY in the worktree and will be lost when it is "
-                   "removed — resolve this before the next cycle."))
+    def push_or_rescue(self, agent: Agent, sub: Path, path: str, head: str) -> None:
+        """Rungs 2 to 4 of the ladder above, for one submodule."""
+        branch = git("rev-parse", "--abbrev-ref", "origin/HEAD", cwd=sub).stdout.strip()
+        branch = branch.split("/", 1)[1] if "/" in branch else "main"
+        if git("push", "--quiet", "origin", f"HEAD:refs/heads/{branch}", cwd=sub).returncode == 0:
+            log(f"{agent.slug}: pushed {path} to origin/{branch} ({head[:8]}).")
+            return
+
+        # The default branch refused it. On an idea repository that is the expected answer,
+        # not a fault: its ruleset requires a pull request and has no bypass actors. A
+        # branch the ruleset does not protect takes the objects just as well, and a commit
+        # on the remote can be turned into a pull request later; a commit in a worktree
+        # about to be deleted cannot.
+        sweep = self.push_sweep_branch(agent, sub)
+        if sweep:
+            log(f"WARNING: {agent.slug}: {branch} refused {path} ({head[:8]}) — pushed it to "
+                f"origin/{sweep} instead. The work is safe on the remote but has NOT landed: "
+                f"open a pull request for {sweep} before building on top of it.")
+            self.note_sweep_branch(agent, path, sweep, head)
+            return
+
+        # Could not push at all — keep the objects in the superproject so the gitlink the
+        # parent is about to record still resolves after the worktree is gone.
+        shared = self.repo / ".git" / "modules" / path
+        worktree_git = (sub / ".git").read_text().split("gitdir:", 1)[-1].strip() \
+            if (sub / ".git").is_file() else str(sub / ".git")
+        source = (sub / worktree_git).resolve() if not Path(worktree_git).is_absolute() \
+            else Path(worktree_git)
+        rescued = False
+        if shared.is_dir() and source.exists():
+            if git("fetch", "--quiet", str(source), head, cwd=shared).returncode == 0:
+                git("update-ref", f"refs/aideas/rescued/{agent.slug}/{head[:8]}", head,
+                    cwd=shared)
+                rescued = True
+        log(f"WARNING: {agent.slug}: could not push {path} to its remote. "
+            + (f"Objects rescued into .git/modules/{path} as "
+               f"refs/aideas/rescued/{agent.slug}/{head[:8]}."
+               if rescued else
+               "The commits exist ONLY in the worktree and will be lost when it is "
+               "removed — resolve this before the next cycle."))
+
+    def push_sweep_branch(self, agent: Agent, sub: Path) -> str | None:
+        """Push HEAD to a branch no ruleset protects. Returns the branch, or None.
+
+        `agent/<slug>-sweep` is stable and easy to find, which matters more than uniqueness
+        — but a second sweep before the first has been turned into a pull request would be
+        a non-fast-forward, and `--force` there would destroy unmerged rescued work with
+        the very mechanism meant to rescue it. So the plain push is tried first and a dated
+        branch catches the diverged case. Never `--force`, under any circumstances.
+        """
+        candidates = [f"agent/{agent.slug}-sweep",
+                      f"agent/{agent.slug}-sweep-{datetime.now():%Y-%m-%d}"]
+        for candidate in candidates:
+            if git("push", "--quiet", "origin", f"HEAD:refs/heads/{candidate}",
+                   cwd=sub).returncode == 0:
+                return candidate
+        return None
+
+    def note_sweep_branch(self, agent: Agent, path: str, branch: str, head: str) -> None:
+        """Write the sweep into the idea's STATUS.md, where the next agent cannot miss it.
+
+        A log line is not loud: nobody reads the journal of a cycle that ran at 03:00. But
+        `start_agent` builds every agent's CLAUDE.md from AGENTS.md + PLAN.md + the last 20
+        lines of STATUS.md, so a notice appended here is part of the next cycle's briefing
+        for this idea — which is what makes "the next cycle can turn it into a pull request"
+        true rather than aspirational.
+
+        It goes in the agent's worktree copy deliberately: finalize() commits that tree and
+        merges the branch moments later, so the notice reaches the superproject by the same
+        route as the agent's own work. rewrite_status() keeps it, because it is body text
+        rather than a header field, a log entry or an HTML comment.
+        """
+        status_file = agent.idea_dir / "STATUS.md"
+        if not status_file.is_file():
+            return
+        when = datetime.now().astimezone().isoformat(timespec="seconds")
+        status_file.write_text(status_file.read_text().rstrip("\n") + f"""
+
+## Rescued work waiting for a pull request
+
+The cycle that ended {when} could not push `{path}` to its default branch: that branch
+requires a pull request. The commits are on **`{branch}`** ({head[:8]}) in that repository,
+and nowhere else that outlives this clone — the gitlink recorded here points at {head[:8]},
+so until the branch lands, this pin names a commit that is not on the default branch.
+
+First unit of the next cycle: turn it into a pull request, get it merged, and bump the pin.
+From the repo root:
+
+    cd {path} && gh pr create --head {branch} --fill
+""")
 
     def release_repo(self, slug: str) -> str:
         """Which GitHub repository should hold this idea's release.

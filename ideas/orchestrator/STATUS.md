@@ -29,13 +29,17 @@ Six units, one commit each; the suite lands before the change it protects.
       that refuses everything falls to the local rescue ref. **Committed red on purpose:** 9
       pass against the unchanged code and the 5 gated-remote cases fail, which is U3's
       specification.
-- [ ] **U3 — the fallback branch**, the log ladder and the STATUS.md notice.
+- [x] **U3 — the fallback branch**, the log ladder and the STATUS.md notice. All 52 tests
+      green. `settle_submodules` now splits into `push_or_rescue` (rungs 2-4),
+      `push_sweep_branch` (plain push to `agent/<slug>-sweep`, then a dated branch, never
+      `--force`) and `note_sweep_branch` (the STATUS.md notice, written into the agent's
+      worktree copy so it reaches the superproject through the branch merge).
 - [ ] **U4 — version comment**, `install.sh` tarball / clone-free path.
 - [ ] **U5 — `release-orchestrator.yml`** and `scripts/check-release.sh`.
 - [ ] **U6 — `status: done`**, then verify the published release.
 
-Next: U3 — the fallback branch, the log ladder and the STATUS.md notice, which turns
-those 5 red cases green.
+Next: U4 — the version comment entry for 1.6, and install.sh's tarball path (it must run
+from an unpacked tarball, and clone the aideas repo itself when --repo is absent).
 
 Run the suite from the repo root:
 
