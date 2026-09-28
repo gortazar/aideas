@@ -6,6 +6,29 @@ last_run: 2026-09-15T20:13:40+02:00
 last_cycle_cost_usd: 4.7124939999999995
 
 ## Log
+
+### 2026-09-28 — 0.6, U0: pin, baseline, and both gaps checked against the tree
+
+Pin intact (gitlink and `flake.lock` both at `5963061`), no rescued work, no open pull
+request, `main` the only branch upstream. The 0.5 suite is green before any change: 114
+unit tests, 4 golden cases, smoke, real-deck and install.
+
+Verified the audit rather than trusting it. All four of its claims hold, with one wording
+correction:
+
+| claim | verdict |
+| --- | --- |
+| the README never says how to build | **confirmed** — zero matches for `nix build`, *build* or *package* in the whole file |
+| `STATUS.md` has no record of the Sonar exemption | **confirmed in substance** — zero occurrences of *Sonar*. The plan also says the file lacks the word *Lua*; it does not. Four occurrences sit in the 0.1 archive, all incidental prose about the Lua filter and `pandoc --lua-filter`, none of them about the analysis |
+| the ruleset requires `test` only | **confirmed against the live ruleset**, not copied from another idea: `main protected`, active, `bypass_actors: []`, rules `deletion`, `non_fast_forward`, `pull_request` and `required_status_checks` with exactly one context, `test` |
+| `nix build .#default` works | **confirmed** — exits 0 and leaves `result/_extensions/title-slides/` holding `_extension.yml`, `setext.lua` and `title-slides.lua`, the extension as `quarto add` installs it |
+
+One thing the plan does not mention, found while looking: **this idea has no
+`scripts/check-release.sh`**, which `AGENTS.md` now requires before `status: done`
+("the release published *and verified* with the idea's own `check-release.sh`"). Writing
+one is part of U3 rather than a separate entry, since without it this entry cannot honestly
+be finished.
+
 - 2026-09-15T20:13:40+02:00 — in_progress ($4.7124939999999995)
 - 2026-08-25T13:11:09+02:00 — done ($16.356105999999997)
 - 2026-08-25T11:01:20+02:00 — done ($13.913596000000002)
