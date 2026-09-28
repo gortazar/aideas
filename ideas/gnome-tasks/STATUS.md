@@ -15,13 +15,17 @@ last_cycle_cost_usd: 13.001496000000001
 - 2026-08-06T01:22:09+02:00 — in_progress ($10.616743999999999)
 - 2026-08-05T13:26:54+02:00 — in_progress ($13.361972999999997)
 
-Difficulty estimate: **hard**, as PLAN.md said — four programs, a platform that hides the
-information the idea needs, and a long tail of per-app work. Every feature in PLAN.md is now built,
-tested and green.
+Difficulty estimate for the 0.1 build: **hard**, as its plan said — four programs, a platform that
+hides the information the idea needs, and a long tail of per-app work. Every feature in that plan is
+built, tested and green. (0.2, the documentation correction below, was **easy**.)
+
+Throughout this file, *the original plan* means [`plans/01-2026-08-28.md`](plans/01-2026-08-28.md),
+which is where the twelve features live. `PLAN.md` is whatever entry is currently being worked on and
+no longer describes the build.
 
 ## What "done" covers
 
-All twelve features in `PLAN.md`, each with tests:
+All twelve features in the original plan, each with tests:
 
 | Feature | Where |
 | --- | --- |
@@ -99,27 +103,33 @@ Two cautions that come with reading this:
   the smoke job's own API conclusion — report `success` whatever the verdict step did. Only the
   printed `VERDICT:` line and the `nested-shell-log` artifact carry the answer. That is why the
   question could sit open for three weeks with the answer already in the logs.
-* **The runner is not GPU-less, contrary to the job's own comment.** `ls -l /dev/dri` prints
-  `crw-rw---- 1 root video 226, 1 … card1` on all four runs checked (2026-08-06, both 2026-08-09 runs,
-  2026-08-28) and again on 2026-09-28. So the verdict is "a nested Shell boots on `ubuntu-latest`",
-  *not* "Mutter falls back to software rendering successfully" — the local attempts to approximate a
-  GPU-less runner were chasing a condition that does not hold there. The comment above the job in the
-  workflow still asserts it does; correcting that comment is code, not this entry.
+* **The runner has a `/dev/dri`, contrary to the job's own comment — and Mutter goes GPU-less
+  anyway.** `ls -l /dev/dri` prints `crw-rw---- 1 root video 226, 1 … card1` on all five runs checked
+  (2026-08-06, both 2026-08-09 runs, 2026-08-28, 2026-09-28), so the comment above the job saying "a
+  runner has no `/dev/dri`" is wrong. The conclusion it was reaching for holds regardless: the
+  `nested-shell-log` artifact from run 36414701024 shows Mutter logging
+  `libmutter-Message: Created surfaceless renderer without GPU` and going on to serve the probe. So
+  GPU-less operation *is* confirmed — by the headless backend choosing a surfaceless renderer, not by
+  the device node being absent. Fixing the stale comment is code, and belongs to another entry.
 
 ## What is built but not verified
 
 Stated plainly, because "done" should not imply more than was actually checked:
 
 * **The browser extension has never run in a real browser.** Every byte of the protocol is tested —
-  including against the real native-messaging host — but Firefox and Chrome are snap-confined on this
-  machine and cannot be launched into the nested session at all. Someone with a normal browser install
-  should load `browser/` and confirm.
+  including against the real native-messaging host. It was not tried in a browser because on the
+  Ubuntu 24.04 development machine this idea was built on, as of 2026-08-09, Firefox and Chrome were
+  snap-confined and could not be launched into the nested session at all. That is an excuse about one
+  machine on one day, not a property of the code: the gap is still open wherever you are reading this.
+  Someone with an unconfined browser install should load `browser/` and confirm.
 * **Nobody has installed this into a real session.** `make install` plus a log out and back in needs
   the machine's owner; Wayland cannot reload the Shell in place. Everything here was exercised in a
-  nested session instead.
-* **Connector names across a real replug.** Layouts are remapped by connector name and the nested
-  session has one virtual monitor, so the remapping arithmetic is unit-tested but the *stability* of
-  the key is not.
+  nested session instead. Still true on 2026-09-28.
+* **Connector names across a real replug.** Layouts are remapped by connector name and every session
+  this has run in has had exactly one virtual monitor — `Meta-0` in CI (run 36414701024), the same
+  locally — so the remapping arithmetic is unit-tested but the *stability* of the key across a real
+  monitor being unplugged and plugged back in is not. CI cannot close this one: a runner has no
+  physical outputs either.
 
 `docs/limitations.md` is the full list, including what cannot work at all (shell state inside a
 terminal, unsaved work, documents for apps with no adapter).
@@ -129,9 +139,39 @@ terminal, unsaved work, documents for apps with no adapter).
 * Placing browser windows *after* the browser rebuilds them — the tabs come back, the per-window
   geometry may not (`docs/app-adapters.md`).
 * Explicit resource linking, activity templates, per-task wallpaper and favourites: out of scope by
-  decision or absent from `PLAN.md`.
+  decision or absent from the original plan.
 * Publishing to extensions.gnome.org, which the answered open questions rule out and which is what
   makes the separate daemon possible at all.
+
+## This idea has no repository of its own
+
+AGENTS.md expects every idea to live in `github.com/<owner>/<slug>`, included here as a submodule at
+`ideas/<idea>/upstream`, with its own CI, releases and Sonar project. **gnome-tasks does not.** Its
+source, tests, workflow and docs are all directly in `gortazar/aideas`, there is no `upstream/`
+submodule, `.github/workflows/ci-gnome-tasks.yml` in this repository *is* its CI, and its Sonar
+coverage is the whole-repo `gortazar_aideas` project — which is the badge `README.md` line 3 already
+points at.
+
+Nothing in the original entry authorised that arrangement; it is recorded here because it is a real
+deviation, not because it has been decided either way. Two consequences worth knowing:
+
+* **No releases.** 0.1 shipped none and 0.2 ships none, because the tag would have to go on a
+  repository this idea does not own. That was the answered open question for this entry, taken as the
+  default: no release, reason recorded, and no release workflow added to `gortazar/aideas`.
+* **Moving it is not this entry's decision.** Creating `gortazar/gnome-tasks` and migrating the
+  history is a substantial piece of work that the 0.2 entry explicitly ruled out of scope.
+
+## The same false sentence elsewhere
+
+The reported error was one instance of a pattern from the same era — a sandbox clone described as
+though it were the repository. Where else it was found, and what was done:
+
+| Where | State |
+| --- | --- |
+| `ideas/gnome-tasks/STATUS.md:74` (as reported) | **fixed** in this entry |
+| `ideas/gnome-tasks/docs/testing.md:27` — "On GitHub runners: not yet known" | **fixed** in this entry; it was the same claim one file over, and leaving it would have contradicted the correction above |
+| `ideas/pwgen/STATUS.md:107-108` | **already fixed** under pwgen's own entry, which now quotes the old sentence as something it corrected. Nothing outstanding, and out of bounds for this entry regardless |
+| `ideas/gnome-tasks/PLAN.md:11-12`, `CLAUDE.md:363-364` | **left alone**: these *quote* the false sentence in order to describe the correction. `CLAUDE.md` is regenerated and must not be edited at all |
 
 ## If this is picked up again
 

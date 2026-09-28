@@ -24,15 +24,32 @@ gnome-terminal) with no physical display attached. `tools/nested-shell.sh` autom
 and the evidence it produced is in [gnome-internals.md](gnome-internals.md). Mutter logs
 `Failed to open gpu '/dev/dri/cardN'` warnings and carries on.
 
-**On GitHub runners: not yet known.** The two things that could break it are software rendering
-(no `/dev/dri` at all on a runner, so Mutter must fall back to llvmpipe) and the size of the
-`gnome-shell` apt closure. Rather than guess, the CI workflow carries a separate
-`nested-shell-smoke` job, marked `continue-on-error`, whose only job is to answer the question in
-public: it installs `gnome-shell`, boots the nested session with the probe extension, and asserts
-the probe emitted its `probe-enabled` record. The blocking checks never depend on it.
+**On GitHub runners: yes.** The CI workflow carries a separate `nested-shell-smoke` job, marked
+`continue-on-error`, whose only job is to answer this in public: it installs `gnome-shell`, boots the
+nested session with the probe extension, and asserts the probe emitted its `probe-enabled` record.
+It has printed
 
-Until that job has run, window capture/restore is verified by hand against a real session, and
-what was verified is recorded in `STATUS.md`.
+```
+VERDICT: a nested headless GNOME Shell runs on this runner.
+```
+
+on every run since the job was added on 2026-08-06 (run `31112654174`), most recently run
+`36414701024` on 2026-09-28: GNOME Shell 46.0, one 1280×800 virtual monitor whose connector is
+`Meta-0`. The blocking checks never depend on it.
+
+Two corrections to what this paragraph used to guess at:
+
+* **A runner does have `/dev/dri`** — `card1`, on every run checked. The worry about `llvmpipe` was
+  aimed at the wrong thing. Mutter still runs without a GPU, because the headless backend logs
+  `Created surfaceless renderer without GPU` and carries on; that is visible in the job's
+  `nested-shell-log` artifact.
+* **A green run is not the verdict.** `continue-on-error: true` makes both the run and the smoke
+  job's own conclusion report `success` whatever the verdict step did. Read the printed `VERDICT:`
+  line or the artifact — nothing else tells you.
+
+What this job does *not* cover is the end-to-end `make smoke`: it boots a Shell and confirms an
+extension loads, and stops there. Window capture/restore is still verified by hand against a real
+session, and what was verified is recorded in `STATUS.md`.
 
 ## The end-to-end smoke test
 
