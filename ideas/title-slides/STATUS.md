@@ -1,5 +1,5 @@
-status: in_progress
-version: 0.5
+status: done
+version: 0.6
 started_at: 2026-08-16
 last_session_id: 498f8809-49e3-4e71-b8bb-3905366ad588
 last_run: 2026-09-15T20:13:40+02:00
@@ -39,7 +39,63 @@ force when it was missed. The quality-gate entries that wrote it into `AGENTS.md
 2026-08-25 and 2026-08-26, and 0.5 shipped on 2026-08-25. This is a real gap closed in 0.6,
 not a rule applied backwards.
 
+## What "done" covers for 0.6
+
+A documentation entry. **No filter code was touched**: the upstream diff is `README.md`,
+`.gitignore` and `_extension.yml`, and nothing under `_extensions/title-slides/*.lua`.
+
+- **The Sonar exemption is recorded where the rule asks for it** — a standing section at the
+  top of this file, naming Lua as the reason, pointing at the quality-gate idea's files as
+  the evidence, recording the `test`-only ruleset as the consequence, and stating the
+  condition that would end it. The rule was already in force when it was missed, which the
+  note says.
+- **The README documents the build** — `nix build .#default`, the `result/` tree it produces,
+  and the two further lines that make `title-slides-<version>.zip`, tied explicitly to
+  `.github/workflows/release.yml` as the same recipe.
+- **The reproduction is checked, not asserted** — every line run in a clean clone; building
+  0.5's commit reproduces that release's asset with the same members and byte-identical
+  contents, though not identical archive bytes, which the README says plainly.
+- **Both greps flip** — *Sonar* 0 → 9 and *Lua* 4 → 12 in this file; *build* / *nix build*
+  0 → present in the README.
+- **The suite is unchanged** — 114 unit tests, 4 golden cases, smoke, real-deck and install,
+  green at the end as at the start. Four byte-identical goldens are the proof a documentation
+  entry stayed one.
+- **Merged through the gate** — [PR #1](https://github.com/gortazar/title-slides/pull/1),
+  squash-merged as `f3289d8` with `test` green and no bypass; the branch is deleted and the
+  pin is on a commit that is an ancestor of `main`.
+- **Released and installable** — `v0.6` tagged on the merge commit with
+  `title-slides-0.6.zip` attached, verified by `scripts/check-release.sh` and by installing
+  both ways from clean directories.
+- **`scripts/check-release.sh` now exists**, which `AGENTS.md` requires before `status: done`
+  and this idea lacked.
+
 ## Log
+
+### 2026-09-28 — 0.6 delivered
+
+[PR #1](https://github.com/gortazar/title-slides/pull/1) squash-merged as `f3289d8` with
+`test` green and no bypass, branch deleted, `v0.6` tagged on the merge commit and released
+with `title-slides-0.6.zip`. `scripts/check-release.sh` exits 0 against it.
+
+The two proofs worth keeping:
+
+- **The 0.6 artefact differs from the 0.5 one by exactly one line** — `version: 0.5.0` →
+  `version: 0.6.0` — with both `.lua` files byte-identical between the two releases. That
+  is the strongest available statement that a documentation entry changed no behaviour, and
+  the plan asked for exactly this check.
+- **Both install paths render the reporter's deck identically to 0.5**: 28 slides, 14 index
+  slides, 9 entries, no warning, from `quarto add gortazar/title-slides@v0.6` and from the
+  downloaded zip.
+
+Two things to know for next time:
+
+- **The gate merged the pull request the moment `test` passed.** The ruleset requires zero
+  approving reviews, so `gh pr ready` followed by `--auto --squash` merged within the same
+  minute; arming auto-merge last was what made that safe.
+- **`check-release.sh` reported "no release" twice before the release existed.** The tag push
+  fires the workflow, which runs the full suite on a cold runner before publishing — about
+  75 seconds. A failing check-release immediately after tagging means "not yet", and the
+  workflow's own status is the thing to read.
 
 ### 2026-09-28 — 0.6, U1–U3: both gaps closed, release in flight
 
@@ -580,6 +636,21 @@ Two mechanics worth recording, both feeding later units:
 - [x] U3 — the real deck as the acceptance test: fourteen slides, no index, an explanation
 - [x] U4 — README, `_extension.yml` at 0.4.0, v0.4 released, both install paths verified
       from clean directories, pin moved here
+
+### 0.6 — the two things the docs never said
+- [x] U0 — pin and baseline verified, and both gaps re-confirmed against the tree rather
+      than taken from the audit; the live ruleset and `nix build .#default` checked too
+- [x] U1 — the Sonar exemption recorded in this idea's `STATUS.md`, as a standing section
+- [x] U2 — the README build docs upstream, from the release's own recipe, every line run in
+      a clean clone and the zip compared with the published 0.5 asset
+- [x] U3 — `_extension.yml` at 0.6.0 and the three install lines at `@v0.6`; PR #1 merged
+      through the gate, `v0.6` released and verified, pin moved here, `check-release.sh`
+      written because `status: done` now requires it
+
+Next: nothing — 0.6 is done. 114 unit tests, 4 golden cases, the smoke test, the real-deck
+test and the install test, all green and unchanged by this entry.
+
+Previously: 0.5 was done.
 
 ### 0.5 — index the `##` headings, not the `#` ones
 - [x] U0 — pin verified, 0.4 baseline green, and the before picture recorded from real
