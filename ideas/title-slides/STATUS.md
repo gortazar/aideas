@@ -41,6 +41,40 @@ not a rule applied backwards.
 
 ## Log
 
+### 2026-09-28 — 0.6, U1–U3: both gaps closed, release in flight
+
+**U1 — the Sonar exemption**, above under its own standing heading rather than buried in
+this log, so it survives the next entry. The audit's grep flips: *Sonar* 0 → 9, *Lua* 4 → 12.
+
+**U2 — the README build docs**, upstream on `agent/title-slides/2026-09-28`, opened as
+[PR #1](https://github.com/gortazar/title-slides/pull/1) as a draft at that first upstream
+unit rather than at the end. What the checks actually showed:
+
+- Every line of the documented snippet was run in a **clean clone** of the branch, in order.
+  `result/` holds `_extensions/title-slides/` with the three files, and the zip has five
+  members — which is what the README now says, because it is what the runs produced.
+- Building the 0.5 commit reproduces `title-slides-0.5.zip` with the **same members and
+  byte-identical contents**, but **not identical archive bytes**: a zip records modification
+  times and the order members were added, and the published asset happens to have stored
+  `setext.lua` before `_extension.yml`. The README says exactly that rather than claiming
+  reproducibility it does not have.
+- `.gitignore` gains `dist/` and `title-slides-*.zip`, beside the `result` it already had.
+  This is one file more than the plan's expected diff, and deliberate: the README now tells
+  contributors to run a command that leaves both in their checkout. The invariant that
+  matters is intact — `git diff origin/main...` touches `.gitignore`, `README.md` and
+  `_extension.yml`, and **nothing under `_extensions/title-slides/*.lua`**.
+
+**U3 — release.** `_extension.yml` at 0.6.0 and the three `quarto add` lines at `@v0.6`;
+the three other mentions of 0.5 are left alone, being statements about when the index rule
+changed that bumping would falsify.
+
+**`scripts/check-release.sh` now exists**, which it did not when this entry began, and
+`AGENTS.md` requires it before `status: done`. Writing it found a real trap: `_extension.yml`
+carries three-component versions (`0.6.0`) where this idea's `version:` and its tag carry
+two (`0.6`), so a naive equality check fails against a perfectly good release. It accepts
+either form now. Checked both ways before being trusted — exit 0 against the published 0.5,
+exit 1 against a version that was never released.
+
 ### 2026-09-28 — 0.6, U0: pin, baseline, and both gaps checked against the tree
 
 Pin intact (gitlink and `flake.lock` both at `5963061`), no rescued work, no open pull
