@@ -78,15 +78,7 @@ makes position a safe identity: the active list only ever holds work still to do
    fixed under its own entry; if you find the claim anywhere else, say so rather than fixing it here. This idea has no upstream repository and must not get one under this entry —
    moving it is a separate decision, and the audit already established that nothing in its original entry authorised the current arrangement.
 
-4. [title-slides](ideas/title-slides) - Two documentation gaps a fleet audit confirmed, neither of which affects the code. Minor update. (1) `ideas/title-slides/STATUS.md` never
-   mentions Sonar or the Lua exemption at all: AGENTS.md says an unsupported language is a reason to skip the analysis **and say so in `STATUS.md`**, and the exemption is currently
-   recorded only in another idea's files (`ideas/quality-gate/STATUS.md` and `baseline.md`). Record it where the rule asks for it, naming Lua as the reason. The rule is
-   contemporaneous with this idea's last entry, so this is a real omission rather than a rule applied backwards. (2) The upstream README documents `nix develop`, the five test
-   scripts and `nix flake check`, but never how to build: the words build, package and `nix build` appear nowhere, even though `flake.nix` exposes `packages.default`
-   ("title-slides-extension") and `release.yml` ships the zip with `nix build .#default`. Document the build the release actually uses, in the section that already covers
-   development.
-
-5. [orchestrator](ideas/orchestrator) - A failed agent is indistinguishable from an agent that had little to do, so a hard stop looks like quiet non-progress. Minor update, 1.7.
+4. [orchestrator](ideas/orchestrator) - A failed agent is indistinguishable from an agent that had little to do, so a hard stop looks like quiet non-progress. Minor update, 1.7.
    When the account's model limit was exhausted, both agents exited in five seconds and their result JSON said `"subtype": "success"` and `"is_error": true` **together**, with
    `num_turns: 1`, `total_cost_usd: 0` and `"result": "You've reached your Fable limit. Switch to another model to continue."`. `finalize` reads `subtype` and never `is_error`, so it
    recorded $0, wrote `status: in_progress` and moved on; with the timer enabled that repeats every five minutes for as long as the limit lasts, reporting nothing wrong. Read
@@ -274,3 +266,11 @@ makes position a safe identity: the active list only ever holds work still to do
    worked example in AGENTS.md under **Issues: fix them, configure around them, never re-label them**. Take the configuration route, not the dismissal one: copy the built-in CSS
    profile (both built-ins are read-only), deactivate `css:S4654` in the copy, and assign the copy to the affected projects — never the organisation default — then record it in
    `ideas/quality-gate/exclusions.md`. Do not change any issue's status. When the project is green, say so in this idea's own `STATUS.md`, which today never mentions Sonar at all.
+
+29. [title-slides](ideas/title-slides) - Two documentation gaps a fleet audit confirmed, neither of which affects the code. Minor update. (1) `ideas/title-slides/STATUS.md` never (finished 2026-09-28, v0.6)
+   mentions Sonar or the Lua exemption at all: AGENTS.md says an unsupported language is a reason to skip the analysis **and say so in `STATUS.md`**, and the exemption is currently
+   recorded only in another idea's files (`ideas/quality-gate/STATUS.md` and `baseline.md`). Record it where the rule asks for it, naming Lua as the reason. The rule is
+   contemporaneous with this idea's last entry, so this is a real omission rather than a rule applied backwards. (2) The upstream README documents `nix develop`, the five test
+   scripts and `nix flake check`, but never how to build: the words build, package and `nix build` appear nowhere, even though `flake.nix` exposes `packages.default`
+   ("title-slides-extension") and `release.yml` ships the zip with `nix build .#default`. Document the build the release actually uses, in the section that already covers
+   development.
