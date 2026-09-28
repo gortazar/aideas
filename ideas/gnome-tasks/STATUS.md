@@ -104,12 +104,18 @@ run **36414701024** (`e1113a8`, 2026-09-28), is the reference below.
 `plans/01-2026-08-28.md:204` — *"Can CI run a nested headless Gnome Shell on the available GitHub
 runners?"*, which the user answered *"I don't know what github runners can do. You might need to
 discover it for yourself."* It has been discoverable in public since **2026-08-06** — the first run
-whose SHA carried the smoke job (run **31112654174**, `4970510a`) already printed it. Every smoke job
-since has printed the same line:
+whose SHA carried the smoke job (run **31112654174**, `4970510a`) already printed it. **All ten runs
+that carried the job have printed the same line**, checked one by one:
 
 ```
 VERDICT: a nested headless GNOME Shell runs on this runner.
 ```
+
+31112654174, 31117350267, 31166187904, 31211906764, 31263208278, 31309991357, 31342738093,
+31976842505, 33152614983, 36414701024. The three older runs (`0456387`, `d3b2ec2`) predate the job.
+Run 31211906764 is worth noting: it concluded `failure` at the run level — its `test` job broke — and
+the smoke job still printed the verdict, which is the same independence that lets a green run hide a
+red one.
 
 The probe record behind that verdict, from run 36414701024, is `gnome-shell 46.0` under a real
 compositor with one 1280×800 virtual monitor:
@@ -208,7 +214,7 @@ machine on a day is dated; anything unpaired was cut or rewritten as an explicit
 | `origin` is `git@github.com:gortazar/aideas.git` | `git remote -v`, 2026-09-28 |
 | The workflow has run 13 times; four most recent are `success` | `gh run list --workflow=ci-gnome-tasks.yml --limit 30` |
 | Per-job conclusions | `gh run view <id> --json jobs` |
-| The `VERDICT:` line, on every smoke run | `gh run view <run> --job <job> --log`, runs 31112654174, 31309991357, 31342738093, 33152614983, 36414701024 |
+| The `VERDICT:` line, on all ten smoke runs | `gh run view <run> --job <job> --log`, each of the ten ids listed above |
 | The smoke job first appears at `4970510` (2026-08-06) | `git show <sha>:.github/workflows/ci-gnome-tasks.yml` over all 13 run SHAs |
 | The `probe-enabled` / `display-config` records, connector `Meta-0` | `gh run download 36414701024 -n nested-shell-log` |
 | `Created surfaceless renderer without GPU` | the same artifact, `gtn/shell.log` |
@@ -217,6 +223,21 @@ machine on a day is dated; anything unpaired was cut or rewritten as an explicit
 | All four flake checks green | local `git add -A && nix flake check --print-build-logs`, exit 0, 2026-09-28 |
 | `pwgen/STATUS.md` is already corrected | read at `ideas/pwgen/STATUS.md:107-108` |
 | The question this answers is the plan's last | `plans/01-2026-08-28.md:204`, nine questions at lines 196-204 |
+
+One gap, stated rather than papered over: **the CI run caused by *this* change has not been read**,
+because agents do not push this repository — the orchestrator merges and pushes after the session, so
+that run did not exist while the file was being written. The freshest run available was 36414701024
+on `e1113a8`, the commit immediately before these, and it is the one quoted throughout. Two reasons
+that is adequate here, and one caveat:
+
+* The smoke job's input — `tools/nested-shell.sh`, `tools/probe`, the workflow — is untouched by
+  0.2, so there is no mechanism by which its verdict could change.
+* 0.2 changes only `STATUS.md` and `docs/`, both of which `flake.nix` deliberately excludes from the
+  check inputs, so the `test` job on the next run will replay cached results. **A green run on this
+  push would not be fresh evidence that the suites pass** — that is what the local `nix flake check`
+  is for, and it is the trap that made a green run look like a verdict in the first place.
+* The caveat: if a future smoke run ever contradicts the verdict above, this section is wrong and
+  should be rewritten from that run, not defended.
 
 Unchanged and *not* re-verified this session, by decision: `make smoke`'s eleven checks and the two
 experiments. Those are claims about 2026-08-09 on a development machine and are labelled as such; a
