@@ -1,5 +1,5 @@
 status: not_started
-version: 1.6
+version: 1.7
 started_at: 2026-09-15T18:39:34+02:00
 last_session_id: c42e4c48-8bfe-49f0-accb-f4d4d5588837
 last_run: 2026-09-15T19:50:36+02:00
@@ -55,10 +55,14 @@ closes the one item the previous entry left open.
       config with no `max_cycle_cost_usd` passed `--max-budget-usd ''`, which the CLI
       rejects, so every agent died before starting — the same invisible failure this entry
       is about. An absent limit now means no flag. 102 tests green.
-- [ ] **U5 — `ORCHESTRATOR_VERSION = "1.7"`** and the version-comment entry.
+- [x] **U5 — `ORCHESTRATOR_VERSION = "1.7"`**, its one-line entry in the version comment,
+      and `version: 1.7` here. `scripts/check-version.sh` confirms the two agree; neither
+      it nor `check-release.sh` needed editing, since both read the version rather than
+      hardcoding it.
 - [ ] **U6 — `status: done` at 1.7**, suite green under `env -i`, then `check-release.sh`.
 
-Next: U5 — ORCHESTRATOR_VERSION = "1.7" and its one-line entry in the version comment.
+Next: U6 — status: done at 1.7, the suite green under env -i and a comma-decimal locale,
+then check-release.sh once the release workflow has fired.
 
 Run the suite from the repo root:
 

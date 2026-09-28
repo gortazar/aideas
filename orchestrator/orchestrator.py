@@ -57,8 +57,11 @@ from pathlib import Path
 # "aideas/" being read as an "ideas/" link; pushes rescued submodule work to
 # agent/<slug>-sweep when a ruleset refuses the default branch, instead of to a local ref
 # that dies with the clone, and says so in the idea's STATUS.md; and is the first version
-# with a test suite of its own, in orchestrator/tests/.
-ORCHESTRATOR_VERSION = "1.6"
+# with a test suite of its own, in orchestrator/tests/. 1.7 stops a failed agent reading as a
+# quiet one: a result JSON saying the run failed no longer writes `in_progress`, a session id
+# that no longer resolves is dropped and the agent respawned once without `--resume`, and a
+# cycle in which every agent failed exits non-zero.
+ORCHESTRATOR_VERSION = "1.7"
 
 UNLIMITED = {"unlimited", "none", "off"}
 
