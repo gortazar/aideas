@@ -9,6 +9,10 @@ refusal is asserted directly here.
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
+
 from tests import support
 
 
@@ -42,6 +46,41 @@ class SuperprojectLayout(support.GitSandbox):
     def test_worktree_is_on_agent_branch(self) -> None:
         branch = support.git("rev-parse", "--abbrev-ref", "HEAD", cwd=self.project.worktree)
         self.assertEqual(branch.stdout.strip(), "agent/demo")
+
+
+class StubClaudeFixture(support.GitSandbox):
+    """A stub that is not actually on PATH turns every test below it into a tautology."""
+
+    def test_the_stub_is_what_runs_when_claude_is_invoked(self) -> None:
+        stub = self.stub_claude('echo "stub ran"; exit 0')
+        found = shutil.which("claude")
+        self.assertEqual(found, str(stub.script), "the stub is not first on PATH")
+        result = subprocess.run(["claude", "-p", "hello"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout.strip(), "stub ran")
+
+    def test_the_stub_is_executable_and_records_its_argv(self) -> None:
+        stub = self.stub_claude("exit 0")
+        self.assertTrue(os.access(stub.script, os.X_OK), "the stub is not executable")
+        self.assertEqual(stub.calls, 0)
+        subprocess.run(["claude", "-p", "one", "--resume", "abc"], capture_output=True)
+        subprocess.run(["claude", "-p", "two"], capture_output=True)
+        self.assertEqual(stub.calls, 2)
+        self.assertIn("--resume abc", stub.invocations()[0])
+        self.assertNotIn("--resume", stub.invocations()[1])
+
+    def test_the_stub_can_fail(self) -> None:
+        self.stub_claude('echo "No conversation found with session ID: x" >&2; exit 1')
+        result = subprocess.run(["claude", "-p", "x"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("No conversation found", result.stderr)
+
+    def test_path_is_restored_after_the_test(self) -> None:
+        before = os.environ["PATH"]
+        self.stub_claude("exit 0")
+        self.assertNotEqual(os.environ["PATH"], before)
+        self._restore_env()
+        self.assertEqual(os.environ["PATH"], before)
 
 
 class Remotes(support.GitSandbox):

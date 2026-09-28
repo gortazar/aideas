@@ -57,8 +57,11 @@ from pathlib import Path
 # "aideas/" being read as an "ideas/" link; pushes rescued submodule work to
 # agent/<slug>-sweep when a ruleset refuses the default branch, instead of to a local ref
 # that dies with the clone, and says so in the idea's STATUS.md; and is the first version
-# with a test suite of its own, in orchestrator/tests/.
-ORCHESTRATOR_VERSION = "1.6"
+# with a test suite of its own, in orchestrator/tests/. 1.7 stops a failed agent reading as a
+# quiet one: a result JSON saying the run failed no longer writes `in_progress`, a session id
+# that no longer resolves is dropped and the agent respawned once without `--resume`, and a
+# cycle in which every agent failed exits non-zero.
+ORCHESTRATOR_VERSION = "1.7"
 
 UNLIMITED = {"unlimited", "none", "off"}
 
@@ -73,7 +76,7 @@ class AgentSetupError(RuntimeError):
 PLAN_TOOLS_DEFAULT = "Read,Write,Glob,Grep,WebFetch,WebSearch"
 BUILD_TOOLS_DEFAULT = "Bash,Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
 LOG_ENTRY_RE = re.compile(
-    r"^- \d{4}-\d{2}-\d{2}T\S+ — (in_progress|blocked|done) "
+    r"^- \d{4}-\d{2}-\d{2}T\S+ — (in_progress|blocked|done|failed)"
 )
 # The trailing slash is optional: requiring it silently swallowed every entry written as
 # `(ideas/recap)` rather than `(ideas/recap/)` — no error, the idea simply never existed.
@@ -89,6 +92,41 @@ SLUG_RE = re.compile(r"(?<![a-z0-9-])ideas/([a-z0-9][a-z0-9-]*)(?![a-z0-9-])")
 def log(message: str) -> None:
     print(f"[{datetime.now().astimezone().isoformat(timespec='seconds')}] {message}",
           flush=True)
+
+
+def agent_failure(result: dict) -> str | None:
+    """None when a run succeeded; a short reason when it failed.
+
+    One classifier, used everywhere a result JSON is read, because the payload a failure
+    produces is not self-consistent. An exhausted model limit wrote this:
+
+        {"subtype": "success", "is_error": true, "num_turns": 1, "total_cost_usd": 0,
+         "result": "You've reached your Fable limit. Switch to another model to continue."}
+
+    `subtype` and `is_error` disagree and every reader here used to believe `subtype`, so a
+    hard stop was recorded as an ordinary five-second cycle: `status: in_progress`, `$0.0000`,
+    "Cycle complete". With the timer on that repeated every five minutes, silently.
+
+    So `is_error` is consulted first — it is the one that was right — and a `subtype` other
+    than "success" also counts, as a hedge against a failure shape nobody has seen yet. Two
+    things are deliberately *not* failures: an empty dict, which means no result JSON at all
+    and already has its own louder report, and a result carrying neither key, which is what an
+    older CLI would write and must not turn every healthy cycle into a failure.
+
+    The reason is the model's own `result` string whenever there is one. It is already plain
+    English written for a person, and paraphrasing it would lose the specifics — which limit,
+    which model, and whatever wording a future failure arrives in.
+    """
+    if not result:
+        return None
+    subtype = result.get("subtype")
+    failed = bool(result.get("is_error")) or (subtype is not None and subtype != "success")
+    if not failed:
+        return None
+    reason = str(result.get("result") or "").strip()
+    if reason:
+        return reason
+    return f"error (subtype={subtype}, num_turns={result.get('num_turns', 0)})"
 
 
 def is_unlimited(value: str | None) -> bool:
@@ -586,10 +624,18 @@ class Agent:
     # recomputed at the end: by then the agent has bumped STATUS.md as instructed, and
     # bumping again from that would punish it for following the rule.
     target_version: str = INITIAL_VERSION
+    # The session id this agent was started with, if any. Kept so that a `--resume` the CLI
+    # refuses can be identified and retried without it.
+    resumed_session: str = ""
 
     @property
     def idea_dir(self) -> Path:
         return self.worktree / "ideas" / self.slug
+
+    @property
+    def err_file(self) -> Path:
+        """Where this agent's stderr goes — beside its result JSON, and named for it."""
+        return self.out_file.with_suffix(".err")
 
     def load_result(self) -> dict:
         try:
@@ -797,8 +843,17 @@ class Orchestrator:
         cost = float(result.get("total_cost_usd", 0) or 0)
         turns = result.get("num_turns", 0)
         denials = len(result.get("permission_denials") or [])
+        # A failed run's $0.0000 is true and useless: it reads exactly like a short honest
+        # cycle. Mark the row so the ledger can tell "cheap" from "refused", and say why —
+        # this catches the planning pass too, which otherwise commits an idea with no
+        # PLAN.md and reports nothing at all.
+        failure = agent_failure(result)
+        phase_recorded = f"{phase}-failed" if failure else phase
         with self.usage_log.open("a") as fh:
-            fh.write(f"{today},{cost},{agent.slug},{phase},{turns}\n")
+            fh.write(f"{today},{cost},{agent.slug},{phase_recorded},{turns}\n")
+        if failure:
+            log(f"WARNING: {phase}/{agent.slug} failed after {turns} turn(s): {failure}")
+            return
         log(f"{phase}/{agent.slug}: ${cost:.4f}, {turns} turns, {denials} permission denials.")
         if denials:
             # Denials mean Claude tried a tool --allowed-tools didn't cover: it silently
@@ -880,8 +935,18 @@ class Orchestrator:
         return ["--model", model] if model else []
 
     def claude_budget_args(self, key: str) -> list[str]:
-        value = self.config.get(key, "")
-        return [] if is_unlimited(value) else ["--max-budget-usd", value]
+        """`--max-budget-usd` when the config sets one, and nothing when it does not.
+
+        A *missing* key used to produce `--max-budget-usd ''`, which the CLI rejects outright:
+
+            error: option '--max-budget-usd <amount>' argument '' is invalid.
+
+        Every agent then died before doing anything, which under 1.6 looked like a quiet
+        cycle — the same class of invisible failure this version exists to end. An absent
+        limit means no flag, exactly as "unlimited" does.
+        """
+        value = self.config.get(key, "").strip()
+        return [] if not value or is_unlimited(value) else ["--max-budget-usd", value]
 
     def claude_tool_args(self, key: str, default: str) -> list[str]:
         """Both flags, because they do different jobs.
@@ -1074,11 +1139,26 @@ class Orchestrator:
             parts.append("\n".join(status_file.read_text().splitlines()[-20:]))
         (agent.idea_dir / "CLAUDE.md").write_text("\n".join(parts))
 
-        resume: list[str] = []
         session_file = self.state_dir / "sessions" / f"{slug}.id"
         if session_file.is_file():
-            resume = ["--resume", session_file.read_text().strip()]
+            agent.resumed_session = session_file.read_text().strip()
 
+        self.spawn_agent(agent)
+        return agent
+
+    def spawn_agent(self, agent: Agent, resume: bool = True) -> None:
+        """Start (or restart) one agent's `claude`, capturing its stderr.
+
+        stderr used to be inherited, which is why a CLI that refused to start left no trace
+        anywhere: no result JSON, nothing in the log, and a warning that blamed a kill. It now
+        goes to a file beside the result JSON, which is what `recover_dead_sessions` reads to
+        tell "this conversation is gone" from every other fast exit.
+
+        stderr is opened for *append*, so a respawn adds to the record rather than wiping it:
+        the whole reason the retry happened is in the first run's stderr, and truncating it
+        would destroy the evidence at the moment it became interesting. stdout is truncated,
+        because it holds one JSON document and the retry's is the one that counts.
+        """
         command = [
             "claude", "-p", "Continue implementing this idea per CLAUDE.md.",
             *self.claude_tool_args("build_tools", BUILD_TOOLS_DEFAULT),
@@ -1086,12 +1166,53 @@ class Orchestrator:
             "--permission-mode", "acceptEdits",
             *self.claude_budget_args("max_cycle_cost_usd"),
             "--output-format", "json",
-            *resume,
+            *(["--resume", agent.resumed_session] if resume and agent.resumed_session else []),
         ]
-        agent.process = subprocess.Popen(
-            command, cwd=agent.idea_dir, stdout=agent.out_file.open("w"),
-        )
-        return agent
+        # Closed as soon as the child has them: the parent's copies are not needed, and
+        # leaving them open leaks a descriptor per agent per cycle.
+        with agent.out_file.open("w") as out, agent.err_file.open("a") as err:
+            agent.process = subprocess.Popen(
+                command, cwd=agent.idea_dir, stdout=out, stderr=err,
+            )
+
+    def recover_dead_sessions(self) -> None:
+        """Respawn, once, any agent that refused to start because its session is gone.
+
+        `--resume <id>` against a conversation that no longer exists fails instantly, and
+        nothing ever rewrote the stored id, so the idea failed identically every cycle for
+        ever. The id is provably useless at that point, so it is deleted rather than kept.
+
+        One sleep for the whole set, then `poll()` — never `process.wait(timeout=…)` per
+        agent, which with parallel_agents > 1 multiplies, and a blocking wait in the start
+        path is exactly what the deadline logic exists to avoid. Every failure this looks for
+        is instantaneous by nature: the CLI refuses before it starts any work.
+
+        Deliberately narrow. Only this signature is retried; an agent that died of an
+        exhausted model limit is left alone, because restarting it would burn another five
+        seconds to produce a second identical failure.
+        """
+        candidates = [a for a in self.agents if a.resumed_session and a.process]
+        if not candidates:
+            return
+        time.sleep(self.config.number("early_exit_probe_seconds", 5))
+
+        for agent in candidates:
+            if agent.process.poll() is None or agent.process.returncode == 0:
+                continue
+            try:
+                stderr = agent.err_file.read_text()
+            except OSError:
+                continue
+            if "No conversation found with session ID" not in stderr:
+                continue
+
+            log(f"WARNING: {agent.slug}: stored session {agent.resumed_session} no longer "
+                "exists; starting a fresh conversation.")
+            (self.state_dir / "sessions" / f"{agent.slug}.id").unlink(missing_ok=True)
+            agent.resumed_session = ""  # spawn_agent now has nothing to resume, and this
+            # also takes the agent out of `candidates` for any later pass, so the respawn
+            # can happen at most once per agent per cycle.
+            self.spawn_agent(agent, resume=False)
 
     def wait_for_agents(self) -> None:
         """Poll rather than block: a plain wait would run until the agents finish, which
@@ -1559,6 +1680,61 @@ From the repo root:
                             f"\n\n<!-- orchestrator: no v{version} release in {repo} when "
                             f"this entry was retired. -->\n")
 
+    def cycle_exit_code(self) -> int:
+        """0 if the cycle achieved something, non-zero if every agent failed.
+
+        `run()` used to return 0 unconditionally, so a cycle in which both agents died in five
+        seconds exited green and systemd recorded a clean run. The exit code is the only
+        signal that reaches somebody who is not reading the journal: a failed timer run shows
+        up in `systemctl --failed` and is marked in the journal, which is the entire point —
+        a hard stop should not look like a quiet lack of progress.
+
+        Some failed and some worked is still a success: real work landed, and failing the
+        unit would misreport that. An agent with no result JSON at all is not counted here;
+        that is a different failure with its own louder report, and conflating the two would
+        make "the agent was killed" indistinguishable from "the model refused".
+        """
+        failures = [(a.slug, agent_failure(a.result)) for a in self.agents]
+        failures = [(slug, reason) for slug, reason in failures if reason]
+        if not failures or not self.agents:
+            return 0
+
+        reasons = "; ".join(sorted({reason for _slug, reason in failures}))
+        if len(failures) == len(self.agents):
+            log(f"WARNING: cycle failed: all {len(self.agents)} agent(s) failed ({reasons}).")
+            return 1
+        log(f"WARNING: cycle partly failed: {len(failures)} of {len(self.agents)} "
+            f"agent(s) failed ({reasons}). The rest of the cycle's work did land.")
+        return 0
+
+    def note_agent_failure(self, slug: str, reason: str) -> None:
+        """Record a failed run in the idea's STATUS.md log, where the next agent will read it.
+
+        Written in the shape LOG_ENTRY_RE matches, so next cycle's rewrite_status re-gathers
+        it with the other log lines instead of stranding it at the bottom of the file — and so
+        it stays inside the last 20 lines, which is the slice start_agent puts into the next
+        agent's CLAUDE.md. Same mechanism as 1.6's sweep-branch notice, for the same reason: a
+        WARNING in the journal of a cycle that ran at 03:00 is not a report anybody reads.
+
+        The reason is folded to one line: it goes into a line-oriented log, and the model's
+        sentence is occasionally wrapped.
+        """
+        status_file = self.repo / "ideas" / slug / "STATUS.md"
+        if not status_file.is_file():
+            return
+        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        folded = " ".join(str(reason).split())
+        entry = f"- {now} — failed: {folded}"
+
+        lines = status_file.read_text().splitlines()
+        for index, line in enumerate(lines):
+            if line.startswith("## Log"):
+                lines.insert(index + 1, entry)
+                break
+        else:
+            lines += ["", "## Log", entry]
+        status_file.write_text("\n".join(lines).rstrip("\n") + "\n")
+
     def finalize(self, agent: Agent) -> None:
         slug = agent.slug
         result = agent.load_result()
@@ -1597,6 +1773,25 @@ From the repo root:
         self.sync_submodule_checkouts(slug)
         git("worktree", "remove", "--force", str(agent.worktree), cwd=self.repo)
         git("branch", "-d", f"agent/{slug}", "--quiet", cwd=self.repo)
+
+        # The agent wrote a result and the result says it failed — an exhausted model limit,
+        # most often. Nothing was built, so say so and leave the idea exactly as it was:
+        # writing `in_progress` here is not just misleading, it sets `started_at` and starts
+        # the stale_idea_after_hours clock that pick_ideas deprioritises on, so a run of
+        # these could push a never-started idea into the stalled bucket without one turn
+        # having been taken. Everything above this line still ran: the work an agent had
+        # already committed is merged, and its worktree is cleaned up.
+        failure = agent_failure(result)
+        if failure:
+            current = status_value(self.repo / "ideas" / slug / "STATUS.md", "status") \
+                or "not_started"
+            log(f"WARNING: {slug}: the agent failed after "
+                f"{result.get('num_turns', 0)} turn(s): {failure}")
+            log(f"WARNING: {slug}: status left at {current} — nothing was built this cycle.")
+            self.note_agent_failure(slug, failure)
+            self.sweep_repo(f"{slug}: agent failed ({failure[:60]})")
+            self.record_usage(agent, "build")
+            return
 
         # pick_ideas only selects ideas with zero unanswered questions, so any unticked
         # checkbox now can only have been appended by the run that just finished.
@@ -1709,6 +1904,10 @@ From the repo root:
             if not self.agents:
                 log("No agent could be started; exiting.")
                 return 0
+            # Before settling in to wait: catch the agents that refused to start at all
+            # because the conversation they were told to resume is gone, and give each one
+            # fresh start. One bounded probe for the whole set.
+            self.recover_dead_sessions()
             self.wait_for_agents()
 
             if self.lock.lost:
@@ -1720,7 +1919,7 @@ From the repo root:
 
             for agent in self.agents:
                 self.finalize(agent)
-            return 0
+            return self.cycle_exit_code()
         finally:
             self.push_if_ahead()
             self.lock.release()

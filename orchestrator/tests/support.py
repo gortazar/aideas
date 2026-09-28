@@ -147,6 +147,9 @@ max_cycle_minutes: unlimited
 allowed_hours: unlimited
 lock_ttl_minutes: 5
 lock_renew_seconds: 30
+# The suite runs on every push and shells out to git constantly, so the one real sleep in
+# the code under test is shrunk rather than waited out. Production leaves this at 5.
+early_exit_probe_seconds: 0.3
 """
 
 
@@ -169,7 +172,7 @@ class GitSandbox(unittest.TestCase):
         ))
         self._saved_env = {key: os.environ.get(key) for key in (
             "HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_TERMINAL_PROMPT",
-            "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "XDG_CONFIG_HOME")}
+            "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "XDG_CONFIG_HOME", "PATH")}
         os.environ["HOME"] = str(home)
         os.environ["GIT_CONFIG_GLOBAL"] = str(gitconfig)
         os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
@@ -191,6 +194,74 @@ class GitSandbox(unittest.TestCase):
     def orchestrator(self, repo: Path) -> orch.Orchestrator:
         """An Orchestrator over `repo`, with no heartbeat and the sandbox config."""
         return orch.Orchestrator(repo, "")
+
+    def stub_claude(self, body: str) -> "StubClaude":
+        """Put a fake `claude` first on PATH, and record how it is called.
+
+        The three failures this suite is about — an exhausted model limit, a session id that
+        no longer resolves, a cycle where every agent died — are all things the real CLI does
+        and none of them can be provoked on demand. A stub is the only way any of it is
+        reproducible, and `PATH` is the honest seam: the orchestrator spawns `claude` by name,
+        so a stub found first on `PATH` is substituted exactly where the real one would be.
+
+        `body` is shell, and runs with "$@" as the arguments the orchestrator passed. Two
+        variables are set for it: INVOCATION_LOG, to which the argv has already been appended,
+        and RESULT_FILE, the path the orchestrator will read the result JSON from (the stub's
+        own stdout, which the orchestrator redirects there).
+        """
+        bin_dir = self.tmp / "stub-bin"
+        bin_dir.mkdir(exist_ok=True)
+        log_file = bin_dir / "invocations.log"
+        script = bin_dir / "claude"
+        script.write_text(
+            "#!/bin/sh\n"
+            f'INVOCATION_LOG="{log_file}"\n'
+            'printf "%s\\n" "$*" >> "$INVOCATION_LOG"\n'
+            f"{body}\n"
+        )
+        script.chmod(0o755)
+        os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        return StubClaude(bin_dir=bin_dir, script=script, log_file=log_file)
+
+
+@dataclass
+class StubClaude:
+    """A fake `claude` on PATH, and the record of how it was called."""
+    bin_dir: Path
+    script: Path
+    log_file: Path
+
+    def invocations(self) -> list[str]:
+        if not self.log_file.exists():
+            return []
+        return [line for line in self.log_file.read_text().splitlines() if line.strip()]
+
+    @property
+    def calls(self) -> int:
+        return len(self.invocations())
+
+
+# A result JSON shaped exactly like the one an exhausted model limit produced: `subtype` says
+# success and `is_error` says otherwise, which is the disagreement the classifier exists for.
+LIMIT_RESULT = {
+    "type": "result",
+    "subtype": "success",
+    "is_error": True,
+    "num_turns": 1,
+    "total_cost_usd": 0,
+    "session_id": "11111111-2222-3333-4444-555555555555",
+    "result": "You've reached your Fable limit. Switch to another model to continue.",
+}
+
+HEALTHY_RESULT = {
+    "type": "result",
+    "subtype": "success",
+    "is_error": False,
+    "num_turns": 12,
+    "total_cost_usd": 1.25,
+    "session_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    "result": "Implemented the thing.",
+}
 
 
 @dataclass
