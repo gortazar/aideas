@@ -246,6 +246,38 @@ rating there is.
 Worth knowing before entry 5 decides anything: an E rating here means nothing about the
 code, and a blocking gate that read it as a verdict would be wrong twice over.
 
+> **Note, 2026-09-28 — the E above is historical.** The table and the reasoning stay as
+> measured on 2026-08-25; this says what happened next. `css:S4654` was deactivated in a
+> copied quality profile, `GNOME Shell (St) stylesheets`, assigned to this project — the
+> remedy `AGENTS.md` prescribes for a rule that is wrong about a whole technology, and
+> recorded in `exclusions.md` under **Quality profiles**. The two issues closed on the next
+> analysis of `main` (commit `08528f2`), and the new reading is:
+>
+> | Measure | 2026-08-25 | 2026-09-28 |
+> | --- | --- | --- |
+> | Bugs | **2** | **0** |
+> | Reliability | **E** (5.0) | **A** (1.0) |
+> | Code smells | 9 | 9 |
+> | Lines of code | 1,874 | 1,874 |
+> | Security / Maintainability | A / A | A / A |
+> | Gate | OK (vacuously) | OK |
+>
+> **Nothing was re-labelled**, and that is checkable rather than claimed: issues
+> `AaA5xQ_tVAZt5f74MM8u` and `AaA5xQ_tVAZt5f74MM8v` resolve `CLOSED` / **`REMOVED`** — what
+> a rule going inactive leaves behind — and not `FALSE-POSITIVE` or `WONTFIX`, which is what
+> `api/issues/do_transition` would have left.
+>
+> The finding this section reports is unchanged and still the point: it is not the
+> JavaScript that confuses Sonar on a GJS project, it is the stylesheet. What changed is
+> that the fleet now has a remedy for it that the next GJS project can apply in one command.
+>
+> Still open here, and named so the next reader does not have to go looking: three
+> `javascript:S3735` issues ("Remove this use of the `void` operator") on `src/extension.js`,
+> `src/prefs.js` and `src/lib/events.js`. **Not BLOCKER under either severity model** —
+> CRITICAL code smells in the old one, `MAINTAINABILITY/HIGH` in the new — and
+> maintainability is rated A with them counted. They are inherited code, which the
+> Clean as You Code gate does not judge.
+
 ### gortazar_lo-pert — Python
 
 [Dashboard](https://sonarcloud.io/project/overview?id=gortazar_lo-pert) ·

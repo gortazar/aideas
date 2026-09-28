@@ -83,7 +83,9 @@ about it on every GJS project with a stylesheet, forever. That is the case this 
 `api/issues/bulk_change` were not called, and `ensure-quality-profile.sh` does not contain
 them. That is checkable rather than asserted, and anyone can check it without a token — a
 deactivated rule's findings close as **removed**, where a dismissal would have left
-`FALSE-POSITIVE` or `WONTFIX` behind:
+`FALSE-POSITIVE` or `WONTFIX` behind. Checked on 2026-09-28, after the analysis of `main` at
+`08528f2`, both keys read `CLOSED` / `REMOVED`, and the project went from 2 bugs and
+reliability **E** to 0 bugs and reliability **A**:
 
 ```sh
 curl -fsS 'https://sonarcloud.io/api/issues/search?componentKeys=gortazar_recap-gs&issues=AaA5xQ_tVAZt5f74MM8u,AaA5xQ_tVAZt5f74MM8v&resolved=true' |

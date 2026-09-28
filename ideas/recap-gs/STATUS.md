@@ -17,7 +17,7 @@ last_cycle_cost_usd: 0.0
 
 ### 2026-09-28 — in_progress (0.3: clear the two BLOCKERs by configuring the rule)
 
-Units 4 of 6 done.
+Units 5 of 6 done.
 
 - [x] Q1 — `ideas/quality-gate/scripts/ensure-quality-profile.sh`: the fleet's route to the
       profile remedy, shellcheck-clean, `--status` first. It reads `SONAR_TOKEN` into a
@@ -41,24 +41,51 @@ Units 4 of 6 done.
       key, the rule, the projects, and the two real costs), and the "Considered and
       rejected" bullet that used to prescribe `sonar.exclusions=src/stylesheet.css` is
       rewritten to record why the profile beat it.
-- [ ] Q2b — the fresh analysis of `main`. **`gh run rerun` is not available**: the last
-      `main` run predates GitHub's 30-day retry limit, so the merge above is the route, and
-      its analysis is what closes the two issues. Numbers to be read back and recorded here.
-- [ ] Q4b — `baseline.md` annotated with the new reading, `v0.3` tagged, released and
-      install-verified from a clean directory.
+- [x] Q2b — the fresh analysis of `main`, and the numbers. **`gh run rerun` was not
+      available**: the last `main` run predates GitHub's 30-day retry limit and the API
+      refuses it outright, so the merge above was the route — exactly the second path the
+      plan kept in reserve for this. Run
+      [36409112171](https://github.com/gortazar/recap-gs/actions/runs/36409112171) on `main`
+      at `08528f2`: `check`, `package` and `sonar / Analysis` all green.
+- [ ] Q4b — `v0.3` released and install-verified from a clean directory.
 
-**The two BLOCKERs, as `AGENTS.md` requires them to be named** — both open, both
-`css:S4654` ("CSS properties should be valid"), both **false positives about the dialect**:
+**The two BLOCKERs, as `AGENTS.md` requires them to be named** — both were open, both
+`css:S4654` ("CSS properties should be valid"), both **false positives about the dialect**,
+and both now **closed by the rule going inactive**:
 
-| Issue key | Rule | File:line | Message |
-| --- | --- | --- | --- |
-| `AaA5xQ_tVAZt5f74MM8u` | `css:S4654` | `src/stylesheet.css:5` | Unknown property "spacing" |
-| `AaA5xQ_tVAZt5f74MM8v` | `css:S4654` | `src/stylesheet.css:13` | Unknown property "spacing" |
+| Issue key | Rule | File:line | Message | Now |
+| --- | --- | --- | --- | --- |
+| `AaA5xQ_tVAZt5f74MM8u` | `css:S4654` | `src/stylesheet.css:5` | Unknown property "spacing" | `CLOSED` / `REMOVED` |
+| `AaA5xQ_tVAZt5f74MM8v` | `css:S4654` | `src/stylesheet.css:13` | Unknown property "spacing" | `CLOSED` / `REMOVED` |
 
 `spacing` is a real St property. GNOME Shell stylesheets are St's own dialect, parsed here
 by an analyser that only knows CSS, so the rule is wrong about the whole technology rather
-than about these two lines. **Before**: `bugs=2`, `reliability_rating=5.0` (**E**),
-`code_smells=9`, `ncloc=1874` — read from the public API on 2026-09-28.
+than about these two lines — which is why the remedy was a quality profile and **not** a
+dismissal. That distinction is the one thing here worth being able to check rather than
+believe, and it is: a dismissal leaves `FALSE-POSITIVE` or `WONTFIX` behind, and these read
+`REMOVED`. `api/issues/do_transition` and `api/issues/bulk_change` were never called, and
+`ensure-quality-profile.sh` does not contain them.
+
+**Before and after** (public API, 2026-09-28, [dashboard](https://sonarcloud.io/project/overview?id=gortazar_recap-gs)):
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Open BLOCKER issues | **2** | **0** |
+| Bugs | **2** | **0** |
+| Reliability rating | **E** (5.0) | **A** (1.0) |
+| Security / Maintainability | A / A | A / A |
+| Code smells | 9 | 9 |
+| Lines of code | 1,874 | 1,874 |
+| Quality gate | OK | OK |
+
+**No open BLOCKER remains under either severity model** — checked both ways round, because
+the `bugs` measure alone would not have shown one. Three issues do come back at HIGH impact:
+`javascript:S3735` ("Remove this use of the `void` operator") on `src/extension.js:273`,
+`src/prefs.js:221` and `src/lib/events.js:55`. They are CRITICAL code smells in the old
+model and `MAINTAINABILITY/HIGH` in the new, **not BLOCKER in either**, maintainability is
+still rated A with them counted, and they are inherited code the Clean as You Code gate does
+not judge. Named here so the next session does not have to rediscover them; not fixed,
+because `AGENTS.md` says not to spend an entry paying down old debt.
 
 **Which fleet projects hold CSS**, measured rather than assumed
 (`ncloc_language_distribution`, 2026-09-28):
