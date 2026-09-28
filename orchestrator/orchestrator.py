@@ -621,10 +621,18 @@ class Agent:
     # recomputed at the end: by then the agent has bumped STATUS.md as instructed, and
     # bumping again from that would punish it for following the rule.
     target_version: str = INITIAL_VERSION
+    # The session id this agent was started with, if any. Kept so that a `--resume` the CLI
+    # refuses can be identified and retried without it.
+    resumed_session: str = ""
 
     @property
     def idea_dir(self) -> Path:
         return self.worktree / "ideas" / self.slug
+
+    @property
+    def err_file(self) -> Path:
+        """Where this agent's stderr goes — beside its result JSON, and named for it."""
+        return self.out_file.with_suffix(".err")
 
     def load_result(self) -> dict:
         try:
@@ -1118,11 +1126,26 @@ class Orchestrator:
             parts.append("\n".join(status_file.read_text().splitlines()[-20:]))
         (agent.idea_dir / "CLAUDE.md").write_text("\n".join(parts))
 
-        resume: list[str] = []
         session_file = self.state_dir / "sessions" / f"{slug}.id"
         if session_file.is_file():
-            resume = ["--resume", session_file.read_text().strip()]
+            agent.resumed_session = session_file.read_text().strip()
 
+        self.spawn_agent(agent)
+        return agent
+
+    def spawn_agent(self, agent: Agent, resume: bool = True) -> None:
+        """Start (or restart) one agent's `claude`, capturing its stderr.
+
+        stderr used to be inherited, which is why a CLI that refused to start left no trace
+        anywhere: no result JSON, nothing in the log, and a warning that blamed a kill. It now
+        goes to a file beside the result JSON, which is what `recover_dead_sessions` reads to
+        tell "this conversation is gone" from every other fast exit.
+
+        stderr is opened for *append*, so a respawn adds to the record rather than wiping it:
+        the whole reason the retry happened is in the first run's stderr, and truncating it
+        would destroy the evidence at the moment it became interesting. stdout is truncated,
+        because it holds one JSON document and the retry's is the one that counts.
+        """
         command = [
             "claude", "-p", "Continue implementing this idea per CLAUDE.md.",
             *self.claude_tool_args("build_tools", BUILD_TOOLS_DEFAULT),
@@ -1130,12 +1153,53 @@ class Orchestrator:
             "--permission-mode", "acceptEdits",
             *self.claude_budget_args("max_cycle_cost_usd"),
             "--output-format", "json",
-            *resume,
+            *(["--resume", agent.resumed_session] if resume and agent.resumed_session else []),
         ]
-        agent.process = subprocess.Popen(
-            command, cwd=agent.idea_dir, stdout=agent.out_file.open("w"),
-        )
-        return agent
+        # Closed as soon as the child has them: the parent's copies are not needed, and
+        # leaving them open leaks a descriptor per agent per cycle.
+        with agent.out_file.open("w") as out, agent.err_file.open("a") as err:
+            agent.process = subprocess.Popen(
+                command, cwd=agent.idea_dir, stdout=out, stderr=err,
+            )
+
+    def recover_dead_sessions(self) -> None:
+        """Respawn, once, any agent that refused to start because its session is gone.
+
+        `--resume <id>` against a conversation that no longer exists fails instantly, and
+        nothing ever rewrote the stored id, so the idea failed identically every cycle for
+        ever. The id is provably useless at that point, so it is deleted rather than kept.
+
+        One sleep for the whole set, then `poll()` — never `process.wait(timeout=…)` per
+        agent, which with parallel_agents > 1 multiplies, and a blocking wait in the start
+        path is exactly what the deadline logic exists to avoid. Every failure this looks for
+        is instantaneous by nature: the CLI refuses before it starts any work.
+
+        Deliberately narrow. Only this signature is retried; an agent that died of an
+        exhausted model limit is left alone, because restarting it would burn another five
+        seconds to produce a second identical failure.
+        """
+        candidates = [a for a in self.agents if a.resumed_session and a.process]
+        if not candidates:
+            return
+        time.sleep(self.config.number("early_exit_probe_seconds", 5))
+
+        for agent in candidates:
+            if agent.process.poll() is None or agent.process.returncode == 0:
+                continue
+            try:
+                stderr = agent.err_file.read_text()
+            except OSError:
+                continue
+            if "No conversation found with session ID" not in stderr:
+                continue
+
+            log(f"WARNING: {agent.slug}: stored session {agent.resumed_session} no longer "
+                "exists; starting a fresh conversation.")
+            (self.state_dir / "sessions" / f"{agent.slug}.id").unlink(missing_ok=True)
+            agent.resumed_session = ""  # spawn_agent now has nothing to resume, and this
+            # also takes the agent out of `candidates` for any later pass, so the respawn
+            # can happen at most once per agent per cycle.
+            self.spawn_agent(agent, resume=False)
 
     def wait_for_agents(self) -> None:
         """Poll rather than block: a plain wait would run until the agents finish, which
@@ -1800,6 +1864,10 @@ From the repo root:
             if not self.agents:
                 log("No agent could be started; exiting.")
                 return 0
+            # Before settling in to wait: catch the agents that refused to start at all
+            # because the conversation they were told to resume is gone, and give each one
+            # fresh start. One bounded probe for the whole set.
+            self.recover_dead_sessions()
             self.wait_for_agents()
 
             if self.lock.lost:

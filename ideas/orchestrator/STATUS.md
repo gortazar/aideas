@@ -36,13 +36,21 @@ closes the one item the previous entry left open.
       covers the planning pass too. The merge, worktree removal and branch delete all still
       run, so a resumed agent that hit the limit on its last turn keeps its commits.
       82 tests green.
-- [ ] **U3 — `test_resume_fallback.py`**, stderr capture, the probe pass and the one respawn.
+- [x] **U3 — the dead session id.** Each agent's stderr is captured to `<out>.err` (it was
+      inherited and lost, which is why a CLI that refused to start left no trace at all).
+      `recover_dead_sessions` sleeps once for the whole set (`early_exit_probe_seconds`,
+      default 5, 0.3 in tests), then `poll()`s: an agent that exited non-zero with
+      `No conversation found with session ID` gets its session file deleted and is respawned
+      once without `--resume`. A limit failure is *not* respawned. Two bugs the tests
+      caught: the respawn truncated the stderr that explains it (now opened for append),
+      and every spawn leaked two file descriptors (now closed once the child holds them —
+      the suite runs clean under `-W error::ResourceWarning`). 89 tests green.
 - [ ] **U4 — `test_cycle_outcome.py`**, the failure count, summary line and exit code.
 - [ ] **U5 — `ORCHESTRATOR_VERSION = "1.7"`** and the version-comment entry.
 - [ ] **U6 — `status: done` at 1.7**, suite green under `env -i`, then `check-release.sh`.
 
-Next: U3 — capture each agent's stderr, and recover from a stored session id that no longer
-resolves by respawning once without --resume.
+Next: U4 — count the failures in run(), print one summary line, and exit non-zero when every
+agent failed.
 
 Run the suite from the repo root:
 

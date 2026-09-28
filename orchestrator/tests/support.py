@@ -147,6 +147,9 @@ max_cycle_minutes: unlimited
 allowed_hours: unlimited
 lock_ttl_minutes: 5
 lock_renew_seconds: 30
+# The suite runs on every push and shells out to git constantly, so the one real sleep in
+# the code under test is shrunk rather than waited out. Production leaves this at 5.
+early_exit_probe_seconds: 0.3
 """
 
 
