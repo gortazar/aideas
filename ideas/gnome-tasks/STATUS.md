@@ -59,6 +59,53 @@ Both are committed as re-runnable scripts, and both changed the code:
   the application but `Meta.Window.get_startup_id()` is null, so windows are matched to launches by
   app id and timing — a guess, labelled as one in every log line it produces.
 
+### What CI runs, and what it has already answered
+
+`.github/workflows/ci-gnome-tasks.yml` runs on every push and pull request touching
+`ideas/gnome-tasks/**` or the workflow itself. It has two jobs, both on `ubuntu-latest`:
+
+* **`test` (blocking)** — `nix flake check --print-build-logs`, which is the whole suite: `lint`,
+  `unit`, `dbus`, `bundle`.
+* **`nested-shell-smoke` (`continue-on-error: true`)** — installs `gnome-shell`, boots a nested
+  headless Shell via `tools/nested-shell.sh` with `tools/probe`, and prints a verdict.
+
+As of 2026-09-28 the workflow has run 13 times on this repository (`origin` is
+`git@github.com:gortazar/aideas.git`); the four most recent runs concluded `success`. The newest,
+run **36414701024** (`e1113a8`, 2026-09-28), is the reference below.
+
+**A nested headless GNOME Shell does run on a GitHub runner.** This answers the last open question in
+`plans/01-2026-08-28.md`, and it has been answered in public since **2026-08-06** — the first run
+whose SHA carried the smoke job (run **31112654174**, `4970510a`) already printed it. Every smoke job
+since has printed the same line:
+
+```
+VERDICT: a nested headless GNOME Shell runs on this runner.
+```
+
+The probe record behind that verdict, from run 36414701024, is `gnome-shell 46.0` under a real
+compositor with one 1280×800 virtual monitor:
+
+```json
+{"event":"probe-enabled","t":63410297,"shell_version":"46.0","session_type":null,
+ "n_workspaces":4,"dynamic_workspaces":false,
+ "monitors":[{"index":0,"x":0,"y":0,"width":1280,"height":800,"scale":1,"is_primary":true,"is_builtin":null}]}
+{"event":"display-config","t":63432843,"serial":2,
+ "monitors":[{"connector":"Meta-0","vendor":"MetaVendor","product":"MetaVirtualMonitor","serial":"0x00"}]}
+```
+
+Two cautions that come with reading this:
+
+* **A green run says nothing about the nested Shell.** `continue-on-error: true` makes the run — and
+  the smoke job's own API conclusion — report `success` whatever the verdict step did. Only the
+  printed `VERDICT:` line and the `nested-shell-log` artifact carry the answer. That is why the
+  question could sit open for three weeks with the answer already in the logs.
+* **The runner is not GPU-less, contrary to the job's own comment.** `ls -l /dev/dri` prints
+  `crw-rw---- 1 root video 226, 1 … card1` on all four runs checked (2026-08-06, both 2026-08-09 runs,
+  2026-08-28) and again on 2026-09-28. So the verdict is "a nested Shell boots on `ubuntu-latest`",
+  *not* "Mutter falls back to software rendering successfully" — the local attempts to approximate a
+  GPU-less runner were chasing a condition that does not hold there. The comment above the job in the
+  workflow still asserts it does; correcting that comment is code, not this entry.
+
 ## What is built but not verified
 
 Stated plainly, because "done" should not imply more than was actually checked:
@@ -70,12 +117,6 @@ Stated plainly, because "done" should not imply more than was actually checked:
 * **Nobody has installed this into a real session.** `make install` plus a log out and back in needs
   the machine's owner; Wayland cannot reload the Shell in place. Everything here was exercised in a
   nested session instead.
-* **Whether GitHub runners can run a nested headless Shell is still unknown.** This checkout's
-  `origin` is a local bare repo, so `.github/workflows/ci-gnome-tasks.yml` has never run; its
-  `nested-shell-smoke` job is written, non-blocking, and will answer the question the first time this
-  lands on a GitHub remote. Two attempts to approximate a GPU-less runner locally failed
-  (`LIBGL_ALWAYS_SOFTWARE` does not stop Mutter opening `/dev/dri`, Mutter 46 has no
-  force-software-rendering switch, and hiding `/dev/dri` needs a user namespace this sandbox forbids).
 * **Connector names across a real replug.** Layouts are remapped by connector name and the nested
   session has one virtual monitor, so the remapping arithmetic is unit-tested but the *stability* of
   the key is not.
