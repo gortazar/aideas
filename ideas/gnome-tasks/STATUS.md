@@ -40,9 +40,15 @@ All twelve features in the original plan, each with tests:
 | Preferences UI | `src/prefs/` — tasks, icons, shortcuts, policies, remembered windows, commands, capture, exclusions |
 | Public D-Bus API | `org.gnome.Tasks`, echoing `org.kde.ActivityManager` |
 | Documented GNOME research | `docs/gnome-internals.md`, `kde-activities.md`, `state-schema.md`, `app-adapters.md`, `limitations.md` (+ `testing.md`) |
-| Reproducible environment + green CI | `flake.nix`: lint, unit, dbus, bundle — all green |
+| Reproducible environment + green CI | `flake.nix`: lint, unit, dbus, bundle — all four green, last measured 2026-09-28 (below) |
 
-**Tests: 151 unit + 56 D-Bus, plus lint and a bundle check, all green under `nix flake check`.** The
+**Tests: 151 unit + 56 D-Bus, plus lint and a bundle check, all green under `nix flake check`.**
+Re-measured for this entry rather than carried over: CI run **36414701024** (2026-09-28) built the
+checks uncached and printed `151 passed, 0 failed, 151 total` for `gnome-tasks-unit` and
+`56 passed, 0 failed, 56 total` for `gnome-tasks-dbus`. A local
+`git add -A && nix flake check --print-build-logs` in the same session exited 0 over all four checks
+(`lint`, `unit`, `dbus`, `bundle`), from cache, so it corroborates green but not the counts. The
+counts had not moved since 0.1. The
 D-Bus suite runs a real daemon against a fake compositor, a fake systemd and the real
 native-messaging host, so capture, restore, policies, commands and tier-2 are covered without
 needing a desktop.
