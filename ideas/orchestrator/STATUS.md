@@ -27,14 +27,22 @@ closes the one item the previous entry left open.
       `PATH` restored. `agent_failure()` lands with its six classifier tests green.
       **Committed red on purpose:** 5 `finalize`/`record_usage` cases fail, which is U2's
       specification. 82 tests, 5 failing.
-- [ ] **U2 — `agent_failure` wired into `finalize`, `note_agent_failure`, `record_usage`.**
+- [x] **U2 — `agent_failure` wired in.** `finalize` returns early on a failed result: no
+      `rewrite_status`, so `status:`, `started_at`, `version` and the staleness clock are
+      all untouched. It logs the model's own sentence and the consequence
+      (`status left at not_started — nothing was built this cycle`), and
+      `note_agent_failure` inserts a `— failed: <reason>` line under `## Log` in the shape
+      `LOG_ENTRY_RE` matches. `record_usage` writes `<phase>-failed` and the reason, which
+      covers the planning pass too. The merge, worktree removal and branch delete all still
+      run, so a resumed agent that hit the limit on its last turn keeps its commits.
+      82 tests green.
 - [ ] **U3 — `test_resume_fallback.py`**, stderr capture, the probe pass and the one respawn.
 - [ ] **U4 — `test_cycle_outcome.py`**, the failure count, summary line and exit code.
 - [ ] **U5 — `ORCHESTRATOR_VERSION = "1.7"`** and the version-comment entry.
 - [ ] **U6 — `status: done` at 1.7**, suite green under `env -i`, then `check-release.sh`.
 
-Next: U2 — leave a failed idea's status alone, record the failure where the next agent reads
-it, and stop printing a confident $0.
+Next: U3 — capture each agent's stderr, and recover from a stored session id that no longer
+resolves by respawning once without --resume.
 
 Run the suite from the repo root:
 

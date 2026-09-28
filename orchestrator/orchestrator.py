@@ -832,8 +832,17 @@ class Orchestrator:
         cost = float(result.get("total_cost_usd", 0) or 0)
         turns = result.get("num_turns", 0)
         denials = len(result.get("permission_denials") or [])
+        # A failed run's $0.0000 is true and useless: it reads exactly like a short honest
+        # cycle. Mark the row so the ledger can tell "cheap" from "refused", and say why —
+        # this catches the planning pass too, which otherwise commits an idea with no
+        # PLAN.md and reports nothing at all.
+        failure = agent_failure(result)
+        phase_recorded = f"{phase}-failed" if failure else phase
         with self.usage_log.open("a") as fh:
-            fh.write(f"{today},{cost},{agent.slug},{phase},{turns}\n")
+            fh.write(f"{today},{cost},{agent.slug},{phase_recorded},{turns}\n")
+        if failure:
+            log(f"WARNING: {phase}/{agent.slug} failed after {turns} turn(s): {failure}")
+            return
         log(f"{phase}/{agent.slug}: ${cost:.4f}, {turns} turns, {denials} permission denials.")
         if denials:
             # Denials mean Claude tried a tool --allowed-tools didn't cover: it silently
@@ -1594,6 +1603,34 @@ From the repo root:
                             f"\n\n<!-- orchestrator: no v{version} release in {repo} when "
                             f"this entry was retired. -->\n")
 
+    def note_agent_failure(self, slug: str, reason: str) -> None:
+        """Record a failed run in the idea's STATUS.md log, where the next agent will read it.
+
+        Written in the shape LOG_ENTRY_RE matches, so next cycle's rewrite_status re-gathers
+        it with the other log lines instead of stranding it at the bottom of the file — and so
+        it stays inside the last 20 lines, which is the slice start_agent puts into the next
+        agent's CLAUDE.md. Same mechanism as 1.6's sweep-branch notice, for the same reason: a
+        WARNING in the journal of a cycle that ran at 03:00 is not a report anybody reads.
+
+        The reason is folded to one line: it goes into a line-oriented log, and the model's
+        sentence is occasionally wrapped.
+        """
+        status_file = self.repo / "ideas" / slug / "STATUS.md"
+        if not status_file.is_file():
+            return
+        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        folded = " ".join(str(reason).split())
+        entry = f"- {now} — failed: {folded}"
+
+        lines = status_file.read_text().splitlines()
+        for index, line in enumerate(lines):
+            if line.startswith("## Log"):
+                lines.insert(index + 1, entry)
+                break
+        else:
+            lines += ["", "## Log", entry]
+        status_file.write_text("\n".join(lines).rstrip("\n") + "\n")
+
     def finalize(self, agent: Agent) -> None:
         slug = agent.slug
         result = agent.load_result()
@@ -1632,6 +1669,25 @@ From the repo root:
         self.sync_submodule_checkouts(slug)
         git("worktree", "remove", "--force", str(agent.worktree), cwd=self.repo)
         git("branch", "-d", f"agent/{slug}", "--quiet", cwd=self.repo)
+
+        # The agent wrote a result and the result says it failed — an exhausted model limit,
+        # most often. Nothing was built, so say so and leave the idea exactly as it was:
+        # writing `in_progress` here is not just misleading, it sets `started_at` and starts
+        # the stale_idea_after_hours clock that pick_ideas deprioritises on, so a run of
+        # these could push a never-started idea into the stalled bucket without one turn
+        # having been taken. Everything above this line still ran: the work an agent had
+        # already committed is merged, and its worktree is cleaned up.
+        failure = agent_failure(result)
+        if failure:
+            current = status_value(self.repo / "ideas" / slug / "STATUS.md", "status") \
+                or "not_started"
+            log(f"WARNING: {slug}: the agent failed after "
+                f"{result.get('num_turns', 0)} turn(s): {failure}")
+            log(f"WARNING: {slug}: status left at {current} — nothing was built this cycle.")
+            self.note_agent_failure(slug, failure)
+            self.sweep_repo(f"{slug}: agent failed ({failure[:60]})")
+            self.record_usage(agent, "build")
+            return
 
         # pick_ideas only selects ideas with zero unanswered questions, so any unticked
         # checkbox now can only have been appended by the run that just finished.
