@@ -74,11 +74,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1789490618,
-        "narHash": "sha256-mlUnmkqrTurrOxs2WIxypDCVeFOg2O0sC7Yu68CaPkA=",
+        "lastModified": 1790590971,
+        "narHash": "sha256-IoLNL6GsWel68L7PQDZG+fQ8THA7R+0PtAm2b6MpZp0=",
         "owner": "gortazar",
         "repo": "gnome-shell-pwgen",
-        "rev": "db1fbe5a5eff8a401fb29c02d4c8ff445fdfa4fd",
+        "rev": "dd8d83b04da9caee95f4c5230b7609a312d317d3",
         "type": "github"
       },
       "original": {
