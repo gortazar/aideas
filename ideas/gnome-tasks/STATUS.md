@@ -1,5 +1,5 @@
-status: not_started
-version: 0.1
+status: done
+version: 0.2
 started_at: 2026-08-05T13:26:54+02:00
 last_session_id: 58e4e9b2-48c5-4ddf-bb7a-4bce8e161845
 last_run: 2026-08-09T13:03:02+02:00
@@ -15,9 +15,25 @@ last_cycle_cost_usd: 13.001496000000001
 - 2026-08-06T01:22:09+02:00 — in_progress ($10.616743999999999)
 - 2026-08-05T13:26:54+02:00 — in_progress ($13.361972999999997)
 
+## 0.2 — what this entry changed
+
+**No code.** 0.2 corrected the record. `STATUS.md` claimed this checkout's `origin` was a local bare
+repo and that `.github/workflows/ci-gnome-tasks.yml` had never run; both halves were false, and the
+sentence was load-bearing — it was the stated reason the nested-Shell runner question was open. The
+answer had been sitting in public CI logs since 2026-08-06. This entry went and read it, wrote down
+what it says, and audited the rest of the file for the same class of error. What "done" covers for
+0.2: the CI section below, the `docs/testing.md` correction, re-attributed test counts, the
+no-upstream deviation, and the found-elsewhere table. **No release**, for the reason in
+*This idea has no repository of its own*.
+
+The `status:` header read `not_started` while this entry was queued, which was correct — the
+orchestrator rewrites it per entry, and it was never a bug in the 0.1 record. It is set to `done`
+here because the 0.2 work is finished.
+
 Difficulty estimate for the 0.1 build: **hard**, as its plan said — four programs, a platform that
 hides the information the idea needs, and a long tail of per-app work. Every feature in that plan is
-built, tested and green. (0.2, the documentation correction below, was **easy**.)
+built, tested and green. **0.2 was easy**, as its plan said: one file to rewrite, no code, and the
+work was reading evidence rather than producing it.
 
 Throughout this file, *the original plan* means [`plans/01-2026-08-28.md`](plans/01-2026-08-28.md),
 which is where the twelve features live. `PLAN.md` is whatever entry is currently being worked on and
@@ -48,8 +64,9 @@ checks uncached and printed `151 passed, 0 failed, 151 total` for `gnome-tasks-u
 `56 passed, 0 failed, 56 total` for `gnome-tasks-dbus`. A local
 `git add -A && nix flake check --print-build-logs` in the same session exited 0 over all four checks
 (`lint`, `unit`, `dbus`, `bundle`), from cache, so it corroborates green but not the counts. The
-counts had not moved since 0.1. The
-D-Bus suite runs a real daemon against a fake compositor, a fake systemd and the real
+counts had not moved since 0.1.
+
+The D-Bus suite runs a real daemon against a fake compositor, a fake systemd and the real
 native-messaging host, so capture, restore, policies, commands and tier-2 are covered without
 needing a desktop.
 
@@ -84,7 +101,9 @@ As of 2026-09-28 the workflow has run 13 times on this repository (`origin` is
 run **36414701024** (`e1113a8`, 2026-09-28), is the reference below.
 
 **A nested headless GNOME Shell does run on a GitHub runner.** This answers the last open question in
-`plans/01-2026-08-28.md`, and it has been answered in public since **2026-08-06** — the first run
+`plans/01-2026-08-28.md:204` — *"Can CI run a nested headless Gnome Shell on the available GitHub
+runners?"*, which the user answered *"I don't know what github runners can do. You might need to
+discover it for yourself."* It has been discoverable in public since **2026-08-06** — the first run
 whose SHA carried the smoke job (run **31112654174**, `4970510a`) already printed it. Every smoke job
 since has printed the same line:
 
@@ -178,6 +197,31 @@ though it were the repository. Where else it was found, and what was done:
 | `ideas/gnome-tasks/docs/testing.md:27` — "On GitHub runners: not yet known" | **fixed** in this entry; it was the same claim one file over, and leaving it would have contradicted the correction above |
 | `ideas/pwgen/STATUS.md:107-108` | **already fixed** under pwgen's own entry, which now quotes the old sentence as something it corrected. Nothing outstanding, and out of bounds for this entry regardless |
 | `ideas/gnome-tasks/PLAN.md:11-12`, `CLAUDE.md:363-364` | **left alone**: these *quote* the false sentence in order to describe the correction. `CLAUDE.md` is regenerated and must not be edited at all |
+
+## Where each claim above comes from
+
+0.2 has no tests to run, so "verified" means every assertion has a source. Anything measured on a
+machine on a day is dated; anything unpaired was cut or rewritten as an explicit unknown.
+
+| Claim | Source |
+| --- | --- |
+| `origin` is `git@github.com:gortazar/aideas.git` | `git remote -v`, 2026-09-28 |
+| The workflow has run 13 times; four most recent are `success` | `gh run list --workflow=ci-gnome-tasks.yml --limit 30` |
+| Per-job conclusions | `gh run view <id> --json jobs` |
+| The `VERDICT:` line, on every smoke run | `gh run view <run> --job <job> --log`, runs 31112654174, 31309991357, 31342738093, 33152614983, 36414701024 |
+| The smoke job first appears at `4970510` (2026-08-06) | `git show <sha>:.github/workflows/ci-gnome-tasks.yml` over all 13 run SHAs |
+| The `probe-enabled` / `display-config` records, connector `Meta-0` | `gh run download 36414701024 -n nested-shell-log` |
+| `Created surfaceless renderer without GPU` | the same artifact, `gtn/shell.log` |
+| `/dev/dri/card1` exists on the runner | the "Report what we are running on" step, all five runs above |
+| 151 unit + 56 D-Bus, 0 failed | CI run 36414701024 build log, 2026-09-28 |
+| All four flake checks green | local `git add -A && nix flake check --print-build-logs`, exit 0, 2026-09-28 |
+| `pwgen/STATUS.md` is already corrected | read at `ideas/pwgen/STATUS.md:107-108` |
+| The question this answers is the plan's last | `plans/01-2026-08-28.md:204`, nine questions at lines 196-204 |
+
+Unchanged and *not* re-verified this session, by decision: `make smoke`'s eleven checks and the two
+experiments. Those are claims about 2026-08-09 on a development machine and are labelled as such; a
+nested-Shell run from this session would have been a long blocking wait and would not have made the
+corrected sentence any truer.
 
 ## If this is picked up again
 
