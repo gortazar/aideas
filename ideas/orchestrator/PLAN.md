@@ -182,20 +182,23 @@ One commit per unit; the tests for each behaviour land with or before the behavi
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **Should a cycle in which every agent failed exit non-zero?** The plan assumes **yes** — it
+- [x] **Should a cycle in which every agent failed exit non-zero?** The plan assumes **yes** — it
       is the only signal that reaches someone who is not reading the journal, and "a hard stop
       looks like quiet non-progress" is the whole complaint. The cost is that a multi-hour model
       limit leaves a trail of failed timer runs in `systemctl --failed`, which some would call
       noise. Say if you would rather it stayed 0 and relied on the WARNING line alone.
-- [ ] **Should a model-limit failure stop the timer from retrying every five minutes?** The entry
+      ANSWERED: **yes**, default accepted. A cycle in which every agent failed exits non-zero. The failed timer runs in `systemctl --failed` are the signal, not noise — that is the whole point of the entry.
+- [x] **Should a model-limit failure stop the timer from retrying every five minutes?** The entry
       asks only that it be reported, and the plan does only that: the next cycle tries again and
       fails again, now loudly. The alternative is a backoff — write the stop file, or record a
       "not before <time>" marker that `cycle_preflight` honours, so an exhausted account is not
       retried twelve times an hour. That is a behaviour change beyond reporting, so it is left
       out; say if you want it in this entry rather than a later one.
-- [ ] **When an agent fails, should its stored session id be kept?** The plan keeps it for every
+      ANSWERED: **no backoff in this entry**, default accepted. Report only; the next cycle tries again and fails again, loudly. If the retry noise turns out to matter in practice, propose a backoff as its own entry rather than widening this one.
+- [x] **When an agent fails, should its stored session id be kept?** The plan keeps it for every
       failure except the dead-session one (which deletes it, since it is provably useless), so a
       limit failure resumes the same conversation once the limit lifts and nothing is thrown away.
       The risk is that the id belongs to a conversation that never really started — but the
       dead-session fallback added here now recovers from exactly that, so keeping it is safe.
       Confirm, or say a failed agent should always start fresh.
+      ANSWERED: **keep it**, default accepted. A failed agent keeps its stored session id so a limit failure resumes the same conversation once the limit lifts; only the provably dead session id is deleted.

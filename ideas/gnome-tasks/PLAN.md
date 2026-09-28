@@ -169,14 +169,15 @@ There is no code here, so "tested" means every assertion has a source:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] Does this entry also correct `docs/testing.md`, which says "On GitHub runners: not yet known"
+- [x] Does this entry also correct `docs/testing.md`, which says "On GitHub runners: not yet known"
       and "Until that job has run, window capture/restore is verified by hand"? Ticking this line
       as-is fixes it here: it is the same claim as line 74, inside this same idea, and leaving it
       would have `STATUS.md` and `docs/testing.md` contradicting each other on the file's central
       correction. The alternative reading is literal — the entry names `STATUS.md`, and the
       "say so rather than fixing it" instruction covers every other occurrence, including this one,
       leaving `docs/testing.md` for a follow-up entry.
-- [ ] Does a documentation-only entry on an idea with no repository of its own ship a release?
+      ANSWERED: **yes**, default accepted. Correct `docs/testing.md` in this entry too — leaving it contradicting `STATUS.md` on the file's central correction would be worse than the slightly wider scope.
+- [x] Does a documentation-only entry on an idea with no repository of its own ship a release?
       AGENTS.md says every finished entry ships one, tagged `v<version>` from the idea's own
       repository; this idea has none and must not get one, and 0.1 shipped none either. Ticking this
       line as-is finishes 0.2 with **no release**, recording that reason in `STATUS.md`. The
@@ -184,3 +185,4 @@ There is no code here, so "tested" means every assertion has a source:
       (`gnome-tasks-v0.2`) carrying the packed `.shell-extension.zip` — which means adding a release
       workflow to a repository this idea does not own, and is a bigger change than the entry
       describes.
+      ANSWERED: **no release**, default accepted. Finish 0.2 without one and record that reason in `STATUS.md`. Do not add a release workflow to a repository this idea does not own; that is a bigger change than this entry describes.
