@@ -45,12 +45,20 @@ closes the one item the previous entry left open.
       caught: the respawn truncated the stderr that explains it (now opened for append),
       and every spawn leaked two file descriptors (now closed once the child holds them —
       the suite runs clean under `-W error::ResourceWarning`). 89 tests green.
-- [ ] **U4 — `test_cycle_outcome.py`**, the failure count, summary line and exit code.
+- [x] **U4 — the cycle's own verdict.** `cycle_exit_code()` returns 1 when every agent
+      failed, with one summary line naming the distinct reasons; 0 with a WARNING when some
+      failed and some worked, because real work landed; 0 and silence otherwise. An agent
+      with no result JSON is not counted — that is the killed-agent case, which has its own
+      report. Verified that both orchestrator units are `Type=oneshot` with no `Restart=`,
+      so a failed cycle marks the unit failed without looping (the `Restart=always` in
+      install.sh belongs to the heartbeat server). **Incidental fix found by the stub:** a
+      config with no `max_cycle_cost_usd` passed `--max-budget-usd ''`, which the CLI
+      rejects, so every agent died before starting — the same invisible failure this entry
+      is about. An absent limit now means no flag. 102 tests green.
 - [ ] **U5 — `ORCHESTRATOR_VERSION = "1.7"`** and the version-comment entry.
 - [ ] **U6 — `status: done` at 1.7**, suite green under `env -i`, then `check-release.sh`.
 
-Next: U4 — count the failures in run(), print one summary line, and exit non-zero when every
-agent failed.
+Next: U5 — ORCHESTRATOR_VERSION = "1.7" and its one-line entry in the version comment.
 
 Run the suite from the repo root:
 

@@ -932,8 +932,18 @@ class Orchestrator:
         return ["--model", model] if model else []
 
     def claude_budget_args(self, key: str) -> list[str]:
-        value = self.config.get(key, "")
-        return [] if is_unlimited(value) else ["--max-budget-usd", value]
+        """`--max-budget-usd` when the config sets one, and nothing when it does not.
+
+        A *missing* key used to produce `--max-budget-usd ''`, which the CLI rejects outright:
+
+            error: option '--max-budget-usd <amount>' argument '' is invalid.
+
+        Every agent then died before doing anything, which under 1.6 looked like a quiet
+        cycle — the same class of invisible failure this version exists to end. An absent
+        limit means no flag, exactly as "unlimited" does.
+        """
+        value = self.config.get(key, "").strip()
+        return [] if not value or is_unlimited(value) else ["--max-budget-usd", value]
 
     def claude_tool_args(self, key: str, default: str) -> list[str]:
         """Both flags, because they do different jobs.
@@ -1667,6 +1677,33 @@ From the repo root:
                             f"\n\n<!-- orchestrator: no v{version} release in {repo} when "
                             f"this entry was retired. -->\n")
 
+    def cycle_exit_code(self) -> int:
+        """0 if the cycle achieved something, non-zero if every agent failed.
+
+        `run()` used to return 0 unconditionally, so a cycle in which both agents died in five
+        seconds exited green and systemd recorded a clean run. The exit code is the only
+        signal that reaches somebody who is not reading the journal: a failed timer run shows
+        up in `systemctl --failed` and is marked in the journal, which is the entire point —
+        a hard stop should not look like a quiet lack of progress.
+
+        Some failed and some worked is still a success: real work landed, and failing the
+        unit would misreport that. An agent with no result JSON at all is not counted here;
+        that is a different failure with its own louder report, and conflating the two would
+        make "the agent was killed" indistinguishable from "the model refused".
+        """
+        failures = [(a.slug, agent_failure(a.result)) for a in self.agents]
+        failures = [(slug, reason) for slug, reason in failures if reason]
+        if not failures or not self.agents:
+            return 0
+
+        reasons = "; ".join(sorted({reason for _slug, reason in failures}))
+        if len(failures) == len(self.agents):
+            log(f"WARNING: cycle failed: all {len(self.agents)} agent(s) failed ({reasons}).")
+            return 1
+        log(f"WARNING: cycle partly failed: {len(failures)} of {len(self.agents)} "
+            f"agent(s) failed ({reasons}). The rest of the cycle's work did land.")
+        return 0
+
     def note_agent_failure(self, slug: str, reason: str) -> None:
         """Record a failed run in the idea's STATUS.md log, where the next agent will read it.
 
@@ -1879,7 +1916,7 @@ From the repo root:
 
             for agent in self.agents:
                 self.finalize(agent)
-            return 0
+            return self.cycle_exit_code()
         finally:
             self.push_if_ahead()
             self.lock.release()
