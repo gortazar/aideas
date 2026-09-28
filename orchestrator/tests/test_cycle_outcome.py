@@ -144,7 +144,13 @@ class RunCleanupTests(support.GitSandbox):
         self.repo = self.project.repo
 
     def runnable_orchestrator(self) -> orch.Orchestrator:
-        """One whose preflight passes: the laptop reports idle instead of unreachable."""
+        """One whose preflight passes: the laptop reports idle instead of unreachable.
+
+        Also stubs `claude`. No test may invoke the real CLI — it costs money, it is absent
+        on CI, and a suite that passes only because a developer happens to have it installed
+        is asserting on the sandbox.
+        """
+        self.stub_claude("exit 0")
         orchestrator = self.orchestrator(self.repo)
         orchestrator.heartbeat_over_http = lambda: (orch.HEARTBEAT_IDLE, "idle in the test")
         return orchestrator
@@ -154,11 +160,12 @@ class RunCleanupTests(support.GitSandbox):
         pushed: list[str] = []
         orchestrator.push_if_ahead = lambda context="", attempts=3: pushed.append(context)
 
-        # Nothing is buildable: the one idea is done. run() takes an early return from inside
-        # the try, which is the path that must still clean up.
-        support.write(self.repo / "ideas" / "demo" / "STATUS.md",
-                      "status: done\nversion: 0.1\n\n## Log\n")
-        support.commit_all(self.repo, "done")
+        # Nothing is buildable: the idea has an unanswered question. Deliberately not "done
+        # with a queued entry", which is a state that makes run() archive PLAN.md and draft a
+        # new one — a legitimate thing for it to do, and not the path under test here.
+        support.write(self.repo / "ideas" / "demo" / "PLAN.md",
+                      "# Plan\n\n## Open Questions\n\n- [ ] something genuinely ambiguous\n")
+        support.commit_all(self.repo, "a blocking question")
 
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -172,6 +179,7 @@ class RunCleanupTests(support.GitSandbox):
 
     def test_a_refused_preflight_neither_pushes_nor_takes_the_lock(self) -> None:
         """The cycle never started, so there is nothing to push and no lock to release."""
+        self.stub_claude("exit 0")
         orchestrator = self.orchestrator(self.repo)
         pushed: list[str] = []
         orchestrator.push_if_ahead = lambda context="", attempts=3: pushed.append(context)

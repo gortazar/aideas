@@ -1,4 +1,4 @@
-status: not_started
+status: done
 version: 1.7
 started_at: 2026-09-15T18:39:34+02:00
 last_session_id: c42e4c48-8bfe-49f0-accb-f4d4d5588837
@@ -59,11 +59,65 @@ closes the one item the previous entry left open.
       and `version: 1.7` here. `scripts/check-version.sh` confirms the two agree; neither
       it nor `check-release.sh` needed editing, since both read the version rather than
       hardcoding it.
-- [ ] **U6 — `status: done` at 1.7**, suite green under `env -i`, then `check-release.sh`.
-
-Next: U6 — status: done at 1.7, the suite green under env -i and a comma-decimal locale,
-then check-release.sh once the release workflow has fired.
+- [x] **U6 — `status: done` at 1.7.** 102 tests green four ways: normally, under `env -i`
+      with `LC_ALL=C`, `HOME=/nonexistent`, an antipodean `TZ` and **no `claude` on `PATH`**,
+      under a comma-decimal locale, and under `-W error::ResourceWarning`. The clean-
+      environment run caught a real defect in this entry's own tests: one of them reached a
+      state where `run()` legitimately archives `PLAN.md` and drafts a new one, so it invoked
+      the **real** `claude`. It passed here and would have failed on CI, which has none
+      installed. Every test that calls `run()` now stubs the CLI.
 
 Run the suite from the repo root:
 
     python3 -m unittest discover -s orchestrator/tests -t orchestrator
+
+## What `done` covers
+
+Every feature in this entry's `PLAN.md` is delivered, tested and committed.
+
+- **A failed agent is reported as failed.** `agent_failure()` reads `is_error` first, because
+  in the observed payload it was the only field that was right, and treats a non-`success`
+  subtype as a failure too. `finalize` then leaves the idea's status, `started_at` and
+  version exactly as they were — which matters beyond honesty, since writing `in_progress`
+  started the staleness clock `pick_ideas` deprioritises on.
+- **The failure outlives the cycle.** A `— failed: <reason>` line goes into the idea's
+  STATUS.md log in the shape `LOG_ENTRY_RE` matches, so it survives the next
+  `rewrite_status` and rides into the next agent's briefing.
+- **A dead session id recovers itself.** stderr is captured, one bounded probe finds the
+  agent that refused to start, its useless session id is deleted and it is respawned once
+  without `--resume`. A model-limit failure is deliberately not respawned.
+- **A cycle where every agent failed exits non-zero**, so it appears in `systemctl --failed`
+  rather than as a clean run. Partial failure stays 0, because real work landed.
+- **Two bugs found while testing, both fixed:** the respawn truncated the stderr that
+  explained it, and a config without `max_cycle_cost_usd` passed `--max-budget-usd ''`, which
+  the CLI rejects outright — killing every agent before it started, silently, under 1.6.
+
+## Not verified from inside this session
+
+**`scripts/check-release.sh` has not been run for 1.7, because the release cannot exist yet.**
+An agent may not push this repository; `release-orchestrator.yml` fires on the push the
+orchestrator makes *after* this cycle, reading the `status: done` above. This is the same
+position 1.6 ended in, and 1.6 published correctly — verified at the start of this session:
+
+    checking gortazar/aideas orchestrator-v1.6 ... PASS: published, verified and installable
+
+**First thing to run next**, and the recovery if it reports nothing:
+
+    ideas/orchestrator/scripts/check-release.sh
+    gh workflow run release-orchestrator.yml --repo gortazar/aideas -f force=true
+
+CI has likewise never run remotely for this entry, for the same reason. The suite is green
+locally on `/usr/bin/python3` 3.12 with nothing on `PATH` but `/usr/bin` and `/bin`, which is
+a closer approximation of the runner than the developer shell is.
+
+## Follow-ups, deliberately not done here
+
+- **No backoff after a model limit**, per the answered open question: the next cycle tries
+  again and fails again, now loudly. If the retry noise matters in practice it should be its
+  own entry, not a widening of this one.
+- **`planning_pass` still raises `FileNotFoundError` when `claude` is absent**, taking the
+  cycle down with a traceback. That is loud rather than silent, so it is outside this entry's
+  subject, but `claude_missing_reason()` already exists and `cycle_preflight` could use it.
+- The root `sonar-project.properties` still lists `orchestrator` under `sonar.sources`, so
+  `orchestrator/tests/` is analysed as production code. That file is outside this entry's
+  scope and `gortazar/aideas` is ungated, so it cannot block.
