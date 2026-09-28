@@ -5,6 +5,40 @@ last_session_id: 498f8809-49e3-4e71-b8bb-3905366ad588
 last_run: 2026-09-15T20:13:40+02:00
 last_cycle_cost_usd: 4.7124939999999995
 
+## No SonarQube Cloud analysis: Lua is not supported
+
+**This idea has no Sonar project, no badge and no `sonar / Analysis` check, deliberately.**
+SonarQube Cloud does not analyse Lua, and the extension is a Lua pandoc filter —
+`_extensions/title-slides/title-slides.lua` and `setext.lua` are the whole of it. `AGENTS.md`
+makes an unsupported language a reason to skip this deliverable and say so here, "not a
+reason to invent a substitute linter and call it the same thing", so there is no luacheck or
+selene standing in for it either.
+
+The fleet-wide record lives in the quality-gate idea, and is the evidence for this rather
+than something restated here:
+
+- `ideas/quality-gate/baseline.md`, `## Out of scope` → `### title-slides — Lua`.
+- `ideas/quality-gate/STATUS.md`, the check-context table: `` `title-slides` | `test` — no
+  Sonar project, because Lua ``.
+
+**The consequence that looks like a defect but is not:** this repository's branch ruleset
+requires exactly one status check, `test`, where every other idea repository also requires a
+Sonar check. Verified against the live ruleset rather than copied from another idea's prose —
+`main protected`, enforcement `active`, `bypass_actors: []`, with `pull_request` and
+`required_status_checks: [{context: test}]`. A pull request is still required and still
+cannot be bypassed; there is simply no second check to wait for.
+
+**When this stops applying:** if SonarQube Cloud adds Lua, wiring this repository up is the
+ordinary three commands from `AGENTS.md` — `scripts/set-repo-secret.sh title-slides
+SONAR_TOKEN`, `ideas/quality-gate/scripts/ensure-sonar-project.sh title-slides`, then
+`ideas/quality-gate/scripts/ensure-branch-ruleset.sh title-slides test '<sonar context>'`,
+reading the context off a live pull request first. Until then the exemption holds.
+
+**On the timing**, since it is the first thing a reader will ask: the rule was already in
+force when it was missed. The quality-gate entries that wrote it into `AGENTS.md` are dated
+2026-08-25 and 2026-08-26, and 0.5 shipped on 2026-08-25. This is a real gap closed in 0.6,
+not a rule applied backwards.
+
 ## Log
 
 ### 2026-09-28 — 0.6, U0: pin, baseline, and both gaps checked against the tree
