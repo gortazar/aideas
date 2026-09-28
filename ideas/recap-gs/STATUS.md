@@ -17,7 +17,7 @@ last_cycle_cost_usd: 0.0
 
 ### 2026-09-28 — in_progress (0.3: clear the two BLOCKERs by configuring the rule)
 
-Units 1 of 4 done.
+Units 4 of 6 done.
 
 - [x] Q1 — `ideas/quality-gate/scripts/ensure-quality-profile.sh`: the fleet's route to the
       profile remedy, shellcheck-clean, `--status` first. It reads `SONAR_TOKEN` into a
@@ -25,12 +25,27 @@ Units 1 of 4 done.
       refuses to modify a profile that is `isDefault`, and calls neither
       `api/issues/do_transition` nor `api/issues/bulk_change` — a comment at the top says so
       and why.
-- [ ] Q2 — copy, deactivate `css:S4654`, assign to `gortazar_recap-gs`, force a fresh
-      analysis, read the numbers back.
-- [ ] Q3 — `exclusions.md` (new Quality profiles section, rewritten rejection note) and
-      `baseline.md` annotation.
-- [ ] Q4 — the upstream stylesheet comment through a pull request, merge, pin, `v0.3`
-      released and install-verified.
+- [x] Q2a — the profile applied. `Sonar way` (`AYFtO8KbS-wEfpJs_r1u`) copied to **`GNOME
+      Shell (St) stylesheets`** (`AaDnhCxzfwKCO0PchjQs`), `css:S4654` deactivated in the
+      copy, `gortazar_recap-gs` assigned to it. Re-running `--status` reports the profile
+      existing, the rule inactive and the project assigned — so it is idempotent, and the
+      assignment is read back rather than inferred from an exit status.
+- [x] Q4a — the upstream record, [PR #1](https://github.com/gortazar/recap-gs/pull/1),
+      **merged** as [`08528f2`](https://github.com/gortazar/recap-gs/commit/08528f2): a
+      comment at the top of `src/stylesheet.css`, a README section naming the rule and the
+      cost of the opt-out, and a hygiene test guarding both the two `spacing` declarations
+      and the note itself. All three checks green on the pull request, `sonar / Analysis`
+      among them. Submodule pointer and `recap-gs-src` flake input both bumped to it;
+      `scripts/check-pin.sh` agrees.
+- [x] Q3 — `exclusions.md` gains a **Quality profiles** section (the profile, its source
+      key, the rule, the projects, and the two real costs), and the "Considered and
+      rejected" bullet that used to prescribe `sonar.exclusions=src/stylesheet.css` is
+      rewritten to record why the profile beat it.
+- [ ] Q2b — the fresh analysis of `main`. **`gh run rerun` is not available**: the last
+      `main` run predates GitHub's 30-day retry limit, so the merge above is the route, and
+      its analysis is what closes the two issues. Numbers to be read back and recorded here.
+- [ ] Q4b — `baseline.md` annotated with the new reading, `v0.3` tagged, released and
+      install-verified from a clean directory.
 
 **The two BLOCKERs, as `AGENTS.md` requires them to be named** — both open, both
 `css:S4654` ("CSS properties should be valid"), both **false positives about the dialect**:

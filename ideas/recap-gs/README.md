@@ -44,3 +44,26 @@ The extension is pinned twice — as the `upstream/` gitlink and as the `recap-g
 input — so `nix flake check` here tests exactly the commit this idea points at.
 `scripts/check-pin.sh` fails if the two ever drift, which is the one mistake this wrapper
 exists to catch.
+
+## Static analysis, and the rule this idea opts out of
+
+`gortazar_recap-gs` is analysed by
+[SonarQube Cloud](https://sonarcloud.io/project/overview?id=gortazar_recap-gs) on every push
+and pull request, and a red gate blocks the merge.
+
+**Since 0.3, one rule is deactivated for this project: `css:S4654`, "CSS properties should be
+valid".** `upstream/src/stylesheet.css` is not CSS — it is St's dialect, GNOME Shell's own
+toolkit stylesheet language, which Sonar has no analyser for. The CSS analyser stands in and
+reports `spacing`, a real St property, as unknown: two BLOCKER bugs, enough on their own to
+hold a project with no other defect at reliability **E**.
+
+The remedy is a copied quality profile, `GNOME Shell (St) stylesheets`, with that one rule
+off — a configuration change, recorded in a diff, and not a dismissal of the two issues. The
+rest of the stylesheet stays under analysis and every other CSS rule still applies. The cost
+is that this project no longer tracks updates to the built-in CSS profile, and `css:S4654`
+will not catch a genuine property typo here.
+
+It is in the fleet ledger at
+[`ideas/quality-gate/exclusions.md`](../quality-gate/exclusions.md) under **Quality
+profiles**, and re-applied by
+[`ideas/quality-gate/scripts/ensure-quality-profile.sh`](../quality-gate/scripts/ensure-quality-profile.sh).
