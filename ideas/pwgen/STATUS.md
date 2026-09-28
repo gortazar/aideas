@@ -17,28 +17,48 @@ last_cycle_cost_usd: 1.3024194999999998
 
 ## Pin
 
-**Upstream pin:** `57b3bf6a64fd4a8109dbe4e6eae1430545a41aa5`
+**Upstream pin:** `db1fbe5a5eff8a401fb29c02d4c8ff445fdfa4fd`
 
 That is the commit the `upstream/` gitlink and the `pwgen-src` input in `flake.lock` point at,
 and `scripts/check-pin.sh` fails if this line, the gitlink and the lock ever name three
-different things. It is `main` of `gortazar/gnome-shell-pwgen` as of 2026-08-25 ("Analyse
-pwgen in SonarQube Cloud"), one commit after the `870d00e` the previous revision of this file
-named from memory.
+different things. It is the tip of `main` on `gortazar/gnome-shell-pwgen`, the merge of pull
+request [#5](https://github.com/gortazar/gnome-shell-pwgen/pull/5), and it is an ancestor of
+`origin/main` rather than a commit living only on a branch.
 
 ## Current entry: close the five audit gaps (0.1 → 0.2)
 
-Difficulty estimate: medium, as planned. Seven units; upstream work lands through a draft
-pull request on `agent/pwgen/2026-09-15`.
+Difficulty estimate: medium, as planned. Seven units.
 
 | Unit | What it delivers | State |
 | --- | --- | --- |
-| U1 | `STATUS.md` says only what the tree shows; `check-pin.sh` asserts the pin this file names | **done** (this commit) |
-| U2 | `flake.nix` in the extension repository, checks and package under their existing names | next |
-| U3 | wrapper `flake.nix` consumes upstream's flake; pin bumped; `ci-pwgen.yml` green on the remote | — |
-| U4 | `curl`-able `install.sh` upstream; the symlink installer moves to `scripts/install-local.sh` | — |
+| U1 | `STATUS.md` says only what the tree shows; `check-pin.sh` asserts the pin this file names | **done** |
+| U2 | `flake.nix` in the extension repository, checks and package under their existing names | **done**, merged (PR [#4](https://github.com/gortazar/gnome-shell-pwgen/pull/4), PR [#5](https://github.com/gortazar/gnome-shell-pwgen/pull/5)) |
+| U3 | wrapper `flake.nix` consumes upstream's flake; pin bumped to `db1fbe5` | **done** (this commit) |
+| U4 | `curl`-able `install.sh` upstream; the references to the moved local installer follow | next |
 | U5 | `release.yml` upstream (tag push or dispatch, self-tagging), `version-name` in `metadata.json`, `scripts/check-release.sh` here | — |
 | U6 | `v0.2` published by the workflow, verified with `check-release.sh` and a clean-directory install | — |
 | U7 | `version: 0.2`, wrapper `README.md`, pin at merged `main`, `status: done` | — |
+
+### What landed upstream between sessions
+
+The 2026-09-15 cycle ended mid-unit, and the orchestrator's sweep carried the work the rest
+of the way: draft pull request #4 (`flake.nix`, the three review-rule line fixes) was merged,
+and the sweep opened and merged #5 with what was still uncommitted — the rename of
+`install.sh` to `scripts/install-local.sh`. Upstream CI is green on `main` at `db1fbe5`
+(run 34996814981).
+
+That rename landed **without** the rest of U4. `README.md` upstream still tells people to run
+`./install.sh`, which no longer exists, and there is no downloading installer in its place.
+Repairing that is U4, this session's next unit, and until it lands the extension's own README
+is wrong about how to install it.
+
+### U3, verified (2026-09-28)
+
+- `ideas/pwgen/flake.nix` no longer defines checks of its own. It takes `pwgen-src` as a
+  *flake* input and re-exports `checks` and `packages.default` from it, so there is one
+  definition of the checks and it lives beside the code.
+- `nix flake check` here: three checks green at the pinned commit, the suite 33/33.
+- `scripts/check-pin.sh`: gitlink, `flake.lock` and this file all name `db1fbe5`.
 
 **Releases:** none exist yet. `https://api.github.com/repos/gortazar/gnome-shell-pwgen/releases`
 returned an empty list on 2026-09-15, and there are no tags. The open question in `PLAN.md`
