@@ -126,3 +126,23 @@ Kept deliberately, so that nobody re-proposes them as obvious:
   to silence two. The profile leaves the rest under analysis. Do not re-propose the
   exclusion; if the profile ever stops being right, the answer is a narrower rule set in the
   profile, not a blind spot in the sources.
+
+## `gortazar_aideas` — `orchestrator/tests/**` reclassified as test code
+
+**2026-09-28.** Not an exclusion from analysis: a correction of what the files *are*.
+
+`orchestrator/tests/` arrived with 1.6 and sits inside `orchestrator`, which is a
+`sonar.sources` root. A file is either source or test and never both, so naming the
+directory in `sonar.tests` is not enough on its own — it also has to leave the main file
+set, which is what the `sonar.exclusions` entry does. Until then the suite was analysed as
+production code and raised **five BLOCKER `pythonsecurity:S2083` path-traversal findings**
+against helpers that build paths under `tempfile.mkdtemp()`, e.g.
+`orchestrator/tests/support.py:72` and four in `test_repo_lock.py`. Those five took
+`new_security_rating` to E and were the whole reason this project's gate was red.
+
+The remedy is reclassification rather than dismissal, and rather than a blanket exclusion:
+the files stay analysed, under the rules that apply to test code, so a real problem in them
+is still reported. Nothing was marked false positive and no issue's status was touched.
+
+Worth knowing for the next idea with a test suite inside a source root: the same two lines
+are needed, and the symptom is always security findings about fixture paths.
