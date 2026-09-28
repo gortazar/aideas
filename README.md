@@ -71,14 +71,7 @@ makes position a safe identity: the active list only ever holds work still to do
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel. 
 
-3. [gnome-tasks](ideas/gnome-tasks) - `STATUS.md` asserts something untrue about the tree, and `STATUS.md` is the only report anyone reads to judge an idea. Minor update. Line 74
-   says "`origin` is a local bare repo, so `.github/workflows/ci-gnome-tasks.yml` has never run" — that was written on 2026-08-10 from a sandbox clone, but the workflow had already
-   run and passed on `gortazar/aideas` main seven times, including on the day the entry was declared done. Correct it with what CI actually reports, then read the whole file
-   against the tree and fix anything else that describes a checkout rather than the repository. `pwgen`'s `STATUS.md` carries the same false sentence from the same era and is being
-   fixed under its own entry; if you find the claim anywhere else, say so rather than fixing it here. This idea has no upstream repository and must not get one under this entry —
-   moving it is a separate decision, and the audit already established that nothing in its original entry authorised the current arrangement.
-
-4. [orchestrator](ideas/orchestrator) - A failed agent is indistinguishable from an agent that had little to do, so a hard stop looks like quiet non-progress. Minor update, 1.7.
+3. [orchestrator](ideas/orchestrator) - A failed agent is indistinguishable from an agent that had little to do, so a hard stop looks like quiet non-progress. Minor update, 1.7.
    When the account's model limit was exhausted, both agents exited in five seconds and their result JSON said `"subtype": "success"` and `"is_error": true` **together**, with
    `num_turns: 1`, `total_cost_usd: 0` and `"result": "You've reached your Fable limit. Switch to another model to continue."`. `finalize` reads `subtype` and never `is_error`, so it
    recorded $0, wrote `status: in_progress` and moved on; with the timer enabled that repeats every five minutes for as long as the limit lasts, reporting nothing wrong. Read
@@ -274,3 +267,10 @@ makes position a safe identity: the active list only ever holds work still to do
    scripts and `nix flake check`, but never how to build: the words build, package and `nix build` appear nowhere, even though `flake.nix` exposes `packages.default`
    ("title-slides-extension") and `release.yml` ships the zip with `nix build .#default`. Document the build the release actually uses, in the section that already covers
    development.
+
+30. [gnome-tasks](ideas/gnome-tasks) - `STATUS.md` asserts something untrue about the tree, and `STATUS.md` is the only report anyone reads to judge an idea. Minor update. Line 74 (finished 2026-09-28, v0.2)
+   says "`origin` is a local bare repo, so `.github/workflows/ci-gnome-tasks.yml` has never run" — that was written on 2026-08-10 from a sandbox clone, but the workflow had already
+   run and passed on `gortazar/aideas` main seven times, including on the day the entry was declared done. Correct it with what CI actually reports, then read the whole file
+   against the tree and fix anything else that describes a checkout rather than the repository. `pwgen`'s `STATUS.md` carries the same false sentence from the same era and is being
+   fixed under its own entry; if you find the claim anywhere else, say so rather than fixing it here. This idea has no upstream repository and must not get one under this entry —
+   moving it is a separate decision, and the audit already established that nothing in its original entry authorised the current arrangement.
