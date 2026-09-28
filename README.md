@@ -71,21 +71,14 @@ makes position a safe identity: the active list only ever holds work still to do
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel. 
 
-3. [recap-gs](ideas/recap-gs) - Two open BLOCKER issues on `gortazar_recap-gs` are neither fixed nor documented, so v0.2 sits at `status: done` against the rule that BLOCKERs gate
-   done. Minor update. Both are `css:S4654` ("CSS properties should be valid") on `src/stylesheet.css` lines 5 and 13, reporting `Unknown property "spacing"`. `spacing` is a real
-   St property: GNOME Shell stylesheets are St's own dialect, not CSS, so this rule is wrong about the whole technology and will misfire on every GJS project forever — it is the
-   worked example in AGENTS.md under **Issues: fix them, configure around them, never re-label them**. Take the configuration route, not the dismissal one: copy the built-in CSS
-   profile (both built-ins are read-only), deactivate `css:S4654` in the copy, and assign the copy to the affected projects — never the organisation default — then record it in
-   `ideas/quality-gate/exclusions.md`. Do not change any issue's status. When the project is green, say so in this idea's own `STATUS.md`, which today never mentions Sonar at all.
-
-4. [gnome-tasks](ideas/gnome-tasks) - `STATUS.md` asserts something untrue about the tree, and `STATUS.md` is the only report anyone reads to judge an idea. Minor update. Line 74
+3. [gnome-tasks](ideas/gnome-tasks) - `STATUS.md` asserts something untrue about the tree, and `STATUS.md` is the only report anyone reads to judge an idea. Minor update. Line 74
    says "`origin` is a local bare repo, so `.github/workflows/ci-gnome-tasks.yml` has never run" — that was written on 2026-08-10 from a sandbox clone, but the workflow had already
    run and passed on `gortazar/aideas` main seven times, including on the day the entry was declared done. Correct it with what CI actually reports, then read the whole file
    against the tree and fix anything else that describes a checkout rather than the repository. `pwgen`'s `STATUS.md` carries the same false sentence from the same era and is being
    fixed under its own entry; if you find the claim anywhere else, say so rather than fixing it here. This idea has no upstream repository and must not get one under this entry —
    moving it is a separate decision, and the audit already established that nothing in its original entry authorised the current arrangement.
 
-5. [title-slides](ideas/title-slides) - Two documentation gaps a fleet audit confirmed, neither of which affects the code. Minor update. (1) `ideas/title-slides/STATUS.md` never
+4. [title-slides](ideas/title-slides) - Two documentation gaps a fleet audit confirmed, neither of which affects the code. Minor update. (1) `ideas/title-slides/STATUS.md` never
    mentions Sonar or the Lua exemption at all: AGENTS.md says an unsupported language is a reason to skip the analysis **and say so in `STATUS.md`**, and the exemption is currently
    recorded only in another idea's files (`ideas/quality-gate/STATUS.md` and `baseline.md`). Record it where the rule asks for it, naming Lua as the reason. The rule is
    contemporaneous with this idea's last entry, so this is a real omission rather than a rule applied backwards. (2) The upstream README documents `nix develop`, the five test
@@ -93,7 +86,7 @@ makes position a safe identity: the active list only ever holds work still to do
    ("title-slides-extension") and `release.yml` ships the zip with `nix build .#default`. Document the build the release actually uses, in the section that already covers
    development.
 
-6. [orchestrator](ideas/orchestrator) - A failed agent is indistinguishable from an agent that had little to do, so a hard stop looks like quiet non-progress. Minor update, 1.7.
+5. [orchestrator](ideas/orchestrator) - A failed agent is indistinguishable from an agent that had little to do, so a hard stop looks like quiet non-progress. Minor update, 1.7.
    When the account's model limit was exhausted, both agents exited in five seconds and their result JSON said `"subtype": "success"` and `"is_error": true` **together**, with
    `num_turns: 1`, `total_cost_usd: 0` and `"result": "You've reached your Fable limit. Switch to another model to continue."`. `finalize` reads `subtype` and never `is_error`, so it
    recorded $0, wrote `status: in_progress` and moved on; with the timer enabled that repeats every five minutes for as long as the limit lasts, reporting nothing wrong. Read
@@ -274,3 +267,10 @@ makes position a safe identity: the active list only ever holds work still to do
    main is at `870d00e` and pinned twice; the gitlink and `flake.lock` have both been at `57b3bf6` since 2026-08-25. (5) `STATUS.md` claims "`ci-pwgen.yml` has never run on GitHub.
    It cannot here: this repository's `origin` is a local bare repo in the sandbox" — origin is `github.com:gortazar/aideas` and the workflow has run at least five times. Both of
    those sentences are false about the tree; correct them and check nothing else in that file asserts something it cannot show.
+
+28. [recap-gs](ideas/recap-gs) - Two open BLOCKER issues on `gortazar_recap-gs` are neither fixed nor documented, so v0.2 sits at `status: done` against the rule that BLOCKERs gate (finished 2026-09-28, v0.3)
+   done. Minor update. Both are `css:S4654` ("CSS properties should be valid") on `src/stylesheet.css` lines 5 and 13, reporting `Unknown property "spacing"`. `spacing` is a real
+   St property: GNOME Shell stylesheets are St's own dialect, not CSS, so this rule is wrong about the whole technology and will misfire on every GJS project forever — it is the
+   worked example in AGENTS.md under **Issues: fix them, configure around them, never re-label them**. Take the configuration route, not the dismissal one: copy the built-in CSS
+   profile (both built-ins are read-only), deactivate `css:S4654` in the copy, and assign the copy to the affected projects — never the organisation default — then record it in
+   `ideas/quality-gate/exclusions.md`. Do not change any issue's status. When the project is green, say so in this idea's own `STATUS.md`, which today never mentions Sonar at all.
