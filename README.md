@@ -71,16 +71,6 @@ makes position a safe identity: the active list only ever holds work still to do
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel. 
 
-3. [orchestrator](ideas/orchestrator) - A failed agent is indistinguishable from an agent that had little to do, so a hard stop looks like quiet non-progress. Minor update, 1.7.
-   When the account's model limit was exhausted, both agents exited in five seconds and their result JSON said `"subtype": "success"` and `"is_error": true` **together**, with
-   `num_turns: 1`, `total_cost_usd: 0` and `"result": "You've reached your Fable limit. Switch to another model to continue."`. `finalize` reads `subtype` and never `is_error`, so it
-   recorded $0, wrote `status: in_progress` and moved on; with the timer enabled that repeats every five minutes for as long as the limit lasts, reporting nothing wrong. Read
-   `is_error`, and when it is set log the model's own `result` string — it is already a plain-English explanation — and leave the idea's status alone rather than implying progress.
-   Distinguish it from the case that already has a warning, an agent stopped with no result JSON at all. Two more failures from the same cycle belong here because they are the same
-   shape, a real error the cycle swallowed: `--resume` against a session id that no longer exists kills the agent instantly with `No conversation found with session ID: <id>`, and
-   nothing ever clears the stored id, so that idea fails identically every cycle forever — fall back to a fresh conversation and say so; and a cycle that starts agents but has every
-   one of them fail should not look like a successful cycle in the log. Cover all three in `orchestrator/tests/`, which this idea now owns.
-
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
@@ -274,3 +264,13 @@ makes position a safe identity: the active list only ever holds work still to do
    against the tree and fix anything else that describes a checkout rather than the repository. `pwgen`'s `STATUS.md` carries the same false sentence from the same era and is being
    fixed under its own entry; if you find the claim anywhere else, say so rather than fixing it here. This idea has no upstream repository and must not get one under this entry —
    moving it is a separate decision, and the audit already established that nothing in its original entry authorised the current arrangement.
+
+31. [orchestrator](ideas/orchestrator) - A failed agent is indistinguishable from an agent that had little to do, so a hard stop looks like quiet non-progress. Minor update, 1.7. (finished 2026-09-28, v1.7)
+   When the account's model limit was exhausted, both agents exited in five seconds and their result JSON said `"subtype": "success"` and `"is_error": true` **together**, with
+   `num_turns: 1`, `total_cost_usd: 0` and `"result": "You've reached your Fable limit. Switch to another model to continue."`. `finalize` reads `subtype` and never `is_error`, so it
+   recorded $0, wrote `status: in_progress` and moved on; with the timer enabled that repeats every five minutes for as long as the limit lasts, reporting nothing wrong. Read
+   `is_error`, and when it is set log the model's own `result` string — it is already a plain-English explanation — and leave the idea's status alone rather than implying progress.
+   Distinguish it from the case that already has a warning, an agent stopped with no result JSON at all. Two more failures from the same cycle belong here because they are the same
+   shape, a real error the cycle swallowed: `--resume` against a session id that no longer exists kills the agent instantly with `No conversation found with session ID: <id>`, and
+   nothing ever clears the stored id, so that idea fails identically every cycle forever — fall back to a fresh conversation and say so; and a cycle that starts agents but has every
+   one of them fail should not look like a successful cycle in the log. Cover all three in `orchestrator/tests/`, which this idea now owns.
