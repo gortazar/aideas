@@ -1,5 +1,5 @@
-status: in_progress
-version: 0.2
+status: done
+version: 0.3
 started_at: 2026-08-10
 last_session_id: 
 last_run: 2026-09-15T19:36:05+02:00
@@ -15,7 +15,149 @@ last_cycle_cost_usd: 0.0
 - 2026-08-10T14:13:00+02:00 — in_progress ($13.098638499999996)
 
 
+### 2026-09-28 — done (0.3: clear the two BLOCKERs by configuring the rule)
 
+All 6 units done. The two BLOCKER bugs are gone, reliability is back to **A**, and the
+entry's real deliverable is that the way they went is reviewable: a rule deactivated in a
+copied quality profile, in a diff, with a script anyone can re-run — not two issues
+re-labelled in a web UI where nobody would ever see it happen.
+
+Nothing a user can observe changed. `spacing` is still in the stylesheet, doing the same
+work, because it was correct all along.
+
+- [x] Q1 — `ideas/quality-gate/scripts/ensure-quality-profile.sh`: the fleet's route to the
+      profile remedy, shellcheck-clean, `--status` first. It reads `SONAR_TOKEN` into a
+      `curl --config -` on stdin and never into argv, asserts `isBuiltIn` before copying,
+      refuses to modify a profile that is `isDefault`, and calls neither
+      `api/issues/do_transition` nor `api/issues/bulk_change` — a comment at the top says so
+      and why.
+- [x] Q2a — the profile applied. `Sonar way` (`AYFtO8KbS-wEfpJs_r1u`) copied to **`GNOME
+      Shell (St) stylesheets`** (`AaDnhCxzfwKCO0PchjQs`), `css:S4654` deactivated in the
+      copy, `gortazar_recap-gs` assigned to it. Re-running `--status` reports the profile
+      existing, the rule inactive and the project assigned — so it is idempotent, and the
+      assignment is read back rather than inferred from an exit status.
+- [x] Q4a — the upstream record, [PR #1](https://github.com/gortazar/recap-gs/pull/1),
+      **merged** as [`08528f2`](https://github.com/gortazar/recap-gs/commit/08528f2): a
+      comment at the top of `src/stylesheet.css`, a README section naming the rule and the
+      cost of the opt-out, and a hygiene test guarding both the two `spacing` declarations
+      and the note itself. All three checks green on the pull request, `sonar / Analysis`
+      among them. Submodule pointer and `recap-gs-src` flake input both bumped to it;
+      `scripts/check-pin.sh` agrees.
+- [x] Q3 — `exclusions.md` gains a **Quality profiles** section (the profile, its source
+      key, the rule, the projects, and the two real costs), and the "Considered and
+      rejected" bullet that used to prescribe `sonar.exclusions=src/stylesheet.css` is
+      rewritten to record why the profile beat it.
+- [x] Q2b — the fresh analysis of `main`, and the numbers. **`gh run rerun` was not
+      available**: the last `main` run predates GitHub's 30-day retry limit and the API
+      refuses it outright, so the merge above was the route — exactly the second path the
+      plan kept in reserve for this. Run
+      [36409112171](https://github.com/gortazar/recap-gs/actions/runs/36409112171) on `main`
+      at `08528f2`: `check`, `package` and `sonar / Analysis` all green.
+- [x] Q4b — **[v0.3](https://github.com/gortazar/recap-gs/releases/tag/v0.3) released**,
+      published by the tag-triggered workflow in the upstream repository from `08528f2`,
+      carrying `recap@recap-gs.patxi.shell-extension.zip` (59,448 bytes) and its `.sha256`.
+      **Install-verified** from a clean directory against the published asset with
+      `XDG_DATA_HOME` redirected: the zip downloads, `recap-gs: checksum ok`, 32 files land
+      — the same 32 as v0.2 — and the installed `hooks/install-hooks.sh --print` runs and
+      prints both agents' merges. The installed `stylesheet.css` carries the new comment,
+      which is the only thing a user could observe about this release, so that is the thing
+      the check looked at.
+
+**The two BLOCKERs, as `AGENTS.md` requires them to be named** — both were open, both
+`css:S4654` ("CSS properties should be valid"), both **false positives about the dialect**,
+and both now **closed by the rule going inactive**:
+
+| Issue key | Rule | File:line | Message | Now |
+| --- | --- | --- | --- | --- |
+| `AaA5xQ_tVAZt5f74MM8u` | `css:S4654` | `src/stylesheet.css:5` | Unknown property "spacing" | `CLOSED` / `REMOVED` |
+| `AaA5xQ_tVAZt5f74MM8v` | `css:S4654` | `src/stylesheet.css:13` | Unknown property "spacing" | `CLOSED` / `REMOVED` |
+
+`spacing` is a real St property. GNOME Shell stylesheets are St's own dialect, parsed here
+by an analyser that only knows CSS, so the rule is wrong about the whole technology rather
+than about these two lines — which is why the remedy was a quality profile and **not** a
+dismissal. That distinction is the one thing here worth being able to check rather than
+believe, and it is: a dismissal leaves `FALSE-POSITIVE` or `WONTFIX` behind, and these read
+`REMOVED`. `api/issues/do_transition` and `api/issues/bulk_change` were never called, and
+`ensure-quality-profile.sh` does not contain them.
+
+**Before and after** (public API, 2026-09-28, [dashboard](https://sonarcloud.io/project/overview?id=gortazar_recap-gs)):
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Open BLOCKER issues | **2** | **0** |
+| Bugs | **2** | **0** |
+| Reliability rating | **E** (5.0) | **A** (1.0) |
+| Security / Maintainability | A / A | A / A |
+| Code smells | 9 | 9 |
+| Lines of code | 1,874 | 1,874 |
+| Quality gate | OK | OK |
+
+**No open BLOCKER remains under either severity model** — checked both ways round, because
+the `bugs` measure alone would not have shown one. Three issues do come back at HIGH impact:
+`javascript:S3735` ("Remove this use of the `void` operator") on `src/extension.js:273`,
+`src/prefs.js:221` and `src/lib/events.js:55`. They are CRITICAL code smells in the old
+model and `MAINTAINABILITY/HIGH` in the new, **not BLOCKER in either**, maintainability is
+still rated A with them counted, and they are inherited code the Clean as You Code gate does
+not judge. Named here so the next session does not have to rediscover them; not fixed,
+because `AGENTS.md` says not to spend an entry paying down old debt.
+
+**Which fleet projects hold CSS**, measured rather than assumed
+(`ncloc_language_distribution`, 2026-09-28):
+
+| Project | Distribution | GNOME Shell stylesheet? |
+| --- | --- | --- |
+| `gortazar_recap-gs` | `css=38;js=1741;xml=95` | yes — `src/stylesheet.css` |
+| `gortazar_aideas` | `css=37;js=5727;py=2748;shell=683;xml=71` | yes — `ideas/aideas/src/extension/stylesheet.css` |
+| `gortazar_recap` | `go=3053` | no CSS |
+| `gortazar_gnome-shell-pwgen` | `js=321` | no CSS |
+| `gortazar_restore-wss` | `js=764;py=3793` | no CSS |
+| `gortazar_lo-pert` | `py=1039` | no CSS |
+
+**`gortazar_aideas` is eligible and deliberately not assigned.** It is the only other project
+holding a GNOME Shell stylesheet, and it has no issue today because it happens to use no
+St-only property. The answered open question makes the opt-out conditional on the project
+**saying so in its own README** — and this entry belongs to `recap-gs`, which may not write
+another idea's files. So the profile exists and is proven, and adding `aideas` is one
+command (`ensure-quality-profile.sh aideas`) for whoever owns that idea, on the day it both
+goes red and says so. That is the one piece of the plan's "which other projects" question
+left deliberately unfinished, and this is it named rather than quietly dropped.
+
+## What "done" covers, and what it does not
+
+**Covers:** the script, the profile, the assignment, a fresh analysis proving it, the ledger
+and baseline updated, the upstream record merged, `v0.3` released and install-verified.
+
+**Does not cover**, and worth knowing:
+
+- **The `enable` step of `install.sh` is the one thing `XDG_DATA_HOME` does not contain.**
+  It calls `gnome-extensions enable`, which writes dconf, and dconf is not under
+  `XDG_DATA_HOME`. Here it was a no-op — this machine already had the extension installed
+  and enabled from the 0.1/0.2 work, and `org.gnome.shell enabled-extensions` was checked
+  afterwards and is unchanged. On a machine where it is *not* already enabled, that
+  verification would leave a dconf entry pointing at a throwaway directory. Worth a
+  `--no-enable` flag if anyone verifies this often; not invented here, because the plan did
+  not ask for it.
+- **No new-code gate was exercised.** The analysis that closed the issues had no new lines
+  to judge — the change is a comment and a README section. The gate reads OK, and it read OK
+  before, vacuously. This entry did not test what a blocking gate does to a real change.
+- **A copied profile drifts from the built-in one**, starting now. See `exclusions.md`; the
+  source key is recorded there so re-copying is possible rather than archaeological.
+
+Difficulty estimate: **easy**, as the plan said, and for the reason it gave — the remedy
+really is three API calls. What took the turns was everything around them. `gh run rerun`
+refused the last `main` run as over a month old, so the plan's reserve route (the merge of
+this entry's own pull request) turned out to be the only route, which is why the
+documentation landed before the verification instead of after. And the dev shell on this
+machine has no `/etc/dbus-1/session.conf` and no GdkPixbuf typelib, so the suite could not
+be run from it at all; the new test was taken red-to-green by evaluating its assertions
+against the file directly, and `nix flake check`'s sandbox is what actually ran the 238.
+
+Next: nothing outstanding for this idea. If it is reopened, in order: the three
+`javascript:S3735` `void`-operator issues, which are not BLOCKER and not new code but are
+the only findings left, and which may themselves be a profile case rather than a fix — `void
+somePromise()` is how GJS marks a deliberately unawaited promise; then the three items 0.2
+left, still unstarted (the hook from a real Claude Code session, a desktop notification for
+`asking` only, and naming *which* session within a project asked).
 
 
 ### 2026-08-14 — done (0.2: notice the moment a session asks or finishes)
