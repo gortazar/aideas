@@ -34,8 +34,8 @@ Difficulty estimate: medium, as planned. Seven units.
 | U1 | `STATUS.md` says only what the tree shows; `check-pin.sh` asserts the pin this file names | **done** |
 | U2 | `flake.nix` in the extension repository, checks and package under their existing names | **done**, merged (PR [#4](https://github.com/gortazar/gnome-shell-pwgen/pull/4), PR [#5](https://github.com/gortazar/gnome-shell-pwgen/pull/5)) |
 | U3 | wrapper `flake.nix` consumes upstream's flake; pin bumped to `db1fbe5` | **done** (this commit) |
-| U4 | `curl`-able `install.sh` upstream; the references to the moved local installer follow | next |
-| U5 | `release.yml` upstream (tag push or dispatch, self-tagging), `version-name` in `metadata.json`, `scripts/check-release.sh` here | — |
+| U4 | `curl`-able `install.sh` upstream; the references to the moved local installer follow | **done**, in PR [#6](https://github.com/gortazar/gnome-shell-pwgen/pull/6) |
+| U5 | `release.yml` upstream (tag push or dispatch, self-tagging), `version-name` in `metadata.json`, `scripts/check-release.sh` here | **done** (this commit; upstream half in PR [#6](https://github.com/gortazar/gnome-shell-pwgen/pull/6)) |
 | U6 | `v0.2` published by the workflow, verified with `check-release.sh` and a clean-directory install | — |
 | U7 | `version: 0.2`, wrapper `README.md`, pin at merged `main`, `status: done` | — |
 
@@ -51,6 +51,38 @@ That rename landed **without** the rest of U4. `README.md` upstream still tells 
 `./install.sh`, which no longer exists, and there is no downloading installer in its place.
 Repairing that is U4, this session's next unit, and until it lands the extension's own README
 is wrong about how to install it.
+
+### U4 and U5, in pull request [#6](https://github.com/gortazar/gnome-shell-pwgen/pull/6)
+
+Draft, on `agent/pwgen/2026-09-28`, waiting on the upstream checks and the quality gate.
+
+- **`install.sh` downloads instead of building.** It fetches the packed zip from the
+  release (`latest`, or `VERSION=v0.2`), refuses to continue unless it matches the SHA-256
+  published beside it, and unpacks into `${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions`.
+  It stages the unpacked extension beside the download and swaps it in only after
+  verification, so a failed download no longer deletes a working install.
+- **Two real defects the tests found**, neither visible by reading:
+  `glib-compile-schemas` over a directory with no `.gschema.xml` *removes* the
+  `gschemas.compiled` that is there, so recompiling on the way in could install an
+  unloadable extension; and the first draft of the installer deleted the destination before
+  the download was verified.
+- **Nine installer tests run the script for real** against a stub `curl` serving local
+  fixtures — happy path, `VERSION`, checksum mismatch, no checksum, missing asset, missing
+  `unzip`, and the previous install surviving a failure. No network, and `PREFIX` points at
+  a temporary tree.
+- **`release.yml`** runs `nix flake check`, refuses to publish when the tag and
+  `metadata.json`'s new `version-name` disagree, and uploads the zip with its `.sha256`.
+  It triggers on a `v*` tag *and* on `workflow_dispatch` with a version input, creating the
+  tag itself at the checked-out commit — the path an agent that cannot push a tag can use.
+  Six tests pin what only runs at release time.
+- **`scripts/check-release.sh` here** answers "is the release real": the release exists for
+  the version in `STATUS.md`, carries both assets, the published checksum matches the
+  downloaded bytes, the zip holds `metadata.json`, `extension.js`, `prefs.js`, `LICENSE`,
+  `lib/generator.js` and `schemas/gschemas.compiled`, and the packed `version-name` equals
+  the tag. Run today for `0.2` it fails with "no release tagged v0.2", which is correct:
+  U6 is what publishes it.
+- Upstream suite at the branch tip: **48/48**, ESLint clean, `ci/lint-package.sh` PASS
+  (errors=0 warnings=0, one expected `manual_review` for clipboard access).
 
 ### U3, verified (2026-09-28)
 
