@@ -73,7 +73,7 @@ class AgentSetupError(RuntimeError):
 PLAN_TOOLS_DEFAULT = "Read,Write,Glob,Grep,WebFetch,WebSearch"
 BUILD_TOOLS_DEFAULT = "Bash,Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
 LOG_ENTRY_RE = re.compile(
-    r"^- \d{4}-\d{2}-\d{2}T\S+ — (in_progress|blocked|done) "
+    r"^- \d{4}-\d{2}-\d{2}T\S+ — (in_progress|blocked|done|failed)"
 )
 # The trailing slash is optional: requiring it silently swallowed every entry written as
 # `(ideas/recap)` rather than `(ideas/recap/)` — no error, the idea simply never existed.
@@ -89,6 +89,41 @@ SLUG_RE = re.compile(r"(?<![a-z0-9-])ideas/([a-z0-9][a-z0-9-]*)(?![a-z0-9-])")
 def log(message: str) -> None:
     print(f"[{datetime.now().astimezone().isoformat(timespec='seconds')}] {message}",
           flush=True)
+
+
+def agent_failure(result: dict) -> str | None:
+    """None when a run succeeded; a short reason when it failed.
+
+    One classifier, used everywhere a result JSON is read, because the payload a failure
+    produces is not self-consistent. An exhausted model limit wrote this:
+
+        {"subtype": "success", "is_error": true, "num_turns": 1, "total_cost_usd": 0,
+         "result": "You've reached your Fable limit. Switch to another model to continue."}
+
+    `subtype` and `is_error` disagree and every reader here used to believe `subtype`, so a
+    hard stop was recorded as an ordinary five-second cycle: `status: in_progress`, `$0.0000`,
+    "Cycle complete". With the timer on that repeated every five minutes, silently.
+
+    So `is_error` is consulted first — it is the one that was right — and a `subtype` other
+    than "success" also counts, as a hedge against a failure shape nobody has seen yet. Two
+    things are deliberately *not* failures: an empty dict, which means no result JSON at all
+    and already has its own louder report, and a result carrying neither key, which is what an
+    older CLI would write and must not turn every healthy cycle into a failure.
+
+    The reason is the model's own `result` string whenever there is one. It is already plain
+    English written for a person, and paraphrasing it would lose the specifics — which limit,
+    which model, and whatever wording a future failure arrives in.
+    """
+    if not result:
+        return None
+    subtype = result.get("subtype")
+    failed = bool(result.get("is_error")) or (subtype is not None and subtype != "success")
+    if not failed:
+        return None
+    reason = str(result.get("result") or "").strip()
+    if reason:
+        return reason
+    return f"error (subtype={subtype}, num_turns={result.get('num_turns', 0)})"
 
 
 def is_unlimited(value: str | None) -> bool:
