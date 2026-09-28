@@ -15,7 +15,47 @@ last_cycle_cost_usd: 0.0
 - 2026-08-10T14:13:00+02:00 — in_progress ($13.098638499999996)
 
 
+### 2026-09-28 — in_progress (0.3: clear the two BLOCKERs by configuring the rule)
 
+Units 1 of 4 done.
+
+- [x] Q1 — `ideas/quality-gate/scripts/ensure-quality-profile.sh`: the fleet's route to the
+      profile remedy, shellcheck-clean, `--status` first. It reads `SONAR_TOKEN` into a
+      `curl --config -` on stdin and never into argv, asserts `isBuiltIn` before copying,
+      refuses to modify a profile that is `isDefault`, and calls neither
+      `api/issues/do_transition` nor `api/issues/bulk_change` — a comment at the top says so
+      and why.
+- [ ] Q2 — copy, deactivate `css:S4654`, assign to `gortazar_recap-gs`, force a fresh
+      analysis, read the numbers back.
+- [ ] Q3 — `exclusions.md` (new Quality profiles section, rewritten rejection note) and
+      `baseline.md` annotation.
+- [ ] Q4 — the upstream stylesheet comment through a pull request, merge, pin, `v0.3`
+      released and install-verified.
+
+**The two BLOCKERs, as `AGENTS.md` requires them to be named** — both open, both
+`css:S4654` ("CSS properties should be valid"), both **false positives about the dialect**:
+
+| Issue key | Rule | File:line | Message |
+| --- | --- | --- | --- |
+| `AaA5xQ_tVAZt5f74MM8u` | `css:S4654` | `src/stylesheet.css:5` | Unknown property "spacing" |
+| `AaA5xQ_tVAZt5f74MM8v` | `css:S4654` | `src/stylesheet.css:13` | Unknown property "spacing" |
+
+`spacing` is a real St property. GNOME Shell stylesheets are St's own dialect, parsed here
+by an analyser that only knows CSS, so the rule is wrong about the whole technology rather
+than about these two lines. **Before**: `bugs=2`, `reliability_rating=5.0` (**E**),
+`code_smells=9`, `ncloc=1874` — read from the public API on 2026-09-28.
+
+**Which fleet projects hold CSS**, measured rather than assumed
+(`ncloc_language_distribution`, 2026-09-28):
+
+| Project | Distribution | GNOME Shell stylesheet? |
+| --- | --- | --- |
+| `gortazar_recap-gs` | `css=38;js=1741;xml=95` | yes — `src/stylesheet.css` |
+| `gortazar_aideas` | `css=37;js=5727;py=2748;shell=683;xml=71` | yes — `ideas/aideas/src/extension/stylesheet.css` |
+| `gortazar_recap` | `go=3053` | no CSS |
+| `gortazar_gnome-shell-pwgen` | `js=321` | no CSS |
+| `gortazar_restore-wss` | `js=764;py=3793` | no CSS |
+| `gortazar_lo-pert` | `py=1039` | no CSS |
 
 
 ### 2026-08-14 — done (0.2: notice the moment a session asks or finishes)
