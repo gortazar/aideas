@@ -69,7 +69,11 @@ makes position a safe identity: the active list only ever holds work still to do
    Some details about the UI: for now a TUI is enough, and maps can be rendered as ascii art. As the referee is a process running 
    on the player's computer, it can later on provide a GUI. Think about the implications of using openstreetmaps in terms of API usage, and recommend alternatives if 
    you feel that is a problem.
-   This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel. 
+   This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel.
+   
+4. [aideas](ideas/aideas) - Add a button to start a new cycle. Add another button to open codium with the readme so that new ideas can be added. Add a button to stop the cycle.
+   
+5. [meet](ideas/meet) - Add the rooms of each instance below the instance name, and a button next to the name to open that room specifically. The button must get you to the call itself, not the room homepage. 
 
 ## Finished
 
