@@ -1,260 +1,252 @@
-# Plan: aideas — two buttons, and the extension's first write
+# Plan: aideas — stop a cycle, and open the queue where ideas are written
 
-Difficulty estimate: medium — "check now" is half a day of plumbing over machinery that already
-exists (`PollScheduler.pollNow()` was written for exactly this), but "run a cycle" makes the
-extension *write* for the first time: a new authenticated endpoint that spends real money, whose
-launch path differs between the box and the laptop, and whose failure modes are environmental and
-therefore invisible to every headless test.
+Difficulty estimate: medium — one of the three buttons already exists, and the second (open the
+README in codium) is a dozen lines of `Gio.Subprocess`; the cost is in the third, because "stop the
+cycle" is the stop *file*, which is a pause switch that stays until removed, so the extension has to
+own a state it has never shown (`Paused`), a second write endpoint, and a wind-down that takes
+minutes and looks like nothing happening.
 
 ## Context
 
-The entry asks for two menu buttons. They look symmetrical and are not: one is local and cheap,
-the other crosses a boundary this extension has never crossed.
+The entry asks for three buttons:
 
-1. **Re-check the status on demand.** The panel polls `/state` every 30 s, or every 5 s while the
-   menu is open (`scheduler.js:24`), backing off to 5 minutes while the box keeps failing
-   (`backoff.js`). Three situations make waiting for the next tick annoying: the box was down and
-   the poller is deep in its backoff; you just answered a question in a `PLAN.md` and want to see
-   the idea go `ready`; you just started a cycle from the other button. The scheduler already has
-   the entry point — `pollNow()`, commented "what a *refresh* action would call"
-   (`scheduler.js:132`) — so what is missing is a menu item, an in-flight state to show while the
-   request is in the air, and a *visible* answer, because a refresh that changes nothing on screen
-   is indistinguishable from a refresh that did nothing.
+> Add a button to start a new cycle. Add another button to open codium with the readme so that new
+> ideas can be added. Add a button to stop the cycle.
 
-2. **Run a cycle.** Today a cycle starts one of three ways, none of them from the panel: the
-   5-minute `idea-orchestrator.timer` on the box, `systemctl start idea-orchestrator.service`
-   (`SETUP.md:87`), or a detached `python3 orchestrator.py` by hand, which is how the orchestrator
-   that actually runs in this deployment is launched (`.claude/skills/run-orchestrator/SKILL.md:43`).
-   `/state` is read-only and `docs/state-contract.md:3` opens by saying it "is the only thing the
-   aideas panel indicator reads". A button changes that sentence: the extension gains a write, to
-   an endpoint that does not exist yet, on the only process the laptop can already reach
-   (`heartbeat_server.py`).
+**The first one shipped in 0.4.** `Run a cycle` is in the menu today, with `POST /cycle`, the shared
+preflight, the gate vocabulary, the rate limit and `Run anyway`
+(`src/lib/menuModel.js:217-270`, `orchestrator/heartbeat_server.py:149`). This entry does not rebuild
+it; it adds the two that are missing and makes the three read as one block rather than as three
+accretions. Where the existing item has to change at all, it is because a queue that can be *paused*
+makes `Run a cycle` say something new — see the `stop-file` gate below.
 
-Three things about that write are load-bearing, and each shapes a feature below:
+The two new ones are not symmetrical either:
 
-- **A cycle refuses to start far more often than it starts.** In order: the stop file,
-  `allowed_hours`, `max_daily_cost_usd` against today's usage log, the heartbeat gate, the lock
-  (`orchestrator.py:1449-1458`). Every one of those returns `0` — success, silently. A button
-  whose entire visible effect is "nothing happened, and the panel still says Idle" is worse than no
-  button, so the endpoint has to answer *why*, and the menu has to say it.
-- **The heartbeat gate fails closed, and it is about this very laptop.** `laptop_is_idle()`
-  (`orchestrator.py:704`) asks the heartbeat server whether a Claude Code session is active and
-  skips the cycle if it cannot tell. So the honest answer to a click may well be "not while you
-  have a Claude Code session open", which is a sentence the menu should be able to show.
-- **A spawned cycle inherits the spawner's environment, and the heartbeat server's is wrong for
-  it.** `idea-orchestrator.service` exists mostly to set that environment: a `PATH` carrying
-  `claude` and `nix`, `ProtectHome` off for `~/.claude` and the SSH key, `KillMode=mixed`,
-  `TimeoutStartSec=3600` (`orchestrator/systemd/idea-orchestrator.service`). The heartbeat unit is
-  the opposite — `ProtectSystem=strict`, `ProtectHome=yes`, `MemoryMax=128M`, no `PATH` — so a
-  cycle `fork()`ed from inside it would start, find no `claude`, and fail every agent. This is the
-  same shape as the bug 0.2 existed to fix (`gjs` missing on the runner): the thing launched fine,
-  in an environment that could not do the work. The launch must therefore be a *configured
-  command* that a deployment owns, not a hard-coded `Popen` that happens to work here.
+1. **Open codium with the README.** The queue is `README.md` at the root of this repository, and
+   adding an idea means typing a numbered entry under `## Ideas`. Everything about this button is
+   *local* to the laptop: it launches an editor on this machine, on a file on this machine. That is
+   a different axis from everything the extension has done so far, all of which went over HTTP to a
+   box that may not be this computer. The extension therefore has to learn where the repository is
+   on *this* machine, and to be honest when it does not know — an editor that silently opens the
+   wrong checkout loses the idea you just wrote.
+
+2. **Stop the cycle.** There is exactly one supported way to stop one, and it is a file:
+
+   ```bash
+   touch "$IDEAS_REPO_PATH/.orchestrator/stop"    # winds down gracefully, still commits
+   rm    "$IDEAS_REPO_PATH/.orchestrator/stop"    # resume — it is a pause switch, not one-shot
+   ```
+
+   (`.claude/skills/run-orchestrator/SKILL.md:53-63`.) Three properties of that file shape this
+   whole entry:
+
+   - **It is a pause, not a kill.** `stop_requested()` (`orchestrator.py:688-700`) is polled between
+     phases and between agents; it sets `stop_reason` once, the cycle winds agents down with
+     `agent_grace_seconds`, and it still commits, merges and pushes. So "stopped" is not instant and
+     is not violent, and the button must not promise otherwise.
+   - **Nothing ever removes it.** No code path in `orchestrator/` deletes the stop file; the only
+     writer is a person, and `orchestrator.py status` says
+     `PAUSED … remove it to resume` (`orchestrator.py:2199`). A button that creates it and walks
+     away pauses the fleet for ever, which reads as "the orchestrator is broken" — the exact failure
+     the skill warns about. Whatever this button does, the panel must afterwards *show* that the
+     queue is paused and offer the way out.
+   - **The panel cannot currently see it.** `GET /state` returns `available`, `running`, `agents`,
+     `cycle_started_at`, `lock_age_seconds`, `ideas` and says outright that "nothing about budget,
+     schedule or the stop file" is returned (`docs/state-contract.md:79-80`). The preflight knows —
+     it refuses with gate `stop-file` and `Paused: .orchestrator/stop exists`
+     (`orchestrator.py:2085-2087`) — but that is only visible after you have clicked something. The
+     contract has to grow one field.
 
 Assumptions, stated rather than asked:
 
-- **This is version 0.4**, a minor entry: `STATUS.md`, `src/extension/metadata.json`
-  (`version-name`) and `flake.nix` (`packages.default.version`), which the release workflow
-  asserts are one string.
+- **This is version 0.5**, a minor entry. The `README.md` entry does not say which kind of update it
+  is, so `AGENTS.md` makes it minor; noted here and in `STATUS.md` as an assumption. Three files
+  carry the version and the release workflow asserts they are one string: `STATUS.md`,
+  `src/extension/metadata.json` (`version-name`) and `flake.nix` (`packages.default.version`).
+- **aideas stays in this repository.** Its original entry says "This project must be done within
+  this repo. Do not create an external repo for this", so the submodule layout `AGENTS.md`
+  describes does not apply here, and no `upstream/` is created. Releases come from
+  `.github/workflows/release-aideas.yml`, which tags itself on merge and is verified afterwards with
+  `make check-release`.
 - **This work may edit `orchestrator/heartbeat_server.py`, `orchestrator/orchestrator.py`,
   `docs/state-contract.md` and `SETUP.md`**, under the grant recorded in `plans/01-2026-08-17.md`
-  and used again in 0.2 and 0.3. The systemd units are read but **not** relaxed — see the fourth
-  open question. Everything else stays inside `ideas/aideas/`. The root `README.md` is the queue
-  and is never touched.
-- **Both buttons live in the menu, not in the panel.** One panel button, one click, then the
-  actions — the top bar is not the place for a second icon.
-- **No stop button this entry.** The asymmetry is deliberate: stopping is `touch .orchestrator/stop`
-  and is a *pause* that stays until removed (`SKILL.md:56-63`), which is a state the menu would then
-  have to own. The entry asks for two buttons; this plan ships two.
-- **Rows stay read-only.** The v0.1 answered question is about idea rows, and it holds: nothing here
-  makes a row clickable. `menuItems.js:9-11` says "the only item that does anything when clicked is
-  `preferences`" — that comment becomes a list of three.
-- **The contract only grows.** `/state` is untouched. `/cycle` is a new path; a box that does not
-  serve it answers 404, and the extension must read that as "this box is older than this
-  extension" rather than as a failure of the click.
+  and used in every entry since. The systemd units are read, not relaxed. The root `README.md` is
+  the queue and is never edited by this work — the whole point of the codium button is that a
+  *person* edits it.
+- **`Run a cycle` keeps its behaviour.** Its answered questions still hold: open when the box has no
+  secret, one click, `Run anyway` after a refusal at `allowed-hours` or `heartbeat` only, never at
+  `stop-file`, `budget` or `lock`. A paused queue refuses at `stop-file`, and that refusal must
+  continue **not** to be overridable — the way to run a cycle while paused is to resume, visibly.
+- **Three items, one block, in the order start / stop / open.** They live in the existing action
+  block above Preferences, with `Check now` first as it is today. No second panel icon.
+- **Rows stay read-only** (the v0.1 answered question). Nothing here makes an idea row clickable.
+- **The contract only grows.** `/state` gains one key; `/stop` is a new path, and a box that does
+  not serve it answers 404, which the extension reads as "this box is older than this extension"
+  rather than as a failure of the click, exactly as `/cycle` already does.
 
 ## Features
 
-- **A "Check now" item that reports what it did.** A reactive item in its own block above
-  Preferences. Clicking it calls `PollScheduler.pollNow()`, which already cancels the pending
-  timer, single-flights against a poll in the air, and reschedules from the new reading — so a
-  click also *resets the backoff*, which is the main reason to want it after the box has been down.
-  While the request is out the item reads `Checking…` and is insensitive; when it lands the header's
-  own `updated 2 s ago` is the answer, and if it failed the failure message appears where failures
-  always appear. **The menu stays open** across the click: closing it would hide the very line the
-  click was for.
-- **A "Run a cycle" item that either starts one or says why not.** Same block. It `POST`s to the
-  new endpoint and shows the outcome inline: `Cycle starting…` while the request is out, then
-  either the cycle appearing in the header within seconds, or one line saying what refused it —
-  `Paused: .orchestrator/stop exists`, `Outside allowed_hours (23:00-08:00 Europe/Madrid)`,
-  `Daily budget spent ($12.40 of $10.00)`, `A Claude Code session is active on this laptop`,
-  `A cycle is already running`. Those are the orchestrator's own gates, in the orchestrator's own
-  order, worded for someone reading a menu.
-- **The item is insensitive when clicking it could not possibly work**, with the reason as its
-  detail line: while a cycle is running (the header already says so), while the reading is
-  `unreachable` or `unconfigured` (there is nothing to post to), and while a post of its own is in
-  flight. An `unavailable` box is *reachable*, so the item stays live there — a box that cannot read
-  its queue can still be told to try a cycle, and the answer will be honest either way.
-- **`POST /cycle`, which decides before it spawns.** New in `heartbeat_server.py`. It runs the same
-  gates `Orchestrator.run()` runs, from **one implementation in `orchestrator.py`** (a
-  `cycle_preflight(repo)` that the run path also calls, so the two cannot drift), and only spawns
-  when they all pass. The response is small and total:
-  `{"started": true, "reason": null}` or `{"started": false, "reason": "…", "gate": "stop-file"}`.
-  `started: true` means *launched*, never *finished*: the cycle re-checks its own gates and may
-  still exit, so the extension confirms by watching `/state` rather than by believing the reply.
-- **The preflight never talks to itself over HTTP.** `laptop_is_idle()` reaches the heartbeat server
-  by URL (`orchestrator.py:709`), and `heartbeat_server.py` is a single-threaded `HTTPServer` — a
-  handler that called it would block on its own socket, time out after 3 s and fail closed, so the
-  button would report "can't tell whether the laptop is busy" *every single time*. The preflight
-  reads the heartbeat state file directly instead, which is the same data from the same place
-  (`load_state()` is already in that file) and needs no second thread.
-- **The launch command belongs to the deployment.** The server spawns
-  `ORCHESTRATOR_CYCLE_COMMAND` if it is set, and otherwise a detached
-  `python3 orchestrator.py run` (`start_new_session=True`, output to the journal, environment
-  explicit) — which is exactly how a cycle is launched in this deployment today. A box running the
-  hardened heartbeat unit sets the variable to `systemctl start idea-orchestrator.service` (or its
-  `--user` form) so that systemd, not the sandboxed server, provides the cycle's `PATH`, its home
-  directory and its timeouts. `SETUP.md` gets both forms and the reason.
-- **The endpoint refuses to run a cycle it knows will fail on `claude`.** Before spawning the
-  default command, the preflight resolves the `claude` binary on the `PATH` the child would get,
-  and refuses with `claude is not on the orchestrator's PATH` if it is not there. A cycle that
-  starts and fails every agent costs a real cycle's worth of time and says nothing; this is the
-  cheapest possible guard against the exact failure 0.2 was about.
-- **The write is authenticated the way this system already authenticates writes.**
-  `POST /cycle` checks `HEARTBEAT_SHARED_SECRET` through the existing `_authorized()` path, the
-  secret travelling in the JSON body as `POST /heartbeat`'s already does. The extension gains an
-  `orchestrator-secret` GSettings key and a password-style field in preferences; when the box has
-  no secret configured it behaves as `/heartbeat` does today and accepts — subject to the first
-  open question, which is the one place this plan does not assume.
-- **A rate limit, because a panel is a thing that can get stuck.** The endpoint refuses a second
-  launch within a short window (`cycle just launched, wait 30 s`) and the extension refuses to have
-  two posts outstanding. The lock already makes a duplicate cycle harmless on the box; this keeps a
-  double-click, or a wedged extension, from filling the journal with launches.
-- **Both buttons are model decisions, not widget decisions.** `menuItems.js` gains `action` items
-  carrying `action`, `label`, `detail` and `sensitive`; `menuModel.js` decides their wording and
-  sensitivity from the reading, the in-flight state and the last action outcome; `indicator.js`
-  gains one widget case that wires `activate` to a callback. So "the item is insensitive while a
-  cycle runs" and "the refusal reason shows under the item" are assertions about whole menus in a
-  headless test, exactly as every other menu behaviour is.
-- **Transport learns to POST, and stays as paranoid as it is about GET.** `soupTransport.js` gains a
-  method with a body and the same two deadlines, and a `cycleClient.js` maps the outcome to fixed
-  English phrases from `GError` codes and HTTP statuses — never from GLib messages, which are
-  localised. `404` is worded as its own case (`this box does not support starting cycles`), because
-  that is what an un-updated box looks like and it is not the user's mistake.
-- **A cycle that was asked for and did not appear is said out loud.** After a successful post the
-  extension polls briskly for a bounded window and, if `/state` never reports `running: true`,
-  shows `The cycle exited without starting — check the journal on the box`. This is the honest
-  reading of `started: true` and it is also the only way the user learns about a refusal the
-  preflight could not predict.
-- **The contract documents the second endpoint.** `docs/state-contract.md` stops being "the `/state`
-  contract" in scope: it gains a `POST /cycle` section — request shape, the response's two fields,
-  the gate vocabulary, the 401/404/429 statuses, the rate limit — and its opening sentence is
-  corrected, since the extension now writes. `tests/test_state_contract.py` covers the preflight
-  over fixture repositories: a stop file present, an hour outside the window, a spent budget, a held
-  lock, a fresh heartbeat, and the all-clear — pure Python, no spawn, no network.
-- **Nothing spawns in a test.** The spawn is one injected callable in `heartbeat_server.py`, so the
-  contract tests assert *that a launch was requested with the right command and environment*, and
-  the one real spawn is exercised by hand against this repo's own orchestrator and recorded in
-  `STATUS.md`.
-- **Verified where it has to be.** The smoke test's stub server (`tests/stub-state-server.py`) gains
-  `POST /cycle` and a request log; the nested-shell test activates both items in a real GNOME Shell
-  and asserts the request arrived, the menu stayed open, the item went insensitive and the refusal
-  line rendered — plus screenshots of the two new items, live and insensitive.
+- **A "Stop the cycle" item that winds the current cycle down.** In the action block, beneath
+  `Run a cycle`. It `POST`s to a new endpoint which creates `.orchestrator/stop`, and it reads
+  `Stopping…` until `/state` reports `running: false` — the wind-down takes as long as the agents
+  take to reach their next check, so an item that flicked back to idle immediately would be lying.
+  When no cycle is running the same item is `Pause the queue`: the file does the same thing, but
+  what it stops is the *next* cycle, and the label should say which of the two just happened.
+- **A "Resume" item, because the stop file is a pause switch.** While `.orchestrator/stop` exists
+  the menu shows `Paused — .orchestrator/stop exists` and the stop item is replaced by
+  `Resume the queue`, which removes the file. This is the half that keeps the button from being a
+  trap: nothing in the orchestrator ever deletes that file, so the panel that created it is the
+  right place to offer its removal.
+- **The panel says `Paused` without being clicked.** `GET /state` gains `paused` (bool) — the one
+  fact the panel cannot deduce and the one the preflight already reads. The header line becomes
+  `Idle — paused` / `Cycle running for 12 min, 2 agents — stopping`, and `Run a cycle` goes
+  insensitive with `the queue is paused` beneath it rather than being clicked to find out.
+- **`POST /stop`, and its `resume`.** New in `heartbeat_server.py`, next to `/cycle` and sharing its
+  authorisation (`_authorized()`, the secret in the JSON body, open when the box has none) and its
+  answer shape: `{"paused": true|false, "changed": bool, "reason": "…"}`. `changed: false` with a
+  reason is how "it was already paused" comes back — a 200, not an error, as with the gates.
+  The file write itself is one function in `orchestrator.py` (`set_paused(repo, paused)`), so the
+  server never builds that path by hand and the test suite can assert the file, not the string.
+- **Stopping is a write about *safety*, so it is never rate-limited into uselessness.** `/cycle`'s
+  30 s limit exists because a launch costs money; a second stop costs nothing and the one situation
+  where someone hammers the button is the one where they most want it to work. `/stop` is
+  idempotent and unlimited; `resume` is the same call with `{"resume": true}`.
+- **An "Add an idea" item that opens the queue in codium.** Third in the block. It launches the
+  editor on the repository with `README.md` open **at the end of the `## Ideas` list**, which is
+  where a new entry goes — `codium <repo> --goto <repo>/README.md:<line>`, the line found by reading
+  the local file for the last entry before `## Finished`. Opening at line 1 would be correct and
+  useless.
+- **The extension learns where the repository is, and says so when it does not.** A new
+  `repo-path` GSettings key and a preferences field, empty by default. The item is insensitive with
+  `set the repository path in preferences` when it is empty, and with `<path>/README.md does not
+  exist` when the path is wrong — never a silent no-op, and never a guess at `~/aideas`. The menu
+  item's detail line names the path it will open, so opening the wrong checkout is a thing you can
+  see before you click rather than after you have typed an idea into it.
+- **codium is found, not assumed.** An `editor-command` key, empty by default, meaning "look for
+  one": `codium`, then `vscodium`, then the Flatpak `com.vscodium.codium`. If none is found the item
+  is insensitive and says so, naming the preference that fixes it. Set the key and it is used
+  verbatim (`shlex`-style splitting, the repo and the file appended), which is also how someone who
+  wants a different editor gets one without this plan inventing an editor-agnostic abstraction.
+- **The launch is a `Gio.Subprocess`, detached and unwatched.** The editor outlives the menu; the
+  extension neither waits for it nor keeps a handle. A failure to spawn is reported in the item's
+  detail line from the `GError` code, never from its message — GLib messages are localised, which
+  this extension has been careful about since v0.1 and which `soupTransport.js` documents.
+- **Every one of the three items is a model decision, not a widget decision.** `menuModel.js` grows
+  the stop/resume/open cases with their labels, detail lines and sensitivity; `menuItems.js` emits
+  them as `action` items; `indicator.js` gains no new widget type — the `action` case from 0.4
+  already replaces the item's `activate` *method* so that **the menu stays open**, which matters
+  more here than it did for `Run a cycle`: `Stopping…` is the whole feedback.
+- **A stop that did not take is said out loud.** After a successful `POST /stop` the extension polls
+  briskly for a bounded window; if `/state` still reports `running: true` when it expires the item
+  says `Still winding down — agents finish their step first`, which is the truth rather than a
+  timeout dressed as a failure. The file is on disk either way, and the header keeps saying
+  `Paused`.
+- **The contract documents all of it.** `docs/state-contract.md` gains `paused` in the `/state`
+  body and a `POST /stop` section — request shape, response fields, statuses, idempotency, and the
+  sentence that the stop file persists across cycles and across reboots.
+  `tests/test_state_contract.py` covers `paused` over fixture repositories, and a new
+  `tests/test_stop_endpoint.py` covers the endpoint with the filesystem, asserting the file is
+  created, removed, idempotent in both directions and refused without the secret when one is set.
+- **Verified where it has to be.** The smoke test's stub server gains `POST /stop` and `paused` in
+  `/state`; the nested-shell test activates the stop item, asserts the request, the `Stopping…`
+  label, the menu staying open, the `Paused` header on the next reading and the `Resume` item
+  replacing the stop item — plus a screenshot of the paused menu. The codium item is activated
+  against a stub editor script on `PATH`, asserting the argv it was given, since a real VSCodium
+  cannot be installed into a nested headless shell.
 
 ## Approach
 
 Units, each one commit, tests first:
 
-1. **U1 — the preflight, in `orchestrator.py`.** `cycle_preflight(repo)` returning a gate name and a
-   sentence, factored out of `run()` so the run path calls it too and the two orders cannot drift.
-   No HTTP: the heartbeat is read from its state file. Contract tests over fixture repositories.
-2. **U2 — `POST /cycle`.** Authorisation through the existing path, the preflight, the injected
-   spawn, the rate limit, the response shape. `docs/state-contract.md` in the same commit. Still
-   nothing in the extension: the endpoint must be right before anything calls it.
-3. **U3 — POST in the transport.** `soupTransport.js` grows a body and a method; `cycleClient.js`
-   maps codes and statuses to phrases; `tests/http` covers 200 both ways, 401, 404, 429, a
-   non-JSON body, a timeout and a refused connection against the stub server.
-4. **U4 — the items, as data.** `menuItems.js` action items, `menuModel.js` wording and
-   sensitivity, unit tests comparing whole menus: idle, running, unreachable, unconfigured,
-   in-flight, and each refusal reason.
-5. **U5 — the widgets.** `indicator.js`'s action case, keeping the menu open on activate, wiring
-   `pollNow()` and the cycle post; `prefs.js` and the schema gain the secret.
-6. **U6 — the compositor.** Activating both items in the nested shell against the stub, asserting
-   the requests, the insensitive states and the rendered refusal; screenshots. The unit that can
-   fail in a way no other can.
-7. **U7 — the bump and the docs.** 0.4 in the three files, `README.md` on what the two items do and
-   what the secret is for, `SETUP.md` on `ORCHESTRATOR_CYCLE_COMMAND` and the sandbox, and
-   `STATUS.md` recording what was run and what it printed — including one real cycle launched from
-   the panel, which is this entry's only end-to-end proof.
+1. **U1 — `paused` in `/state`.** `orchestrator_state()` reports it; `docs/state-contract.md` and
+   `tests/test_state_contract.py` in the same commit; `state.js` carries it into the reading, with
+   an old box (no key) reading as `false`. Nothing visible yet.
+2. **U2 — `set_paused()` and `POST /stop`.** The file write in `orchestrator.py`, the endpoint in
+   `heartbeat_server.py` on the existing authorisation path, the response shape, idempotency both
+   ways, 404 for an unknown path. `tests/test_stop_endpoint.py`. Contract section in the same
+   commit.
+3. **U3 — the client.** `stopClient.js` beside `cycleClient.js`, sharing `soupTransport.post()`:
+   one attempt to `{paused, changed, reason}`, never rejecting, refusing two outstanding posts,
+   and the same code-to-phrase mapping including 404 as `this box does not support stopping
+   cycles`. `tests/http` against the stub in six modes.
+4. **U4 — the stop/resume item, as data.** `menuModel.js` decides the label from `paused` and
+   `running`, the detail from the in-flight state and the last outcome, the sensitivity; the header
+   gains `— paused` and `— stopping`; `Run a cycle` goes insensitive while paused, with
+   `Run anyway` asserted absent at the `stop-file` gate. Unit tests comparing whole menus.
+5. **U5 — the wiring for stop.** `extension.js` connects the item to the client, keeps the
+   in-flight state, polls briskly after a stop and produces the "still winding down" sentence.
+6. **U6 — the editor launcher.** `editorLauncher.js`: discovery, argv construction, the README line
+   for the end of `## Ideas`, and the failure phrases — pure enough to unit-test with an injected
+   "does this binary exist" and an injected spawn, so nothing launches in a test. `repo-path` and
+   `editor-command` in the schema and `prefs.js`.
+7. **U7 — the compositor.** Stop, resume and open activated in the nested shell against the stub
+   server and a stub editor on `PATH`; the paused header; screenshots.
+8. **U8 — the bump and the docs.** 0.5 in the three files, `README.md` on what the three items do
+   and on the two new preferences, `SETUP.md` on the stop file as a pause the panel can now both set
+   and clear, and `STATUS.md` recording what was run and what it printed — including one real stop
+   and resume against this repository's own orchestrator.
 
 ## Risks / things to verify early
 
-- **The sandbox is the whole risk of this entry.** A cycle spawned from inside
-  `idea-heartbeat.service` inherits `ProtectHome=yes`, no `claude` on `PATH` and a 128 MB memory
-  cap. Nothing headless can see this, and the failure looks like "the cycle ran and everything
-  broke". The configured command plus the `claude`-on-`PATH` check are the mitigation; the
-  documentation is the rest of it.
-- **The self-HTTP deadlock is real and silent.** Settle U1's "read the state file, never call
-  yourself" before anything else, and add the test that would have caught it: a preflight that
-  passes the heartbeat gate while no server is listening at all.
-- **A menu item that closes the menu makes both buttons useless.** GNOME's default is for an
-  activated item to dismiss the popup; both of these exist to show what happened. Verify the
-  keep-open path in U5 and in the compositor, not by reading the docs.
-- **Activating an item from the probe may not work.** v0.1 could not press a button in the
-  *preferences* window because that is a separate Wayland client; a menu item lives in the shell's
-  own process, so the probe should be able to activate it directly. If it cannot, the fallback is to
-  assert the item's presence, label and sensitivity from the actor tree and cover activation
-  headlessly — but that would leave the click itself unproven, so it is worth finding out in U6's
-  first hour.
-- **This button spends money.** Wording matters more than usual: `Run a cycle` must not look like
-  `Refresh`, and the two items should not sit adjacent without the running/insensitive state being
-  obvious. The screenshots are the check.
-- **An unauthenticated write on the VPN is a different security posture from an unauthenticated
-  read.** Reading the queue and spending the day's Claude budget are not the same exposure, even on
-  the same socket. The first open question is exactly this and nothing in U2 is written until it
-  is answered.
-- **A secret in GSettings is readable by anything in the user's session.** It is the same secret the
-  laptop's heartbeat hook already holds in its environment, so this adds no new class of exposure —
-  but it is worth one honest line in `README.md` rather than a claim of secrecy.
-- **Old box, new extension and the reverse.** A box without `/cycle` must produce a clear sentence,
-  not a broken menu; an old extension against a new box simply never posts. Both directions get a
-  test.
-- **Do not touch the root `README.md`**, and keep the orchestrator edits to the files named in the
-  assumptions.
+- **The pause outliving its click is the real hazard of this entry.** The failure mode is not a
+  crash: it is a fleet that quietly builds nothing for a week because a button created a file and
+  nothing ever showed it again. `paused` in `/state` (U1) is therefore the *first* unit, not a
+  decoration on the last one, and the panel must show the state even with the menu closed.
+- **`Stopping…` has no upper bound that this extension controls.** An agent is checked between
+  phases and between agents, and `agent_grace_seconds` follows the SIGTERM; a cycle can legitimately
+  take minutes to wind down. Decide the brisk-polling window against `.agent-config.yml`'s actual
+  values rather than picking 45 s because `/cycle` did.
+- **Resuming does not revive the cycle you stopped.** `request_stop()` sets `stop_reason` once and
+  `stop_requested()` stays true for the life of that process, so removing the file mid-wind-down
+  lets the *next* cycle start and does not call the current one back. The wording must not imply
+  otherwise; the smoke test should cover stop-then-resume-while-running so the sentence is asserted.
+- **A local write from an extension is a new class of action.** Everything before this went over
+  HTTP; `editorLauncher.js` spawns a process in the user's session. Keep it to the configured or
+  discovered argv with no shell, and never interpolate the repo path into a string that a shell
+  will parse.
+- **The repository the panel opens may not be the repository the box builds.** If the orchestrator
+  is on another machine, `repo-path` points at a clone whose `README.md` may be behind, and an idea
+  typed into a stale checkout is an idea that reaches nobody. The detail line naming the path is the
+  cheap mitigation; the second open question asks whether more is wanted.
+- **`codium` may be a Flatpak, and a Flatpak's file arguments are sandboxed.** `--goto` on a path
+  outside the Flatpak's permitted filesystem can open an empty window. Verify against whatever this
+  laptop actually has before the smoke test is written, and if the Flatpak form cannot open the file
+  reliably, say so in `README.md` rather than shipping a button that opens a blank editor.
+- **An unauthenticated stop is a cheap denial of service on the VPN.** It is the same socket and the
+  same posture as `/cycle`, whose answered question chose "open when no secret is configured", and
+  pausing is reversible where spending is not — but it is worth one honest line in `README.md`
+  rather than silence.
+- **Old box, new extension and the reverse.** A box without `/stop` or without `paused` must produce
+  a clear sentence and a menu that still works; an old extension against a new box simply never
+  posts. Both directions get a test.
+- **Nothing outside `ideas/aideas/`, `orchestrator/` and `SETUP.md`.** In particular the root
+  `README.md` is not edited by this work.
 
 ## Open Questions
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [x] **Should `POST /cycle` accept a request when no `HEARTBEAT_SHARED_SECRET` is configured?**
-      `POST /heartbeat` does — `_authorized()` returns true when the secret is empty
-      (`heartbeat_server.py:97-100`) — and this deployment runs without one, so the plan assumes
-      `/cycle` behaves identically: authenticated when a secret is set, open when it is not.
-      Ticking this line unchanged chooses that. The alternative is to fail closed on this one path
-      (refuse with `no shared secret is configured on the box` until one is set), on the grounds
-      that starting a paid cycle is a bigger deal than recording a heartbeat, at the cost of the
-      button not working in the current setup until `HEARTBEAT_SHARED_SECRET` is added to the
-      heartbeat server's environment and to the extension's preferences.
-- [x] **Should "Run a cycle" be able to override the gates?** The plan assumes **not**: the button
-      asks for a cycle under exactly the rules a timer-fired cycle obeys, and its whole value when
-      refused is naming the gate — so a cycle outside `allowed_hours`, over budget, or with a
-      Claude Code session open on the laptop is reported, not forced. The alternative is a second,
-      deliberately awkward action (a `Run anyway` item that appears only after a refusal, or a
-      modifier-click) that skips the hours and heartbeat gates but never the stop file, the budget
-      or the lock. That is a real convenience — "I am at the laptop, I want it to build now" is the
-      likeliest reason to click at all — and a real way to spend money outside the window that was
-      set on purpose. Yes should be able to override it.
-- [x] **Should clicking "Run a cycle" ask for confirmation first?** The plan assumes one click
-      starts it, with the running state and the outcome line as the feedback, because that is the
-      GNOME idiom and a confirmation dialogue from a panel menu is heavy. The alternative is a
-      two-step in the menu itself — the item becoming `Really run a cycle?` for a few seconds
-      before it will fire — which costs one click and removes the mis-click that launches a cycle
-      and up to `max_cycle_cost_usd` per agent. One click
-- [x] **May this entry change `orchestrator/systemd/idea-heartbeat.service`?** The plan assumes
-      **no**: the units are read, not relaxed, and the box instead sets
-      `ORCHESTRATOR_CYCLE_COMMAND` to a `systemctl start idea-orchestrator.service` so systemd
-      supplies the cycle's environment — which means a non-root service user needs a polkit rule or
-      the `--user` units, and `SETUP.md` will say so. The alternative is to make the heartbeat unit
-      able to spawn cycles itself (`ProtectHome` off, a `PATH` with `claude`, a higher memory cap),
-      which makes the button work out of the box on a fresh install and widens the sandbox of the
-      one process that listens on the network.
+- [ ] **Should "stop" leave the queue paused until someone resumes it, or only stop the cycle that
+      is running?** The plan assumes the first, because that is what the stop file *is*: a pause
+      switch nothing ever clears, so the button creates it, the panel then shows `Paused` and offers
+      `Resume the queue`. The alternative is a one-shot stop — the extension creates the file, waits
+      for `running: false`, and removes it again — which matches the words "stop the cycle" more
+      literally and needs no resume item, at the cost of a panel that must stay alive through the
+      wind-down to clean up after itself (a screen lock, a logout or a crash mid-wind-down would
+      leave the fleet paused with nothing on screen saying so), and of losing the ability to pause
+      the queue while nothing is running at all.
+- [ ] **When the orchestrator is on another machine, should "Add an idea" still open the local
+      checkout?** The plan assumes yes, with the path named in the menu item so it is visible before
+      the click: the extension has no way to edit a file on the box, and a local clone is what a
+      person would edit anyway before pushing. The alternative is to make the item insensitive
+      unless the configured host is this machine (`localhost`, `127.0.0.1` or this host's own
+      address) — safer against typing an idea into a stale clone that never gets pushed, and it
+      disables the button entirely in the deployment where the box is remote, which is the one
+      `SETUP.md` describes as normal.
+- [ ] **Should a paused queue change the panel icon, or only the menu?** The plan assumes the menu
+      only: the header reads `Idle — paused`, the items say the rest, and no new artwork ships. The
+      alternative is a fifth bulb — 0.3 shipped four symbolic bulbs and an `allBlocked` variant
+      precisely so that a state worth noticing is visible without opening the menu, and "paused"
+      is arguably that state — at the cost of a new SVG on the 16px grid, its recolouring verified
+      in a real compositor, and one more icon to tell apart at panel size from the struck-through
+      all-blocked bulb it would resemble.
