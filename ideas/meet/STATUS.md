@@ -1,4 +1,4 @@
-status: done
+status: not_started
 version: 0.1
 started_at: 2026-08-28
 last_session_id: 259b11be-e715-4112-802e-a582b86d5fb9

@@ -1,154 +1,187 @@
-# Plan: meet — one click from the top bar into an OpenVidu Meet room
+# Plan: meet — the rooms of each instance, and a button that joins the call
 
-Difficulty estimate: easy — the extension is a panel button, two menu items and one URI launch; nearly all
-the work is the scaffolding every idea here needs (upstream repo, flake, headless tests, Sonar, release,
-installer), not the behaviour.
+Difficulty estimate: **medium** — the menu and the extra button are small, but this entry turns a flat
+list of links into a two-level model fed by a **network call from inside the compositor**, which v0.1
+deliberately had none of: a per-instance credential to store, an async request to cancel on `disable()`,
+and four failure states (no key, unreachable, refused, empty) that all have to read as menu rows rather
+than as exceptions. `medium`, not `hard`, because none of it is novel — the launcher's injected-seam
+pattern already shows where the untestable part goes.
+
+Version: this entry is a `minor` update — **`0.2`**. The `README.md` entry does not say which kind it is,
+so `AGENTS.md`'s default applies; noted here and to be repeated in `STATUS.md`.
 
 ## Context
 
-The whole feature fits in a paragraph: a button in the top bar carrying the OpenVidu Meet logo, whose menu
-has **Meet next** and **Meet**, each opening the corresponding site in the default browser. There is no
-state to keep, no polling, no subprocess and no data to parse. That makes the interesting decisions the
-small ones, and they are worth settling before any code:
+v0.1 ships a panel menu of *destinations*: a label and an `https:` URL, two by default (**Meet next**,
+**Meet**), each opening in the browser. The entry renames the level that already exists and adds one
+below it:
 
-1. **The logo is a remote PNG.** The idea names it by URL
-   (`https://openvidu.io/assets/images/logos/logo.png`). An extension must not fetch it at runtime — that
-   is a network request from inside the compositor for a decoration, it fails offline, and the EGO review
-   guidelines would rightly object. So the asset is **vendored into the repository once** and loaded from
-   the extension directory. See the open questions on licensing and on whether the panel wants a colour
-   logo at all.
-2. **"Opens a new browser window" is not something the launching side controls.** The correct API is
-   `Gio.AppInfo.launch_default_for_uri_async`, which hands the URI to the user's default handler; a browser
-   that is already running will usually open a *tab*, not a window. Forcing a window means knowing the
-   browser and passing `--new-window`, which is browser-specific and brittle. The plan launches the default
-   handler and treats "a new tab in the default browser" as satisfying the intent; see the first open
-   question.
-3. **`meet.openvidu.io` is written without a scheme.** Assumed `https://meet.openvidu.io/`, matching the
-   fully written `https://meet-next.openvidu.io/`. Both URLs are constants in one module, never built by
-   string concatenation at call time.
-4. **Nothing here needs a subprocess.** `pwgen` already established why: spawning is a review risk and a
-   main-loop risk. No `xdg-open`, no `GLib.spawn*`, no `Gio.Subprocess` anywhere in this extension.
+- what `destinations` holds is an **instance** — an OpenVidu Meet deployment;
+- each instance has **rooms**, which the menu must list underneath it;
+- each room gets a **button** that opens *the call*, "not the room homepage".
+
+Four things about OpenVidu Meet decide the shape of this, and they are worth settling before any code:
+
+1. **Rooms are a server-side list, not a setting.** An instance exposes them at
+   `GET <instance>/api/v1/rooms?maxItems=…`, authenticated with an **`X-API-KEY` header**; the key is
+   generated per deployment from the app's *Embedded* page. So the menu can only show real rooms for an
+   instance the user has given a key for, and the two shipped instances will show none until they do.
+   That is the honest behaviour, and the first open question asks whether it is the intended one.
+2. **A room has several URLs, and only some of them are the call.** The room object carries anonymous
+   role links — `access.anonymous.moderator.url` and `access.anonymous.speaker.url` — of the form
+   `https://<instance>/room/<roomId>?secret=<secret>`. The secret *is* the role, and it is what makes the
+   link land in the meeting. The same path without a secret is the room's own page, which is precisely
+   the "room homepage" the entry says the button must not stop at. **The button opens a role link; it
+   never builds one by dropping the secret.**
+3. **A role link is a credential.** Anyone holding it joins that room as that role. It must never be
+   logged, never appear in a notification body, never reach a screenshot, and never be written anywhere
+   this repository's CI can print it. The README's screenshots come from a throwaway instance.
+4. **A shell extension may make requests, but on a short leash.** `libsoup3` asynchronously, `https:`
+   only, one `Gio.Cancellable` cancelled in `disable()`, a timeout, and no request at all until the menu
+   is opened. v0.1's hygiene test asserts *nothing anywhere reaches the network*; this entry replaces that
+   rule rather than deleting it — exactly one module may, and the test names it.
 
 Assumptions stated rather than asked:
 
-- **Menu order follows the idea text** — *Meet next* first, then *Meet*.
-- **v0.1 has no preferences window.** Two fixed destinations, no settings schema, no `prefs.js`. Making
-  the URLs configurable is proposed as an open question rather than built.
-- **Activating an item closes the menu**, which is the standard `PopupMenuItem` behaviour and what a user
-  expects from a launcher.
+- **The rooms are listed flat under their instance**, indented, not behind a `PopupSubMenuMenuItem`.
+  "Below the instance name" reads as visible, and a submenu that has to be opened is one more click on a
+  menu whose entire point is being one click deep.
+- **The instance row keeps doing what it does today** — opening the instance's own URL in the browser.
+  Nothing about v0.1's behaviour is taken away by this entry.
+- **Rooms are fetched when the menu opens**, not on a timer. A panel button that polls a remote API every
+  minute for a list nobody is looking at is a battery and review problem; `open-state-changed` is the
+  natural trigger, and the previous list stays on screen while the new one arrives.
+- **The list is per session, in memory.** No room names, and emphatically no role links, are written to
+  dconf as a cache.
 
 ## Features
 
-- **A panel button carrying the OpenVidu Meet logo** — an `St.Icon` built from a `Gio.FileIcon` over the
-  bundled asset, sized to the panel's icon size and following the scale factor, so it is sharp on HiDPI and
-  the same visual weight as its neighbours. It has an accessible name and a tooltip-equivalent label, and it
-  is keyboard reachable like any other panel indicator.
-- **A menu with exactly two items** — **Meet next** → `https://meet-next.openvidu.io/`, **Meet** →
-  `https://meet.openvidu.io/`. The label→URL mapping lives in one Shell-free module so it can be asserted in
-  a headless test rather than only by eye.
-- **Opening through the desktop's own default handler** — `Gio.AppInfo.launch_default_for_uri_async` with a
-  launch context from `Shell.Global.create_app_launch_context` (so the browser gets the right timestamp and
-  workspace, and does not get flagged as demanding attention). Asynchronous, never blocking the compositor.
-- **A failure that is visible and harmless** — no default browser, or a handler that refuses, produces one
-  `Main.notifyError`-style message naming what could not be opened, and no exception escaping into the
-  Shell. A machine with no browser must not break the panel.
-- **The logo ships with the extension** — vendored PNG (plus the `@2x` variant if one is published),
-  recorded in the repository with its source URL and the date fetched, and a `scripts/refresh-logo.sh` that
-  re-downloads it so updating the asset is a deliberate, reviewable commit rather than a runtime download.
-- **Review-rules compliance** — ESM imports and the modern `Extension` base class; every widget, signal
-  handler and menu item created in `enable()` destroyed in `disable()`, leaving nothing on the main loop; no
-  `eval`, no remote code, no bundled binaries; `metadata.json` correct (uuid, `shell-version`, url, licence)
-  and validated by a test.
-- **Headless test suite under plain `gjs`** — the destinations module (labels, URLs, order, that every URL
-  is `https:` and absolute), the launcher with an injected `AppInfo` seam (success, refusal, no handler —
-  each asserted to leave the extension usable), `metadata.json` shape, and a hygiene test that greps the
-  Shell-free modules for `St`/`Clutter`/`Shell` imports and the whole tree for `spawn`, `Soup` and any
-  `http://` literal.
-- **The icon is tested as an image, not as a path** — a test loads the bundled asset through GdkPixbuf and
-  asserts it decodes, has non-zero dimensions and is not blank. A file that is present but unloadable makes
-  GNOME silently fall back to a generic icon, which is exactly the bug that would otherwise ship unnoticed.
-- **A smoke test in a real, nested GNOME Shell** — `ci/smoke-test.sh` on the `recap-gs` model (throwaway
-  `HOME`, headless, never touching the live session): the extension loads, a panel button appears with the
-  logo actually rasterised rather than a fallback, the menu opens with two items, activating one calls the
-  URI handler (a stub `.desktop` file registered as the default handler for `https`, which records what it
-  was asked to open), and five enable/disable rounds leave no widget and no signal behind.
-- **Reproducible environment and green CI** — `flake.nix` providing `gjs`, `glib`, ESLint and
-  `gnome-extensions`; `nix flake check` runs lint, the headless suite and `gnome-extensions pack`; upstream
-  CI runs it on push and pull request, plus `gortazar/aideas/.github/workflows/sonar.yml@v1` for the gate.
-- **Installable without compiling** — `install.sh` fetching the packed `.zip` from the latest release and
-  installing it into `~/.local/share/gnome-shell/extensions`, verified from a clean directory before the
-  entry is called done; `README.md` opens with that one command, then screenshots of the button and the open
-  menu taken from the smoke-test run.
-- **The wrapper here stays coherent** — `upstream` submodule with its pointer committed,
-  `scripts/check-pin.sh` on the `pwgen`/`recap-gs` model, `STATUS.md` refreshed at every unit, and
-  `.github/workflows/ci-meet.yml` adjusted to check the wrapper and the pin (it currently runs
-  `nix flake check` in `ideas/meet`, which has no flake).
+- **Rooms listed under their instance.** Each configured instance keeps its row; beneath it, one
+  indented row per room the instance reports, in the order the API returns them. The shape of that list —
+  instance rows, room rows, notes, separators — lives in `lib/menu.js` as data, as it does today, so
+  every state below is a headless test rather than a desktop to reconfigure.
+- **A join button next to each room name.** The room row is a label plus an `St.Button` carrying a
+  symbolic call icon, with its own accessible name (`Join <room>`) and its own keyboard focus, activating
+  the room's **moderator role link** through the same launcher v0.1 already has. Clicking the button
+  closes the menu and hands the URL to the default browser; nothing new spawns and nothing new blocks.
+- **The button lands in the call, and this is asserted.** `lib/rooms.js` refuses any URL the server
+  hands back that is not `https:`, not on the instance's own host, or missing the `secret` query
+  parameter — the three ways a "join" link silently degrades into a page that merely talks about the
+  room. A room whose link fails those checks is listed without a button rather than with a button that
+  goes somewhere else.
+- **The room list comes from the instance's REST API.** `lib/client.js` holds the request the API needs
+  (path, `X-API-KEY`, paging, the JSON the response must contain) and the parsing of what comes back,
+  behind an injected transport seam — so "the server answered 401", "the server answered HTML", "the
+  server answered a room with no links" are all ordinary tests, and only the four lines that actually
+  call libsoup live in `extension.js`.
+- **A per-instance API key, entered in preferences.** Each instance in the preferences window gains a
+  key field, with the one-line explanation of where the key comes from (the instance's *Embedded* page).
+  An instance without a key is not an error: it is an instance whose rooms we do not know.
+- **Every failure is a row, not an exception.** No key → *Add an API key in Rooms…*; request failed or
+  timed out → *Could not reach <instance>*; key refused (401/403) → *That instance refused the API key*;
+  no rooms → *No rooms yet*. The instance row still works in all four, so a broken or offline instance
+  costs you its rooms and not the menu — the same rule `parseDestinations` already follows for a row
+  broken by hand in dconf.
+- **The request cannot outlive the menu, or the extension.** One `Gio.Cancellable` per refresh, cancelled
+  when the menu closes and again in `disable()`; a timeout on the session; and the existing
+  `_destroyed` guard extended to the callback, so a reply arriving after teardown touches nothing.
+- **Hygiene rules updated rather than dropped.** The "nothing reaches the network" test becomes "only
+  `extension.js` may import `gi://Soup`, everything under `lib/` stays pure", plus new assertions: no
+  `secret` value is ever passed to `log`/`console`/`notifyError`, and no synchronous Soup spelling
+  (`send_and_read`) appears anywhere.
+- **Proven in a real nested GNOME Shell.** `ci/smoke-test.sh` grows a stub OpenVidu instance — a local
+  HTTP server answering `/api/v1/rooms` with a canned payload — so the smoke test asserts the rooms
+  appear under their instance, the join button is drawn and focusable, clicking it reaches the stub
+  browser with the *role link including its secret*, and the no-key and unreachable states each render.
+  The README screenshots are retaken from that run.
+- **Shipped, as every entry is.** `v0.2` released from upstream's own workflow with the packed extension
+  and its checksum, `install.sh` unchanged but re-verified from a clean directory against the new asset,
+  the wrapper's pin and `check-release.sh` green, and the Sonar gate green on the pull request.
 
 ## Approach
 
-Units, each one commit, tests first:
+Units, each one commit, tests first. U1–U3 are pure and land before anything touches the network.
 
-1. **U1 — the upstream repository and an empty-but-green pipeline.** `gh repo create gortazar/meet
-   --public`, submodule at `ideas/meet/upstream`, `flake.nix`, ESLint, the test runner wired into
-   `nix flake check`, `SONAR_TOKEN`, the Sonar project and CI. Green on a draft pull request *before* any
-   behaviour lands, so a red result later means the code, not the scaffolding.
-2. **U2 — destinations.** `src/lib/destinations.js`: the two entries, their order, their URLs, and a test
-   that pins all three plus the `https:`-only rule.
-3. **U3 — the launcher.** `src/lib/launcher.js` with the `AppInfo` seam; tests for launched, refused and
-   no-handler, each asserting the error path is a message and not a throw.
-4. **U4 — the vendored logo**, `scripts/refresh-logo.sh`, provenance note, and the GdkPixbuf decode test.
-5. **U5 — the panel button and menu.** `extension.js` wiring U2–U4 together, with complete `disable()`
-   teardown. This is where the feature becomes visible.
-6. **U6 — the real shell.** `ci/smoke-test.sh` with the stub `https` handler, the icon-rasterised check, the
-   five enable/disable rounds, and the screenshots.
-7. **U7 — installer and README**, then verify the installer from a clean directory.
-8. **U8 — the wrapper and the release.** `check-pin.sh`, `ci-meet.yml` fixed, `STATUS.md` at `version: 0.1`,
-   pull request ready and auto-merged, `v0.1` tagged upstream by the repository's own release workflow,
-   published asset installed and run.
+1. **U1 — the room model.** `lib/rooms.js`: what a room is (`id`, `name`, `joinUrl`), which role link is
+   chosen, and the three-part check that a join URL is really a join URL (https, same host as its
+   instance, carries `secret`). Tests include the degraded cases: link without secret, link on another
+   host, room with no links at all.
+2. **U2 — the two-level menu model.** `buildMenuModel` takes instances plus a per-instance room state and
+   returns instance rows, indented room rows carrying their join URL, and the four note states. The empty
+   menu and the `Rooms…` item survive unchanged. This is where the entry's behaviour is pinned.
+3. **U3 — the API response.** `lib/client.js`: the request description and the parser, over an injected
+   transport. 200 with rooms, 200 with none, 401, 500, HTML instead of JSON, a truncated body, a payload
+   whose rooms are missing fields — every one asserted to produce a state the menu can render.
+4. **U4 — the API key in preferences.** Schema key and its migration (v0.1's `destinations` keeps
+   working and keeps its meaning), the prefs field per instance, and the pure add/edit/remove rules in
+   `lib/editing.js` extended to carry it. Storage per the answered open question.
+5. **U5 — the room rows and the join button in the shell.** `extension.js`: the custom
+   `PopupBaseMenuItem`, accessible names, teardown of the new widgets and handlers asserted by the
+   existing hygiene test, and the button wired to the launcher.
+6. **U6 — the request, for real.** libsoup3 in `extension.js` behind U3's seam, the cancellable, the
+   timeout, refresh on `open-state-changed`, in-memory cache. Hygiene test amended in the same commit.
+7. **U7 — the nested shell.** Stub instance + stub browser; the assertions listed above; screenshots.
+8. **U8 — ship it.** `STATUS.md` at `version: 0.2`, README updated (including a plain sentence saying
+   what the extension sends where, which a reviewer will look for), pull request ready, auto-merge,
+   `v0.2` released and verified, submodule pin bumped here.
 
 ## Risks / things to verify early
 
-- **The logo may not be usable as a panel icon at panel size.** A wordmark that reads at 200px can be an
-  illegible smear at 16px, and a logo designed for a light page can vanish on a dark top bar. Look at it in
-  the nested shell in U4/U5, in both light and dark, before building anything on top of it. If it does not
-  work, the remedy is a cropped or monochrome variant — see the third open question.
-- **The asset must survive being vendored.** Fetch it once, commit it, and never let the extension reach the
-  network. Check the file actually decodes as a PNG at the size we expect rather than trusting the URL.
-- **A default browser is not guaranteed** in a nested shell, in CI, or on a bare machine. The stub handler
-  makes the test deterministic; the no-handler path is a real user state and gets its own test.
-- **`launch_default_for_uri` behaviour differs between Flatpak'd and native browsers** — under a portal the
-  call may be brokered and return before anything opens. Verify on a real session that both destinations
-  actually open, and record the browser used in `STATUS.md`; a launcher that was never launched is a guess.
-- **Sonar on a repository this small.** New-code coverage percentages swing wildly when there are a few
-  hundred lines in total, and the untestable part (`extension.js`, which needs a compositor) is a large
-  fraction of them. If the gate fails on coverage of Shell-only code, that is the catalogued class in
-  `ideas/quality-gate/baseline.md` — a narrow exclusion in `sonar-project.properties` with a row in
-  `exclusions.md`, not a re-labelled issue.
-- **`ci-meet.yml` is red as it stands.** It runs `nix flake check` in `ideas/meet`, where there is no flake;
-  fix it in U1 rather than discovering it at the end.
+- **`libsoup`'s `Message.get_status()` throws on any status outside its enum** — 429 is the one that bit
+  another idea here — and thrown from inside the async callback it settles no promise and the request
+  hangs forever. Read `status_code` directly. Verify with a stub that answers 429 in U3.
+- **The public instances may have no key a user can get.** `meet.openvidu.io` and `meet-next.openvidu.io`
+  are not the user's deployment; if no API key is obtainable there, the two shipped entries show *Add an
+  API key* forever and every screenshot has to come from a self-hosted instance. Find out in U1 — it is
+  the fact most likely to change what this entry should look like.
+- **The room's own page URL is an assumption.** `<instance>/room/<roomId>` without a secret is taken to
+  be the "room homepage" the entry contrasts the button with. Confirm against a live instance before
+  making the room *label* open it (see the open question); if it is not a real route, the label stays
+  inert and only the button acts.
+- **`skip-lobby` / `skip-prejoin` are recent.** They exist as room-URL query params, but an older
+  instance ignores unknown params and a newer one falls back to the lobby when it cannot resolve a name.
+  Whether to append them at all is an open question; either way the button must work on an instance that
+  has never heard of them.
+- **API responses change shape between versions.** Pin what is required (`rooms[].roomId`,
+  `rooms[].roomName`, the role links) and treat everything else as optional, so a 3.x minor upgrade
+  costs a field and not the menu.
+- **Secrets in logs and screenshots.** The smoke test prints what the stub browser was asked to open, and
+  that URL contains a secret. Use an obviously fake one in the stub, and assert on its presence rather
+  than echoing real output.
+- **A long room list makes an unusable menu.** The API returns up to 100. Decide the cap in U2 (see the
+  open question) rather than discovering it on someone's deployment.
+- **Sonar on new code.** U3 and U1 are pure and should be near-fully covered; the uncovered part is the
+  libsoup call in `extension.js`, which is the catalogued GJS class — a narrow exclusion with a row in
+  `ideas/quality-gate/exclusions.md` if it costs the gate, never a re-labelled issue.
 
 ## Open Questions
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [x] **Is "a new browser window" satisfied by whatever the default browser does?** The supported API hands
-      the URI to the default handler, and a running browser normally opens a tab. Guaranteeing a *window*
-      means detecting the browser and passing its own flag (`--new-window`), which is browser-specific,
-      breaks under Flatpak, and needs a spawn we would otherwise not have. Ticking this line as-is accepts
-      the default handler's behaviour; the alternative is a best-effort `--new-window` path for a short list
-      of known browsers with the plain launch as fallback.
-- [x] **May the OpenVidu logo be vendored into a public repository and published on extensions.gnome.org?**
-      It is a third-party trademark and the plan bundles it, which is redistribution. Ticking this line
-      as-is says yes — the extension is an OpenVidu-adjacent tool and the mark is used to identify it. If
-      that is not settled, the fallback is a generic video-call symbolic icon with the logo shipped only for
-      local installs. No, it can't. Use a symbolic icon resembling the logo.
-- [x] **Colour logo in the top bar, or a monochrome/symbolic variant?** The idea says "the OpenVidu Meet
-      logo", so the plan bundles the PNG as-is. GNOME's own convention is symbolic panel icons that follow
-      the theme's foreground colour, which is what makes a top bar look consistent in light and dark.
-      Ticking this line as-is keeps the colour logo; the alternative is a symbolic derivative in the panel
-      with the colour logo used in the menu header. Symbolic variant.
-- [x] **Should the two URLs be configurable?** v0.1 hard-codes them, per the idea text. A preferences page
-      with editable endpoints would let someone point the button at their own OpenVidu deployment, but
-      `AGENTS.md` forbids inventing features, so it is asked rather than built. Ticking this line as-is
-      keeps them hard-coded. It must be configurable. The configuration dialog must allow adding new
-      entries, but those two must appear by default (although they can be removed).
+- [ ] **Where do the rooms come from: the instance's REST API, or a list typed by hand in preferences?**
+      Ticking this line as-is means the REST API — "the rooms of each instance" read as the real ones —
+      which brings with it a per-instance API key, a network request from the extension, and two shipped
+      instances that show no rooms until a key is added. The alternative is no network at all: rooms are
+      configured under each instance in the preferences window, the user pastes a join link per room, and
+      the whole `client.js`/libsoup half of this plan disappears.
+- [ ] **Where is the API key stored?** Ticking this line as-is means the **system keyring** via
+      `libsecret`, keyed by instance URL: a key in dconf is readable by anything in the session and shows
+      up in a `dconf dump` a user might paste into a bug report. The cost is a second storage path to
+      test and a prefs window that can fail to save. The alternative is a GSettings key alongside the
+      instance, which is simpler and matches how the instances themselves are stored.
+- [ ] **Which role does the button join as — moderator or speaker?** Ticking this line as-is means
+      **moderator**: it is your own instance, your own room, and the link that can start and manage the
+      meeting. The alternative is speaker, or a per-room choice in the preferences.
+- [ ] **Should the join URL carry `skip-prejoin` (and `skip-lobby`)?** Ticking this line as-is means
+      **no**: the prejoin view is where a camera and microphone are chosen, and a button that drops you
+      into a call with whatever device was default — camera live — is a surprise, not a convenience. The
+      alternative reads "the call itself" as strictly as possible and appends them.
+- [ ] **What does clicking the room's *name* do, as opposed to its button?** Ticking this line as-is
+      means the name opens the **room's page on the instance** (the link without the secret) and the
+      button joins the call — which is what makes the entry's distinction between the two meaningful, and
+      is subject to that route existing (see Risks). The alternatives are: the name does the same as the
+      button, or the name is an inert label and the button is the only action.
+- [ ] **How many rooms should a menu show, and should closed ones appear?** Ticking this line as-is means
+      **the first 20 open rooms**, most recently created first, with a final *…and N more* row that opens
+      the instance's own rooms page; rooms the API reports as closed are not listed. The alternative is
+      everything the API returns, which on a busy deployment is a menu 100 rows long.
