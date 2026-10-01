@@ -209,3 +209,15 @@ both ship with the next version.
 Difficulty estimate: **medium**, as the plan says — the model and the menu are small, but a
 network call from inside the compositor brings a credential to store, a request to cancel,
 and four failure states that all have to read as menu rows.
+
+## Rescued work waiting for a pull request
+
+The cycle that ended 2026-10-01T09:42:36+02:00 could not push `ideas/meet/upstream` to its default branch: that branch
+requires a pull request. The commits are on **`agent/meet-sweep`** (f3db3060) in that repository,
+and nowhere else that outlives this clone — the gitlink recorded here points at f3db3060,
+so until the branch lands, this pin names a commit that is not on the default branch.
+
+First unit of the next cycle: turn it into a pull request, get it merged, and bump the pin.
+From the repo root:
+
+    cd ideas/meet/upstream && gh pr create --head agent/meet-sweep --fill
