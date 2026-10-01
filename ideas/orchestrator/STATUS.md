@@ -1,5 +1,5 @@
-status: not_started
-version: 1.7
+status: done
+version: 1.8
 started_at: 2026-09-15T18:39:34+02:00
 last_session_id: c42e4c48-8bfe-49f0-accb-f4d4d5588837
 last_run: 2026-09-28T18:48:58+02:00
@@ -67,10 +67,72 @@ last_cycle_cost_usd: 0.0
       (`git@github.com:gortazar/aideas.git`), so the `BatchMode=yes` in the fetch is load
       bearing, not decorative. All of it is optional: a box that cannot refresh reports
       `stale` with the reason and serves the queue it had.
-- [ ] **U7 — 1.8**, `status: done`, suite green under `env -i`.
+- [x] **U7 — 1.8 and `status: done`.** `ORCHESTRATOR_VERSION`, the version comment and
+      `version:` here all say 1.8, asserted by `check-version.sh`. 133 orchestrator tests
+      green four ways — normally, under `env -i` with `LC_ALL=C`, `HOME=/nonexistent`, an
+      antipodean `TZ` and nothing on `PATH` but `/usr/bin` and `/bin`, under a comma-decimal
+      locale, and under `-W error::ResourceWarning` — plus 114 aideas contract tests.
 
-Next: U7 — ORCHESTRATOR_VERSION 1.8, version: 1.8, status: done, suite green under env -i.
-
-Run the suite from the repo root:
+Run the suites from the repo root:
 
     python3 -m unittest discover -s orchestrator/tests -t orchestrator
+    python3 -m unittest discover -s ideas/aideas/tests
+
+## What `done` covers
+
+Every feature in this entry's `PLAN.md` is delivered, tested and committed.
+
+- **`/state` answers for `origin`.** `refresh_clone()` fast-forwards the clone, and
+  `orchestrator_state()` calls it *before* `queue_rows`, so one request can never report a
+  queue from before its own fetch. The reported bug is a test: an unticked question answered
+  and pushed by another clone shows as `ready` on the next poll, with no cycle having run.
+- **Every refusal is decided, not discovered.** Nine rows, each with its own sentence and its
+  own test, and each refusal asserted to leave `rev-parse HEAD` and `git status`
+  byte-identical. `merge --ff-only` is what makes a GET safe to do this at all.
+- **A GET never touches a tree a cycle is building in.** Gated on the lock the function
+  already reads, and asserted on the commit sha rather than on the payload.
+- **Bounded and non-interactive.** One fetch per 120 s on a monotonic clock, abandoned after
+  5 s, with `GIT_TERMINAL_PROMPT=0`, `GIT_ASKPASS=true` and `BatchMode=yes` — proved by a stub
+  `git` that sleeps and one that echoes its environment. This process also serves
+  `POST /heartbeat`, and a heartbeat that does not land reads as an idle laptop.
+- **The contract records it**, with the decision table and the closed two-word vocabulary, and
+  the exact-keys test that keeps the document true was updated in the same commit.
+- **`status` tells the same story read-only.** `upstream_gap()` answers from the last fetch:
+  a status command must not block on the network, and must not move a tree a cycle may be in.
+
+## Not verified from inside this session
+
+**`scripts/check-release.sh` has not been run for 1.8**, because the release cannot exist yet:
+an agent may not push this repository, and `release-orchestrator.yml` fires on the push the
+orchestrator makes *after* this cycle, reading the `status: done` above. 1.6 and 1.7 both ended
+in this position and both published correctly; 1.7 was verified at the start of this session.
+
+**First thing to run next**, and the recovery if it reports nothing:
+
+    ideas/orchestrator/scripts/check-release.sh
+    gh workflow run release-orchestrator.yml --repo gortazar/aideas -f force=true
+
+CI has not run remotely for this entry either, for the same reason. Both suites are green
+locally on `/usr/bin/python3` 3.12 with nothing on `PATH` but `/usr/bin` and `/bin`.
+
+**The refresh has never run on the real box.** Everything here is proved against bare
+repositories on disk; whether `idea-heartbeat.service` can actually write the clone and fetch
+non-interactively is a property of that machine, which is why `SETUP.md` now carries the two
+requirements and a command to check them. A box where it does not work reports `stale` with
+the reason rather than failing, so the worst case is the pre-1.8 behaviour, labelled.
+
+## Follow-ups, deliberately not done here
+
+- **The extension does not render `refresh` yet.** That is the `aideas` idea's work under its
+  own entry; the key is additive so an extension ignoring it stays correct. Until then the
+  panel is fresh but does not say so.
+- **`release-orchestrator.yml` hardcodes 1.6's headline** in the release title, so 1.7 is
+  published as "rescued work reaches the remote, and there are tests". Cosmetic, and that file
+  is outside this entry's stated scope.
+- **A long fetch still blocks `POST /heartbeat`**, since one thread serves everything. Bounded
+  at 5 s, which is the mitigation the entry chose; a background refresh the GET kicks but never
+  waits on is the larger fix, and belongs to its own entry.
+- **No backoff after a model limit**, and **`planning_pass` still raises `FileNotFoundError`
+  when `claude` is absent** — both carried over from 1.7, both still outside scope.
+- The root `sonar-project.properties` still lists `orchestrator` under `sonar.sources`, so
+  `orchestrator/tests/` is analysed as production code.

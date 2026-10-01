@@ -60,8 +60,10 @@ from pathlib import Path
 # with a test suite of its own, in orchestrator/tests/. 1.7 stops a failed agent reading as a
 # quiet one: a result JSON saying the run failed no longer writes `in_progress`, a session id
 # that no longer resolves is dropped and the agent respawned once without `--resume`, and a
-# cycle in which every agent failed exits non-zero.
-ORCHESTRATOR_VERSION = "1.7"
+# cycle in which every agent failed exits non-zero. 1.8 makes GET /state answer for `origin`
+# rather than for whatever the last cycle left in the working tree: it fast-forwards the clone
+# before reading the queue, and says in the body whether that worked.
+ORCHESTRATOR_VERSION = "1.8"
 
 UNLIMITED = {"unlimited", "none", "off"}
 
