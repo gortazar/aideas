@@ -16,7 +16,7 @@ update it is, so `AGENTS.md`'s default applies: **minor**.
 
 Branch `agent/meet/2026-10-01` on `gortazar/meet`.
 
-### Units — 3 of 8 done
+### Units — 4 of 9 done
 
 - [x] **U1 — the room model.** `src/lib/rooms.js`: what a room is (`id`, `name`, `status`,
       `createdAt`, `joinUrl`), that the link taken is the **anonymous moderator** one, and
@@ -41,7 +41,17 @@ Branch `agent/meet/2026-10-01` on `gortazar/meet`.
       everything else, including a 200 whose body is a proxy's HTML login page. A failure
       state never carries rooms, so a stale list cannot survive through one. 33 tests,
       **227** in the suite.
-- [ ] **U4 — the API key in preferences**, in the keyring. **Next.**
+- [x] **U4 — the API key, in the keyring.** `lib/keyring.js` over an injected keyring, so a
+      locked one, a session with no secret service and an absent key are ordinary tests;
+      `lib/secret-store.js` holds the three calls that need a running one, imported
+      **dynamically and guarded** because `gnome-shell` depends on libsecret the library but
+      not on `gir1.2-secret-1`, its typelib. `keyUpdates` turns an edit into what the keyring
+      must be told, and its load-bearing distinction is that a row with *no* `apiKey` means
+      "not read yet" while one with `''` means "emptied on purpose" — which is what stops a
+      window opening faster than the keyring unlocks from deleting the key it was about to
+      show. Verified end to end first: a real `gnome-keyring-daemon` under
+      `dbus-run-session` stores, reads back and clears. 46 tests, **273** in the suite.
+- [ ] **U4b — the key field in the preferences window.** **Next.**
 - [ ] U5 — the room rows and the join button in the shell.
 - [ ] U6 — the request itself: libsoup3, the cancellable, the timeout.
 - [ ] U7 — the nested shell: a stub instance, the assertions, the screenshots.
