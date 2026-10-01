@@ -158,30 +158,31 @@ Units, each one commit, tests first. U1–U3 are pure and land before anything t
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **Where do the rooms come from: the instance's REST API, or a list typed by hand in preferences?**
+- [x] **Where do the rooms come from: the instance's REST API, or a list typed by hand in preferences?**
       Ticking this line as-is means the REST API — "the rooms of each instance" read as the real ones —
       which brings with it a per-instance API key, a network request from the extension, and two shipped
       instances that show no rooms until a key is added. The alternative is no network at all: rooms are
       configured under each instance in the preferences window, the user pastes a join link per room, and
       the whole `client.js`/libsoup half of this plan disappears.
-- [ ] **Where is the API key stored?** Ticking this line as-is means the **system keyring** via
+- [x] **Where is the API key stored?** Ticking this line as-is means the **system keyring** via
       `libsecret`, keyed by instance URL: a key in dconf is readable by anything in the session and shows
       up in a `dconf dump` a user might paste into a bug report. The cost is a second storage path to
       test and a prefs window that can fail to save. The alternative is a GSettings key alongside the
       instance, which is simpler and matches how the instances themselves are stored.
-- [ ] **Which role does the button join as — moderator or speaker?** Ticking this line as-is means
+- [x] **Which role does the button join as — moderator or speaker?** Ticking this line as-is means
       **moderator**: it is your own instance, your own room, and the link that can start and manage the
       meeting. The alternative is speaker, or a per-room choice in the preferences.
-- [ ] **Should the join URL carry `skip-prejoin` (and `skip-lobby`)?** Ticking this line as-is means
+- [x] **Should the join URL carry `skip-prejoin` (and `skip-lobby`)?** Ticking this line as-is means
       **no**: the prejoin view is where a camera and microphone are chosen, and a button that drops you
       into a call with whatever device was default — camera live — is a surprise, not a convenience. The
       alternative reads "the call itself" as strictly as possible and appends them.
-- [ ] **What does clicking the room's *name* do, as opposed to its button?** Ticking this line as-is
+- [x] **What does clicking the room's *name* do, as opposed to its button?** Ticking this line as-is
       means the name opens the **room's page on the instance** (the link without the secret) and the
       button joins the call — which is what makes the entry's distinction between the two meaningful, and
       is subject to that route existing (see Risks). The alternatives are: the name does the same as the
-      button, or the name is an inert label and the button is the only action.
-- [ ] **How many rooms should a menu show, and should closed ones appear?** Ticking this line as-is means
+      button, or the name is an inert label and the button is the only action. Name does the same as the button.
+- [x] **How many rooms should a menu show, and should closed ones appear?** Ticking this line as-is means
       **the first 20 open rooms**, most recently created first, with a final *…and N more* row that opens
       the instance's own rooms page; rooms the API reports as closed are not listed. The alternative is
-      everything the API returns, which on a busy deployment is a menu 100 rows long.
+      everything the API returns, which on a busy deployment is a menu 100 rows long. The first 20, open first,
+      but showing closed as well.
