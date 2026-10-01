@@ -70,12 +70,10 @@ makes position a safe identity: the active list only ever holds work still to do
    on the player's computer, it can later on provide a GUI. Think about the implications of using openstreetmaps in terms of API usage, and recommend alternatives if 
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel.
-   
-3. [aideas](ideas/aideas) - Add a button to start a new cycle. Add another button to open codium with the readme so that new ideas can be added. Add a button to stop the cycle.
-   
-4. [meet](ideas/meet) - Add the rooms of each instance below the instance name, and a button next to the name to open that room specifically. The button must get you to the call itself, not the room homepage. 
 
-5. [orchestrator](ideas/orchestrator) - `/state` reports whatever the last cycle left in the local clone, so the GNOME panel showed two ideas as blocked for days after their questions
+3. [meet](ideas/meet) - Add the rooms of each instance below the instance name, and a button next to the name to open that room specifically. The button must get you to the call itself, not the room homepage. 
+
+4. [orchestrator](ideas/orchestrator) - `/state` reports whatever the last cycle left in the local clone, so the GNOME panel showed two ideas as blocked for days after their questions
    were answered and pushed. Minor update, 1.8. The heartbeat server reads the working tree at `IDEAS_REPO_PATH` and nothing in it ever fetches — the only `git pull` in the system
    runs at the *start* of a cycle. The indicator was polling correctly every 60 seconds and getting a byte-identical answer each time, which is indistinguishable from a dead
    refresh, so this reads to a user as two separate bugs. **`origin/main` is the truth, not the working tree**: the orchestrator pulls before it does anything, so what `/state`
@@ -288,3 +286,5 @@ makes position a safe identity: the active list only ever holds work still to do
    shape, a real error the cycle swallowed: `--resume` against a session id that no longer exists kills the agent instantly with `No conversation found with session ID: <id>`, and
    nothing ever clears the stored id, so that idea fails identically every cycle forever — fall back to a fresh conversation and say so; and a cycle that starts agents but has every
    one of them fail should not look like a successful cycle in the log. Cover all three in `orchestrator/tests/`, which this idea now owns.
+
+32. [aideas](ideas/aideas) - Add a button to start a new cycle. Add another button to open codium with the readme so that new ideas can be added. Add a button to stop the cycle. (finished 2026-10-01, v0.5)

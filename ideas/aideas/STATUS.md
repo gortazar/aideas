@@ -664,3 +664,5 @@ workflow by hand from the Actions tab; nothing else is outstanding.
   running**; this work may edit `SETUP.md` and `orchestrator/`; the release is a tag on
   this repo (`aideas-shell-v0.1`) published by `.github/workflows/release-aideas.yml`; menu
   rows stay read-only.
+
+<!-- orchestrator: no v0.5 release in gortazar/aideas when this entry was retired. -->
