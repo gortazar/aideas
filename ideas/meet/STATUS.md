@@ -1,5 +1,5 @@
-status: in_progress
-version: 0.1
+status: done
+version: 0.2
 started_at: 2026-08-28
 last_session_id: a8a338d4-3bad-427b-bd3d-112da5346bf3
 last_run: 2026-10-01T09:42:37+02:00
@@ -16,15 +16,15 @@ last_cycle_cost_usd: 0.0
 `status: done`, per the cycle header. The `README.md` entry does not say which kind of
 update it is, so `AGENTS.md`'s default applies: **minor**.
 
-Branch `agent/meet/2026-10-01` on `gortazar/meet`, pull request
-[#4](https://github.com/gortazar/meet/pull/4).
+**Released: [v0.2](https://github.com/gortazar/meet/releases/tag/v0.2)** from
+[354e8c2](https://github.com/gortazar/meet/commit/354e8c2), the merge of pull request
+[#4](https://github.com/gortazar/meet/pull/4). Both pins here name that commit.
 
-The previous cycle's sweep rescued U7 to `agent/meet-sweep`; that commit sat directly on
-this branch's tip, so it was reworded onto `agent/meet/2026-10-01` rather than opened as a
-second pull request. The gitlink here stays on `origin/main` until #4 merges — a pin to a
-commit that exists only on a branch resolves nowhere once the branch is squashed away.
+The previous cycle's sweep rescued U7 to `agent/meet-sweep`; that commit sat directly on the
+agent branch's tip, so it was reworded onto `agent/meet/2026-10-01` rather than opened as a
+second pull request. Both branches are deleted now that #4 is merged.
 
-### Units — 8 of 9 done
+### Units — 9 of 9 done
 
 - [x] **U1 — the room model.** `src/lib/rooms.js`: what a room is (`id`, `name`, `status`,
       `createdAt`, `joinUrl`), that the link taken is the **anonymous moderator** one, and
@@ -92,7 +92,10 @@ commit that exists only on a branch resolves nowhere once the branch is squashed
       end — a real `gnome-keyring-daemon` on the session bus stores and reads back a key,
       and a real libsoup request to a real closed port renders *Could not reach …* while
       that instance's own row goes on working. Screenshots retaken, `rooms.png` added.
-- [ ] **U8 — ship `v0.2`.** **Next.**
+- [x] **U8 — shipped.** Pull request [#4](https://github.com/gortazar/meet/pull/4) merged as
+      [354e8c2](https://github.com/gortazar/meet/commit/354e8c2) with all four checks green,
+      [v0.2](https://github.com/gortazar/meet/releases/tag/v0.2) released and verified, the
+      pin and the flake input bumped to the merge commit.
 
 **What the nested shell could not prove, and why.** The *rooms* and *refused* states have
 their room state injected into the indicator; everything around that is real — the payload
@@ -219,6 +222,35 @@ all, and the Sonar fixes, which are `catch {` in place of `catch (e) { void e; }
 `push` in place of three — no behaviour change. Neither is worth moving a published tag for;
 both ship with the next version.
 
+## What "done" covers
+
+Every feature in `PLAN.md`, as amended by the answered open questions.
+
+- **Merged**: pull request [#4](https://github.com/gortazar/meet/pull/4), squashed to
+  [354e8c2](https://github.com/gortazar/meet/commit/354e8c2), with `check`, `package`,
+  `sonar / Analysis` and SonarCloud all green. `CI` on `main` is green at the same commit.
+- **Quality gate green on `main`** — `new_reliability_rating`, `new_security_rating`,
+  `new_maintainability_rating` all 1 and duplication 0.0% — and **no open Sonar issue at any
+  severity, queried under both the legacy and the impact severity models**. So nothing is
+  documented here as a false positive: there was nothing to document. The eight findings the
+  gate raised on the pull request were all fixed in it (five floating promises, a nested
+  ternary, an array where a `Set` belonged, two `push`es that should have been one).
+- **Released and verified**: [v0.2](https://github.com/gortazar/meet/releases/tag/v0.2),
+  both assets, and `scripts/check-release.sh` green — over curl and over `gh`
+  independently, which is a new check this cycle (see Notes).
+- **The published artefact was run, not just downloaded.** The installer was piped into a
+  shell from a clean directory with `HOME` and `XDG_DATA_HOME` redirected: it fetched the
+  asset, the checksum matched, **17 files landed** — the four new `lib/` modules among them
+  — and `gnome-extensions enable` succeeded. The same published zip, sha256 `4f3653a6…`,
+  then passed **45/45 checks in a real headless GNOME Shell 46** through `MEET_INSTALL_ZIP`.
+- **298 headless tests** under plain `gjs`, green in `nix flake check` alongside ESLint and
+  the packed zip assembled and inspected.
+
+What a user gets that they did not have at 0.1: each configured deployment is an
+**instance**, its **rooms** are listed underneath it, and each room has a button that opens
+the call rather than the room's page. The API key that makes that possible is entered in the
+preferences and kept in the login keyring.
+
 ## Notes
 
 **From 0.1, and all still true.** Every one of these looks fine in a diff:
@@ -245,6 +277,25 @@ both ship with the next version.
   `ERROR`: a first analysis has no new-code period to evaluate against, and the shared
   workflow reads anything other than `OK` as a failure. The next push computed a gate and
   went green.
+
+**New this cycle, and worth keeping:**
+
+- **`scripts/check-release.sh` reported "no release tagged v0.2" when the release was there.**
+  The first failure was honest — the workflow had not published yet, which is the documented
+  trap. The second was not: `curl -f` against the unauthenticated `api.github.com` had
+  failed, `|| true` swallowed it, and the script turned that into a statement about the
+  release. It now falls back to `gh`, which is authenticated and has its own allowance, and
+  **both paths are exercised independently** (each verified with the other removed from
+  `PATH`). An unauthenticated 60-requests-an-hour limit answering 403 must not read as "the
+  release workflow never ran".
+- Its file list also only named 0.1's modules, so a zip missing `lib/rooms.js`,
+  `lib/client.js`, `lib/keyring.js` or `lib/secret-store.js` would have passed. All four are
+  named now.
+- **A trusted-TLS stub is not arrangeable here**, which is why the smoke test injects the
+  room state for the success path. `SSL_CERT_FILE` is not read by glib-networking, a p11-kit
+  user config does not register a second trust token, and `bwrap` cannot map a uid in this
+  sandbox. Recorded above under U7 as well, because it is the one place the plan's wording
+  could not be met literally.
 
 Difficulty estimate: **medium**, as the plan says — the model and the menu are small, but a
 network call from inside the compositor brings a credential to store, a request to cancel,
