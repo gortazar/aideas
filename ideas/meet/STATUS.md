@@ -16,7 +16,7 @@ update it is, so `AGENTS.md`'s default applies: **minor**.
 
 Branch `agent/meet/2026-10-01` on `gortazar/meet`.
 
-### Units — 1 of 8 done
+### Units — 2 of 8 done
 
 - [x] **U1 — the room model.** `src/lib/rooms.js`: what a room is (`id`, `name`, `status`,
       `createdAt`, `joinUrl`), that the link taken is the **anonymous moderator** one, and
@@ -25,15 +25,32 @@ Branch `agent/meet/2026-10-01` on `gortazar/meet`.
       not its row. 35 tests, including the degraded cases: no secret, another host, a
       disabled moderator link, no `access` object at all, and a `?not-secret=` that contains
       the word without being the parameter. **161 headless tests** in all.
-- [ ] **U2 — the two-level menu model.** `buildMenuModel` over instances plus a per-instance
-      room state: instance rows, indented room rows, the four failure notes, the cap and the
-      order. **Next.**
-- [ ] U3 — the API response, over an injected transport (`lib/client.js`).
+- [x] **U2 — the two-level menu model.** `buildMenuModel(instances, roomStates)` returns
+      instance rows with indented room rows beneath them, and the answered questions are
+      pinned as tests: twenty rooms at most, most recently created first, closed ones listed
+      too, a *…and N more* row for the remainder, and **one** destination per room, because
+      the name does what the button does. Five states other than "here they are" are rows
+      under the instance — no key, unreachable, refused, no rooms, and a request in flight —
+      so a broken instance costs its rooms and not the menu. A room whose link `rooms.js`
+      refuses is listed with **no** destination, so no button can be drawn. 33 tests, **194**
+      in the suite.
+- [ ] **U3 — the API response**, over an injected transport (`lib/client.js`). **Next.**
 - [ ] U4 — the API key in preferences, in the keyring.
 - [ ] U5 — the room rows and the join button in the shell.
 - [ ] U6 — the request itself: libsoup3, the cancellable, the timeout.
 - [ ] U7 — the nested shell: a stub instance, the assertions, the screenshots.
 - [ ] U8 — ship `v0.2`.
+
+**Two things U2 added that the plan does not list**, both stated here rather than buried:
+
+- **A fifth state, `loading`.** The plan names four *failures*; a request that has not
+  answered yet is not one, but on the very first open there is no previous list to leave on
+  screen and the alternative is a gap under the instance that reads as breakage. It is a
+  note row like the others, and an instance with *no* state at all still gets no rows —
+  which is 0.1's menu exactly.
+- **A separator between instances.** With rooms indented underneath, the row after one
+  instance's last room is the next instance, and without a rule between them the two levels
+  read as one list.
 
 ### What the research settled, before any code
 
