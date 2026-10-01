@@ -1,4 +1,4 @@
-status: not_started
+status: in_progress
 version: 0.1
 started_at: 2026-08-28
 last_session_id: 259b11be-e715-4112-802e-a582b86d5fb9
@@ -8,8 +8,60 @@ last_cycle_cost_usd: 23.70250049999999
 ## Log
 - 2026-08-28T10:09:49+02:00 — done ($23.70250049999999)
 
+## This entry — 0.2: the rooms of each instance, and a button that joins the call
 
-### 2026-08-28 — done (0.1: one click from the top bar into an OpenVidu Meet room)
+`version:` above still reads `0.1` and moves to **`0.2`** in the same commit as
+`status: done`, per the cycle header. The `README.md` entry does not say which kind of
+update it is, so `AGENTS.md`'s default applies: **minor**.
+
+Branch `agent/meet/2026-10-01` on `gortazar/meet`.
+
+### Units — 1 of 8 done
+
+- [x] **U1 — the room model.** `src/lib/rooms.js`: what a room is (`id`, `name`, `status`,
+      `createdAt`, `joinUrl`), that the link taken is the **anonymous moderator** one, and
+      the three-part check that a join URL really joins — `https:`, the instance's own host,
+      and a non-empty `secret`. A link that fails any of them costs the room its button and
+      not its row. 35 tests, including the degraded cases: no secret, another host, a
+      disabled moderator link, no `access` object at all, and a `?not-secret=` that contains
+      the word without being the parameter. **161 headless tests** in all.
+- [ ] **U2 — the two-level menu model.** `buildMenuModel` over instances plus a per-instance
+      room state: instance rows, indented room rows, the four failure notes, the cap and the
+      order. **Next.**
+- [ ] U3 — the API response, over an injected transport (`lib/client.js`).
+- [ ] U4 — the API key in preferences, in the keyring.
+- [ ] U5 — the room rows and the join button in the shell.
+- [ ] U6 — the request itself: libsoup3, the cancellable, the timeout.
+- [ ] U7 — the nested shell: a stub instance, the assertions, the screenshots.
+- [ ] U8 — ship `v0.2`.
+
+### What the research settled, before any code
+
+The plan's four facts about OpenVidu Meet are confirmed against the 3.8 documentation, so
+none of them is an assumption any more:
+
+- the list is `GET <instance>/api/v1/rooms`, authenticated with an **`X-API-KEY` header**,
+  and the key is generated from the deployment's *Embedded* page;
+- a room carries `roomId`, `roomName`, `owner`, `creationDate` (epoch milliseconds),
+  `status`, and `access.anonymous.moderator.url` / `access.anonymous.speaker.url`;
+- a role link looks exactly like `https://YOUR_DOMAIN/meet/room/room-123?secret=123456` —
+  the documented example — so the `secret` parameter is what the check in `rooms.js` looks
+  for;
+- the statuses are **open**, **active meeting** and **closed**. The answered question asks
+  for closed rooms listed too, so `status` is parsed and carried but does not filter.
+
+Two consequences worth stating now rather than at the end:
+
+- **The API path is resolved relative to the instance URL.** The documentation's own
+  deployment serves the app under `/meet`, and its API docs at `/meet/api/v1/docs/`. An
+  instance entered as `https://host/meet/` therefore has to reach
+  `https://host/meet/api/v1/rooms`, not `https://host/api/v1/rooms`. Resolving relatively
+  handles both, and costs an instance at the domain root nothing.
+- **`gi://Secret` and `gi://Soup` (3.0) are both present** and usable from plain `gjs` on
+  this machine, so the keyring answer to open question 2 and the libsoup half of U6 are
+  both buildable as planned. Checked, not assumed.
+
+### Previously — 2026-08-28, 0.1 (one click from the top bar into an OpenVidu Meet room)
 
 A button in the GNOME Shell top bar whose menu lists your meeting rooms. Click one and it
 opens in your default browser. **Meet next** and **Meet** ship with it as ordinary
@@ -36,125 +88,45 @@ your own.
   rather than dismissed. `CI` on `main` is green at
   [6fae6b7](https://github.com/gortazar/meet/commit/6fae6b7).
 
-## Units
-- [x] U1 — reproducible environment and a green pipeline before any behaviour.
-      `gortazar/meet` created and added here as the `upstream/` submodule. `flake.nix`
-      exposes three checks — ESLint, the headless gjs suite, and the packed
-      `.shell-extension.zip` assembled and inspected. `SONAR_TOKEN` set, `gortazar_meet`
-      created and put on the **aideas uninstrumented** quality gate (the GJS one, with no
-      coverage condition) rather than the org default `Sonar way`, whose 80%
-      coverage-on-new-code condition no gjs project can meet.
-- [x] U2 — the destinations model. `src/lib/destinations.js`: the two shipped rooms as
-      ordinary frozen entries, and the rule that a destination is a label plus an absolute
-      `https:` URL with a host. Nothing throws — a row broken by hand in dconf costs you
-      that row, not the menu. 22 tests.
-- [x] U3 — the launcher. `src/lib/launcher.js` over an injected launch seam, so the three
-      failure states that cannot be arranged headlessly — a handler that refuses, a seam
-      that raises on the calling frame, a machine with no browser — all have tests.
-      `open()` never throws and never rejects. 15 tests.
-- [x] U4 — the symbolic panel icon. An **original drawing** echoing the logo's arrangement
-      (two overlapping bubbles, a play triangle), since the mark may not be vendored.
-      Rasterised through the same GdkPixbuf/librsvg pair the shell draws it with and
-      checked pixel by pixel. Both pixel assertions verified by mutation. 12 tests.
-- [x] U5 — configurable destinations. A GSettings `a(ss)` whose schema default is the two
-      rooms; `lib/settings.js`, `lib/editing.js` (what add / remove / move / restore *do*,
-      as pure functions) and `prefs.js` (the Adwaita window, holding the working list so a
-      half-typed address is not erased under the cursor). The schema is compiled under
-      `--strict` in the suite and its default read back and held against the code's. Plus
-      `hygiene.test.js`. 46 tests.
-- [x] U6 — the panel button and its menu. `extension.js` wires U2–U5 together;
-      `lib/menu.js` holds the menu's shape so the empty state is a test case. Teardown is
-      asserted, not trusted. 12 tests.
-- [x] U7 — the nested-shell smoke test. `ci/smoke-test.sh`: **27 checks, all passing on
-      GNOME Shell 46.** The icon is *drawn* (12.6% inked; a missing icon measures 0.0%,
-      verified by mutation), clicking a room really reaches a stub browser registered for
-      `x-scheme-handler/https`, emptying the rooms leaves a menu that says so, and five
-      enable/disable rounds leave no timer behind. The screenshots come from that run.
-- [x] U8 — installer and README. `install.sh` fetches the packed zip from the latest
-      release and verifies it against the published checksum; the README opens with that
-      one command. `packaging.test.js` holds the installer, the README and the release
-      workflow against each other. 14 tests. **126 headless tests in all.**
-- [x] U9 — the wrapper. `flake.nix` running upstream's checks at the pinned commit,
-      `scripts/check-pin.sh`, `scripts/check-release.sh`, `README.md`, and
-      `.github/workflows/ci-meet.yml` fixed — it ran `nix flake check` in a directory that
-      has no flake.
-- [x] U10 — release, and verifying it. `v0.1` tagged and published; the published zip run
-      in the nested shell through the new `MEET_INSTALL_ZIP` path (pull request
-      [#2](https://github.com/gortazar/meet/pull/2)), and the five Sonar findings fixed
-      (pull request [#3](https://github.com/gortazar/meet/pull/3)).
-
-## What "done" covers
-
-Every feature in `PLAN.md`, as amended by the answered open questions: the panel button and
-its symbolic icon, the two-room menu built from configurable settings, the launch through
-the desktop's own default handler, the visible-and-harmless failure path, the preferences
-dialog that can add, edit, reorder and remove entries, review-rules compliance, the headless
-suite, the icon tested as an image, the nested-shell smoke test, the reproducible
-environment and green CI, the installer, and the wrapper here.
-
-Three pull requests, all merged, all with `check`, `package` and `sonar / Analysis` green.
-No open Sonar issue at any severity, so nothing is documented as a false positive — there
-was nothing to document.
+Its ten units were: the environment and a green pipeline; the destinations model; the
+launcher over an injected seam; the symbolic panel icon, tested as an image; configurable
+destinations with their schema and preferences window; the panel button and its menu; the
+nested-shell smoke test; the installer and README; the wrapper here; and the release with
+its two follow-ups.
 
 **The release is `v0.1` = `ca3152d`.** Two follow-ups landed on `main` after it: the
 `MEET_INSTALL_ZIP` smoke-test path, which is test tooling and is not in the packed zip at
 all, and the Sonar fixes, which are `catch {` in place of `catch (e) { void e; }` and one
 `push` in place of three — no behaviour change. Neither is worth moving a published tag for;
-both ship with the next version. The `upstream/` gitlink and the `meet-src` flake input
-point at `main`'s head, which is where the work is.
+both ship with the next version.
 
 ## Notes
 
-**The answered open questions changed the plan in three places**, and the units above
-reflect the answers rather than the original draft:
+**From 0.1, and all still true.** Every one of these looks fine in a diff:
 
-- The OpenVidu logo **may not be vendored**. There is no remote fetch, no bundled PNG and
-  no `scripts/refresh-logo.sh`; the panel carries an **original symbolic icon** drawn to
-  resemble the logo's arrangement — overlapping speech bubbles with a play triangle — in
-  the single colour GTK recolours symbolic icons with.
-- The two URLs **must be configurable**, with a preferences dialog that can add entries.
-  That made the schema and preferences a unit of its own, which the draft plan did not
-  have, and the menu is built from settings rather than from a constant.
-- "A new browser window" is satisfied by whatever the **default handler** does, so the
-  launch is `Gio.AppInfo.launch_default_for_uri_async` and nothing spawns a browser. This
-  is stated in the extension's own README, because it is the first thing a user will
-  notice: a running browser opens a tab.
-
-**One thing was added that the draft plan does not list**: the menu ends with a `Rooms…`
-item that opens the preferences. It follows from the configurability answer rather than
-extending it — with every room removable, a menu with none left would otherwise be a dead
-end, nothing to click and no way from there to the window that would fix it.
-
-**Findings worth keeping, all of the kind that look fine in a diff:**
-
+- The OpenVidu logo **may not be vendored**: the panel carries an **original symbolic icon**
+  drawn to resemble the logo's arrangement, in the single colour GTK recolours symbolic
+  icons with.
 - `Adw.ExpanderRow.add_suffix` puts widgets on screen in the reverse of the order they were
-  added, which had the delete button nearest the room's name. The buttons now go in one
-  `Gtk.Box`, which packs in the order written. Found by looking at the nested shell's
-  screenshot, not by reading the code.
-- A pixel measurement **cannot** tell a working preferences page from a broken one.
-  Calibrated by making `fillPreferencesWindow` throw: GNOME's resulting error page scored
-  1.63% dark against the real page's 0.42%, so the obvious "did it draw anything" check
+  added. The buttons go in one `Gtk.Box`, which packs in the order written. Found by looking
+  at the nested shell's screenshot, not by reading the code.
+- A pixel measurement **cannot** tell a working preferences page from a broken one. GNOME's
+  error page scored 1.63% dark against the real page's 0.42%, so "did it draw anything"
   passes on the broken case. What catches it is the log line `Failed to open preferences`,
-  emitted by the prefs process — which carries no uuid and so slipped through the existing
-  scan. The scan now looks for it, and both directions are verified.
+  which carries no uuid and so slipped through the existing scan.
 - A synthetic pointer click into the preferences window does not reach GTK clients under
   headless Wayland. Tried and dropped: a click that silently misses is worse than no click.
 - **The orchestrator's sweep had pushed a branch literally named `HEAD`** at the rescued
-  commit. `github:gortazar/meet` then resolved to it, and the wrapper's first
-  `nix flake lock` pinned a commit that was on no real branch. Deleted, and the lock redone
-  explicitly against the merge commit; `check-pin.sh` now warns when a pin is not on
-  `origin/main`.
+  commit, and `github:gortazar/meet` then resolved to it. `check-pin.sh` now warns when a
+  pin is not on `origin/main`.
 - Auto-merge fires the moment checks go green. A commit pushed to a branch after arming it
-  misses the merge and silently recreates the branch — which is how the Sonar fixes needed a
-  third pull request. Arm it last.
+  misses the merge and silently recreates the branch. Arm it last.
 - **The very first `sonar / Analysis` on `main` fails, and it is not a quality problem.**
-  The run on `ca3152d` — the release commit — is red. Its gate status is `NONE`, not
-  `ERROR`: Sonar computed no gate at all, because a first analysis has no new-code period
-  to evaluate against, and the shared workflow reads anything other than `OK` as a failure.
-  The next push to `main` computed a gate and went green, and so did the one after it. Worth
-  knowing before someone reads that red mark as a verdict on the release; worth raising with
-  `ideas/quality-gate` if a second new repository does the same, since the remedy belongs in
-  the shared workflow and not here.
+  The run on `ca3152d` — the release commit — is red, with gate status `NONE` rather than
+  `ERROR`: a first analysis has no new-code period to evaluate against, and the shared
+  workflow reads anything other than `OK` as a failure. The next push computed a gate and
+  went green.
 
-Difficulty estimate: easy, as planned — one unit larger than the draft, because the
-preferences dialog was added by an answered question.
+Difficulty estimate: **medium**, as the plan says — the model and the menu are small, but a
+network call from inside the compositor brings a credential to store, a request to cancel,
+and four failure states that all have to read as menu rows.
