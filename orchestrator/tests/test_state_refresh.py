@@ -19,6 +19,8 @@ Every remote here is a bare repository on disk. No network, no DNS, no real orig
 
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 
 import orchestrator as orch
@@ -151,6 +153,171 @@ class StateEndpointRefreshTests(support.GitSandbox):
         self.assertEqual(failed["refresh"]["state"], "stale")
         self.assertEqual(len(stub.calls_matching("fetch")), attempts,
                          "a failed fetch must still start the window")
+
+
+class RefreshFieldShapeTests(support.GitSandbox):
+    """What `refresh` promises a consumer, case by case."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        import heartbeat_server as hb
+        self.hb = hb
+        hb.reset_refresh_state()
+        self.addCleanup(hb.reset_refresh_state)
+
+        self.origin = support.bare_remote(self.path("origin.git"))
+        self.seed = self.path("seed")
+        support.init_repo(self.seed, "README.md", "# Ideas\n\n## Ideas\n\n1. [demo](ideas/demo)\n")
+        support.write(self.seed / ".agent-config.yml", support.AGENT_CONFIG)
+        support.write(self.seed / "ideas" / "demo" / "STATUS.md", "status: in_progress\n")
+        support.write(self.seed / "ideas" / "demo" / "PLAN.md", "# Plan\n")
+        support.commit_all(self.seed, "an idea")
+        support.git("remote", "add", "origin", str(self.origin), cwd=self.seed)
+        support.git("push", "--quiet", "-u", "origin", "main", cwd=self.seed)
+        self.repo = self.path("clone")
+        support.git("clone", "--quiet", str(self.origin), str(self.repo), cwd=self.tmp)
+        os.environ["IDEAS_REPO_PATH"] = str(self.repo)
+
+    def refresh(self, **kwargs) -> dict:
+        return self.hb.orchestrator_state(**kwargs)["refresh"]
+
+    def test_the_keys_are_exactly_these_four(self) -> None:
+        self.assertEqual(set(self.refresh()),
+                         {"state", "reason", "checked_at", "age_seconds"})
+
+    def test_a_successful_refresh_is_current_with_no_reason(self) -> None:
+        refresh = self.refresh(now=lambda: 1_700_000_000.0)
+
+        self.assertEqual(refresh["state"], "current")
+        self.assertIsNone(refresh["reason"], "reason is null when there is nothing to say")
+        self.assertEqual(refresh["checked_at"], 1_700_000_000.0)
+        self.assertEqual(refresh["age_seconds"], 0)
+
+    def test_age_seconds_is_an_integer_age_of_the_last_success(self) -> None:
+        clock, wall = [1000.0], [1_700_000_000.0]
+        self.refresh(clock=lambda: clock[0], now=lambda: wall[0])
+
+        clock[0] += 1          # inside the window: no new attempt
+        wall[0] += 412.7       # but time has passed
+        refresh = self.refresh(clock=lambda: clock[0], now=lambda: wall[0])
+
+        self.assertEqual(refresh["checked_at"], 1_700_000_000.0, "the last *success*")
+        self.assertEqual(refresh["age_seconds"], 413)
+        self.assertIsInstance(refresh["age_seconds"], int)
+
+    def test_a_box_that_has_never_managed_a_refresh_reports_nulls(self) -> None:
+        support.git("remote", "set-url", "origin", str(self.path("gone.git")), cwd=self.repo)
+
+        refresh = self.refresh()
+
+        self.assertEqual(refresh["state"], "stale")
+        self.assertIsNone(refresh["checked_at"])
+        self.assertIsNone(refresh["age_seconds"])
+
+    def test_the_state_vocabulary_is_closed(self) -> None:
+        self.assertIn(self.refresh()["state"], ("current", "stale"))
+
+    def test_each_declined_case_has_its_own_sentence(self) -> None:
+        cases = {
+            "uncommitted changes": lambda: support.write(self.repo / "README.md", "edited\n"),
+            "no upstream branch": lambda: support.git(
+                "checkout", "--quiet", "--detach", "HEAD", cwd=self.repo),
+            "could not reach": lambda: support.git(
+                "remote", "set-url", "origin", str(self.path("gone.git")), cwd=self.repo),
+        }
+        for expected, provoke in cases.items():
+            with self.subTest(expected):
+                support.git("checkout", "--quiet", "main", cwd=self.repo)
+                support.git("checkout", "--quiet", "--", ".", cwd=self.repo)
+                support.git("remote", "set-url", "origin", str(self.origin), cwd=self.repo)
+                self.hb.reset_refresh_state()
+                provoke()
+
+                refresh = self.refresh()
+
+                self.assertEqual(refresh["state"], "stale")
+                self.assertIn(expected, refresh["reason"])
+
+    def test_an_unavailable_body_still_promises_nothing_but_reason(self) -> None:
+        """The contract says so, and a consumer branches on `available` before anything else."""
+        os.environ["IDEAS_REPO_PATH"] = ""
+
+        payload = self.hb.orchestrator_state()
+
+        self.assertFalse(payload["available"])
+        self.assertEqual(set(payload), {"available", "reason"})
+
+    def test_a_refresh_that_raises_does_not_500_the_endpoint(self) -> None:
+        def explode(_repo):
+            raise RuntimeError("git went missing")
+
+        payload = self.hb.orchestrator_state(refresh=explode)
+
+        self.assertTrue(payload["available"], "the queue is still readable")
+        self.assertEqual(payload["refresh"]["state"], "stale")
+        self.assertIn("git went missing", payload["refresh"]["reason"])
+
+
+class StatusCommandTests(support.GitSandbox):
+    """`/state` and `orchestrator.py status` have been one implementation since 1.4."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.origin = support.bare_remote(self.path("origin.git"))
+        self.seed = self.path("seed")
+        support.init_repo(self.seed, "README.md", "# Ideas\n\n## Ideas\n\n1. [demo](ideas/demo)\n")
+        support.write(self.seed / ".agent-config.yml", support.AGENT_CONFIG)
+        support.write(self.seed / "ideas" / "demo" / "STATUS.md", "status: in_progress\n")
+        support.write(self.seed / "ideas" / "demo" / "PLAN.md", "# Plan\n")
+        support.commit_all(self.seed, "an idea")
+        support.git("remote", "add", "origin", str(self.origin), cwd=self.seed)
+        support.git("push", "--quiet", "-u", "origin", "main", cwd=self.seed)
+        self.repo = self.path("clone")
+        support.git("clone", "--quiet", str(self.origin), str(self.repo), cwd=self.tmp)
+
+    def status_output(self) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            orch.cmd_status(self.repo, "http://127.0.0.1:1")
+        return out.getvalue()
+
+    def test_a_clone_behind_its_upstream_is_warned_about(self) -> None:
+        support.write(self.seed / "new.md", "pushed elsewhere\n")
+        support.commit_all(self.seed, "new work")
+        support.git("push", "--quiet", "origin", "main", cwd=self.seed)
+        support.git("fetch", "--quiet", "origin", cwd=self.repo)  # status never fetches
+
+        output = self.status_output()
+
+        self.assertIn("WARNING", output)
+        self.assertIn("may be behind origin", output)
+        self.assertIn("1 commit behind", output)
+
+    def test_a_current_clone_says_nothing_about_it(self) -> None:
+        output = self.status_output()
+
+        self.assertNotIn("may be behind origin", output)
+
+    def test_status_never_fetches_and_never_moves_the_tree(self) -> None:
+        """It is run interactively and must answer at once; a cycle may be in that tree."""
+        stub = self.stub_binary("git", 'exec "$REAL_BINARY" "$@"')
+        support.write(self.seed / "new.md", "pushed elsewhere\n")
+        support.commit_all(self.seed, "new work")
+        support.git("push", "--quiet", "origin", "main", cwd=self.seed)
+        before = support.git("rev-parse", "HEAD", cwd=self.repo).stdout.strip()
+
+        self.status_output()
+
+        self.assertEqual(stub.calls_matching("fetch"), [], "status shelled out to the network")
+        self.assertEqual(support.git("rev-parse", "HEAD", cwd=self.repo).stdout.strip(),
+                         before, "status moved the working tree")
+
+    def test_a_dirty_tree_is_reported_in_the_same_words_as_the_endpoint(self) -> None:
+        support.write(self.repo / "README.md", "edited by hand\n")
+
+        output = self.status_output()
+
+        self.assertIn("uncommitted changes", output)
 
 
 class RefreshCloneTests(support.GitSandbox):

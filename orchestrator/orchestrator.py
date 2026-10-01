@@ -2067,6 +2067,59 @@ STATE_FETCH_TIMEOUT_SECONDS = float(
     os.environ.get("ORCHESTRATOR_STATE_FETCH_TIMEOUT_SECONDS", "5"))
 
 
+def local_refresh_blocker(repo: Path) -> tuple[str | None, str]:
+    """`(reason this clone cannot be fast-forwarded, its upstream ref)` — no network.
+
+    The three refusals that can be decided without talking to a remote, in one place because
+    two callers need them and in the same words: `refresh_clone`, which then fetches, and
+    `upstream_gap`, which only reports. Splitting the wording between the endpoint and the
+    status command is exactly how the two drift into disagreeing about the same clone.
+
+    Dirtiness is measured on **tracked files only**. A fast-forward does not touch a
+    submodule's working tree, only its gitlink, and an untracked file in the way makes git
+    refuse the checkout rather than lose anything. Counting submodule state would leave the
+    real box permanently dirty, since a gitlink a cycle moved is an everyday state, and the
+    refresh would then never run at all.
+    """
+    if not (repo / ".git").exists():
+        return f"{repo} is not a git clone", ""
+
+    dirty = git("status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all",
+                cwd=repo)
+    if dirty.returncode != 0:
+        return f"{repo} is not a git clone", ""
+    if dirty.stdout.strip():
+        return "the working tree has uncommitted changes", ""
+
+    upstream = git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", cwd=repo)
+    tracking = upstream.stdout.strip()
+    if upstream.returncode != 0 or not tracking:
+        return "no upstream branch is configured", ""
+    return None, tracking
+
+
+def upstream_gap(repo: Path) -> tuple[bool, str | None]:
+    """Is this clone level with its upstream, judged without touching the network?
+
+    `refresh_clone`'s read-only sibling, for `orchestrator.py status`. A status command must
+    not block on a remote — it is run interactively and expected to answer at once — and it
+    certainly must not move a working tree, which is why it does not simply call its sibling:
+    a cycle may be building in that tree, and only the endpoint holds the lock check.
+
+    It therefore answers from the last fetch, which is what "may be behind" means in the line
+    it feeds. The endpoint is what actually refreshes.
+    """
+    blocker, tracking = local_refresh_blocker(repo)
+    if blocker:
+        return False, blocker
+    behind = git("rev-list", "--count", f"HEAD..{tracking}", cwd=repo).stdout.strip()
+    if behind.isdigit() and int(behind) > 0:
+        plural = "" if behind == "1" else "s"
+        return False, (f"{behind} commit{plural} behind {tracking} as of the last fetch; "
+                       f"GET /state refreshes, or run `git pull`")
+    return True, None
+
+
 def refresh_clone(repo: Path, *, timeout: float | None = None) -> tuple[bool, str | None]:
     """Bring `repo` up to its upstream if that can be done without deciding anything.
 
@@ -2097,20 +2150,9 @@ def refresh_clone(repo: Path, *, timeout: float | None = None) -> tuple[bool, st
     submodule state would leave the real box permanently dirty, since a gitlink a cycle moved is
     an everyday state, and the refresh would then never run at all.
     """
-    if not (repo / ".git").exists():
-        return False, f"{repo} is not a git clone"
-
-    dirty = git("status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all",
-                cwd=repo)
-    if dirty.returncode != 0:
-        return False, f"{repo} is not a git clone"
-    if dirty.stdout.strip():
-        return False, "the working tree has uncommitted changes"
-
-    upstream = git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", cwd=repo)
-    tracking = upstream.stdout.strip()
-    if upstream.returncode != 0 or not tracking:
-        return False, "no upstream branch is configured"
+    blocker, tracking = local_refresh_blocker(repo)
+    if blocker:
+        return False, blocker
     remote = tracking.split("/", 1)[0]
 
     # Non-interactive, always. A user unit started at login has no ssh-agent and no terminal,
@@ -2317,6 +2359,16 @@ def cmd_status(repo: Path, heartbeat_url: str) -> int:
     entries = queue.entries()
 
     print(f"Orchestrator  v{ORCHESTRATOR_VERSION}   repo {repo}")
+
+    # The same question /state answers, in the same words. These two have been one
+    # implementation since 1.4 and splitting them is precisely how they drift: a panel saying
+    # the clone is behind while `status` says nothing is a worse bug than either alone.
+    # Read-only here — `status` reports, it does not fetch — so this says "may be", and the
+    # endpoint is what actually refreshes.
+    fresh, why = upstream_gap(repo)
+    if not fresh:
+        print(f"  WARNING: this clone may be behind origin — {why}")
+
     for line in heartbeat_report(heartbeat_url):
         print(line)
 

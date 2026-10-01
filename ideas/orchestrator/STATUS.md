@@ -40,13 +40,22 @@ last_cycle_cost_usd: 0.0
       failed attempt starts the window too. The end-to-end case is the reported bug: an
       unticked question answered and pushed by a second clone shows as `ready` on the next
       poll, with no cycle having run. 7 tests.
-- [ ] **U4 — the `refresh` field** on the available body, and the status command's warning.
+- [x] **U4 — the `refresh` field and the status line.** Keys are exactly `state`, `reason`,
+      `checked_at`, `age_seconds`; `state` is the closed pair `current`/`stale`; `reason` is
+      null when current; `checked_at` is the last **success** and `age_seconds` its integer
+      age; a box that has never managed a refresh reports nulls, not a third state. An
+      `available: false` body still carries nothing but `reason`, and a refresh that raises
+      degrades to `stale` instead of 500ing. `orchestrator.py status` prints the same
+      sentence — but **read-only**: `upstream_gap()` answers from the last fetch rather than
+      calling its mutating sibling, because `status` is interactive and a cycle may be
+      building in that tree. `local_refresh_blocker()` holds the three network-free refusals
+      so both callers word them identically. 133 tests.
 - [ ] **U5 — the contract** in `ideas/aideas/docs/state-contract.md` and its exact-keys test.
 - [ ] **U6 — `SETUP.md`** and the hardened unit's `ReadWritePaths` note.
 - [ ] **U7 — 1.8**, `status: done`, suite green under `env -i`.
 
-Next: U4 — the refresh field's shape asserted case by case, and the status command's
-warning line.
+Next: U5 — the contract in ideas/aideas/docs/state-contract.md and the exact-keys assertion
+in its test suite.
 
 Run the suite from the repo root:
 
