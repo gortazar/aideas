@@ -58,11 +58,18 @@ last_cycle_cost_usd: 0.0
       test of its shape. Both suites green: 133 orchestrator, 114 aideas. **No extension
       source touched** — rendering the field is the aideas idea's own entry, and the key is
       additive precisely so an extension that ignores it keeps working.
-- [ ] **U6 — `SETUP.md`** and the hardened unit's `ReadWritePaths` note.
+- [x] **U6 — what refreshing needs from the box.** `SETUP.md` gains a subsection under
+      `/state`, and `idea-heartbeat.service` the matching commented lines. Checking the real
+      unit rather than assuming turned up two requirements beyond the planned
+      `ReadWritePaths`: `RestrictAddressFamilies` omits `AF_UNIX`, which both an ssh-agent
+      socket and `systemd-resolved` need, and `ProtectHome=yes` makes a clone under `/home`
+      invisible to that unit for reading as much as for writing. `origin` here is SSH
+      (`git@github.com:gortazar/aideas.git`), so the `BatchMode=yes` in the fetch is load
+      bearing, not decorative. All of it is optional: a box that cannot refresh reports
+      `stale` with the reason and serves the queue it had.
 - [ ] **U7 — 1.8**, `status: done`, suite green under `env -i`.
 
-Next: U6 — SETUP.md on what refreshing needs from the box, and the hardened unit's
-ReadWritePaths note.
+Next: U7 — ORCHESTRATOR_VERSION 1.8, version: 1.8, status: done, suite green under env -i.
 
 Run the suite from the repo root:
 

@@ -158,6 +158,46 @@ Two things to know, both about the box rather than the extension:
 - `HEARTBEAT_BIND_IP` and `HEARTBEAT_PORT` are what the extension has to be pointed at. If
   you changed the port from 8787, change it in the extension's preferences too.
 
+##### `/state` refreshes the clone, so it needs two things from the box
+
+Since orchestrator 1.8, `GET /state` fast-forwards the clone to `origin` before reading the
+queue — at most once every two minutes, never while a cycle is running, and never with
+anything but `merge --ff-only`. That is what makes a question you answer and push from the
+laptop show up in the panel within about two minutes instead of waiting for a cycle. It needs:
+
+- **Write access to the clone.** The hardened `orchestrator/systemd/idea-heartbeat.service`
+  runs with `ProtectSystem=strict`, so the whole filesystem is read-only to it. Two lines,
+  both commented in that unit file:
+
+  ```ini
+  ReadWritePaths=/opt/idea-agent                      # matching IDEAS_REPO_PATH
+  RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX    # ssh-agent, systemd-resolved
+  ```
+
+  `AF_UNIX` is there because the shipped list does not include it, and both an ssh-agent
+  socket and `systemd-resolved`'s socket are `AF_UNIX`: without it an SSH remote cannot
+  authenticate and name resolution may not work at all. Note also `ProtectHome=yes` in that
+  unit — a clone under `/home` is invisible to it entirely, for reading as much as for
+  writing. The user units written by `orchestrator/install.sh` are not sandboxed and need
+  none of this.
+- **A `git fetch` that works non-interactively as that user.** The fetch runs with
+  `GIT_TERMINAL_PROMPT=0`, `GIT_ASKPASS=true` and `BatchMode=yes`, and is abandoned after five
+  seconds, so it can never hang the server — but a passphrase-protected SSH key with no agent,
+  or an `https` remote whose credential helper wants to prompt, simply never succeeds. A
+  deploy key, or an agent socket the unit can see, is the fix. Check it the way the unit will
+  run it:
+
+  ```bash
+  sudo -u CHANGEME_USER env GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND='ssh -o BatchMode=yes' \
+      git -C /opt/idea-agent fetch --quiet origin && echo "the refresh will work"
+  ```
+
+Neither is fatal. When either is missing the body reports `refresh.state: "stale"` with the
+reason in words, and the panel shows the queue it already had — which is the old behaviour,
+now labelled rather than silent. `python3 orchestrator/orchestrator.py status` prints the same
+sentence, and `ORCHESTRATOR_STATE_REFRESH_SECONDS` and
+`ORCHESTRATOR_STATE_FETCH_TIMEOUT_SECONDS` tune the window and the timeout.
+
 #### Letting the panel start a cycle
 
 The menu's *Run a cycle* posts to `/cycle` on the same receiver. It applies the gates a

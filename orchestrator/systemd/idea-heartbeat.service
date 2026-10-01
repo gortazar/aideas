@@ -18,7 +18,21 @@ StartLimitIntervalSec=0
 # State file lives here; the unit gets it created and owned automatically.
 StateDirectory=idea-agent
 
-# Hardening — this process only needs to write its one state file and listen on the VPN.
+# Hardening — this process writes its one state file, listens on the VPN, and since
+# orchestrator 1.8 fast-forwards the ideas clone before answering GET /state.
+#
+# That last one is the only thing here that needs anything relaxed, and all of it is
+# optional: when the refresh cannot run, /state reports refresh.state "stale" with the reason
+# in words and serves the queue it already had. That is the pre-1.8 behaviour, labelled
+# rather than silent — but the panel then shows an answer pushed from the laptop only after a
+# cycle has run, which is the bug 1.8 exists to fix. To let it work:
+#
+#   ReadWritePaths=/opt/idea-agent        # ProtectSystem=strict makes everything read-only
+#   RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX   # ssh-agent and systemd-resolved
+#
+# Note ProtectHome=yes: a clone under /home is invisible to this unit entirely, for reading
+# as much as for writing, so IDEAS_REPO_PATH must point outside it. SETUP.md has the detail
+# and the fetch's other requirement, which is that `git fetch` works without a prompt.
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
