@@ -71,8 +71,6 @@ makes position a safe identity: the active list only ever holds work still to do
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel.
 
-3. [meet](ideas/meet) - Add the rooms of each instance below the instance name, and a button next to the name to open that room specifically. The button must get you to the call itself, not the room homepage. 
-
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
@@ -288,3 +286,5 @@ makes position a safe identity: the active list only ever holds work still to do
    Decide and write down what happens in the cases that makes a GET mutate a working tree: a dirty tree, a clone that has genuinely diverged, a fetch that fails because the network
    is down. Stale data shown silently is the bug being fixed, so the honest answer is probably to serve what it has and say in the payload that it is out of date — which means a
    field the extension can render, and that is a contract change `ideas/aideas/docs/state-contract.md` has to record. Cover it in `orchestrator/tests/`.
+
+34. [meet](ideas/meet) - Add the rooms of each instance below the instance name, and a button next to the name to open that room specifically. The button must get you to the call itself, not the room homepage. (finished 2026-10-01, v0.2)
