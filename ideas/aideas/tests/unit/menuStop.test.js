@@ -279,7 +279,7 @@ suite('where the stop item sits', () => {
         const list = menuItems(built({ reading: running }));
 
         assertDeepEquals(list.filter(i => i.type === 'action').map(i => i.action),
-            ['refresh', 'cycle', 'stop']);
+            ['refresh', 'cycle', 'stop', 'open']);
     });
 
     test('after Run anyway, when there is one', () => {
@@ -289,7 +289,7 @@ suite('where the stop item sits', () => {
         }));
 
         assertDeepEquals(list.filter(i => i.type === 'action').map(i => i.action),
-            ['refresh', 'cycle', 'override', 'stop']);
+            ['refresh', 'cycle', 'override', 'stop', 'open']);
     });
 
     test('it is one item whichever way it reads — never a stop and a resume at once', () => {

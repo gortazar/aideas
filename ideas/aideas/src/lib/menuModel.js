@@ -229,6 +229,7 @@ function actionItems(reading, actions) {
     const {
         refreshing = false, cycleInFlight = false, cycleOutcome = null,
         stopInFlight = null, stopOutcome = null,
+        editor = null, openOutcome = null,
     } = actions ?? {};
     const unconfigured = reading.status === Status.UNCONFIGURED;
     const unreachable = reading.status === Status.UNREACHABLE;
@@ -292,7 +293,33 @@ function actionItems(reading, actions) {
     items.push(stopItem({ paused, running, unconfigured, unreachable },
         stopInFlight, stopOutcome));
 
+    items.push(openItem(editor, openOutcome));
+
     return items;
+}
+
+/**
+ * Opening the queue in an editor — the one item here that has nothing to do with the box.
+ *
+ * The queue is `README.md` on this laptop, so this item is live whatever the orchestrator is
+ * doing: writing an idea down is always possible. What it does depend on is two preferences, and
+ * when either is wrong the item is **insensitive with the reason**, never a silent no-op. When
+ * both are right the detail line is the path itself: an editor that opens the wrong checkout
+ * loses the idea you just typed into it, and seeing the path first is the cheap guard.
+ */
+function openItem(editor, outcome) {
+    // No editor information at all means the extension has not worked out where the repository
+    // is — which is the same situation as not having one configured, and reads the same way.
+    const problem = editor === null
+        ? 'set the repository path in preferences'
+        : editor.problem;
+
+    return {
+        action: 'open',
+        label: 'Add an idea',
+        detail: outcome ?? problem ?? editor?.path ?? null,
+        sensitive: problem === null,
+    };
 }
 
 /**

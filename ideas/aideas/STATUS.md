@@ -127,7 +127,30 @@ update it is, and `AGENTS.md` makes that minor.
       `nix flake check`: 4 green. This unit is verified in the compositor at U7, which is where
       `extension.js` can be exercised at all.
 
-Next: **U6** — `editorLauncher.js` and the two new preferences.
+- [x] **U6 — the editor launcher.** `src/lib/editorLauncher.js`: discovery, argv, the README line
+      and the failure phrases, all through injected seams so no test ever launches anything —
+      which matters more than usual here, since a test that really spawned would open a window on
+      whoever ran it. Discovery tries `codium`, `vscodium`, then `com.vscodium.codium`; the third
+      is the Flatpak, which works through the same "is this program on PATH" seam because a
+      Flatpak install *exports* its app id as a wrapper onto `PATH`. A configured
+      `editor-command` is used **verbatim**, shell-split but never looked for — that is also how
+      somebody who wants a different editor gets one.
+      The item is insensitive with `set the repository path in preferences` when `repo-path` is
+      empty and with `<path>/README.md does not exist` when it is wrong; when it is right the
+      detail line is the path itself. `repo-path` and `editor-command` joined the schema and the
+      preferences window as a new **The queue on this machine** group. 33 launcher tests + 11
+      menu tests (**399 unit**, was 356); seven more layout expectations updated.
+      **The Flatpak risk PLAN.md raised does not apply to this laptop**: codium here is a *snap*
+      with **classic** confinement, so there is no filesystem sandbox to defeat.
+      **Verified for real, once, against that codium** — the one thing no headless test can say.
+      The exact argv the extension builds
+      (`codium <worktree> --goto <worktree>/README.md:86`) opened a window, and after closing it
+      codium's own `state.vscdb` for that workspace recorded
+      `"cursorState":[{…"position":{"lineNumber":86,"column":1}}]` — line 86 being the last entry
+      before `## Finished` at line 88, which is exactly where a new idea is typed. No codium
+      process was left behind.
+
+Next: **U7** — the compositor: stop, resume and open activated in a nested shell.
 
 ## What 0.4 covered — two buttons, and the extension's first write
 

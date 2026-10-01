@@ -35,6 +35,27 @@
       </description>
     </key>
 
+    <key name="repo-path" type="s">
+      <default>''</default>
+      <summary>Path to the ideas repository on this machine</summary>
+      <description>
+        Where the queue lives *locally*, so that "Add an idea" can open README.md in an editor.
+        Empty by default and deliberately so: there is no safe guess. If the orchestrator is on
+        another machine this is a clone of it, and the menu item names the path it will open
+        before you click, because an idea typed into a stale checkout reaches nobody.
+      </description>
+    </key>
+
+    <key name="editor-command" type="s">
+      <default>''</default>
+      <summary>Command that opens the queue</summary>
+      <description>
+        Empty means "look for one": codium, then vscodium, then the Flatpak's exported
+        com.vscodium.codium. Set it and it is used verbatim, split like a shell command line, with
+        the repository and the file appended — which is also how to use a different editor.
+      </description>
+    </key>
+
     <key name="poll-interval-seconds" type="i">
       <range min="10" max="300"/>
       <default>30</default>

@@ -20,6 +20,7 @@ import { SoupTransport } from './lib/soupTransport.js';
 import { StateClient } from './lib/stateClient.js';
 import { CycleClient } from './lib/cycleClient.js';
 import { StopClient } from './lib/stopClient.js';
+import { describeOpen, openQueue, systemSeams } from './lib/editorLauncher.js';
 import { PollScheduler } from './lib/scheduler.js';
 
 /** The scheduler's timer seam, as GLib provides it. */
@@ -65,7 +66,11 @@ export default class AideasExtension extends Extension {
             refreshing: false,
             cycleInFlight: false, cycleOutcome: null,
             stopInFlight: null, stopOutcome: null,
+            editor: null, openOutcome: null,
         };
+        // The filesystem and the process table, as seams, so that everything the menu says about
+        // the editor is decided by a module the tests can drive without launching anything.
+        this._seams = systemSeams();
         this._confirmUntil = 0;
         this._confirmTimer = null;
         this._windDownUntil = 0;
@@ -134,6 +139,7 @@ export default class AideasExtension extends Extension {
         this._cycleClient = null;
         this._stopClient = null;
         this._actions = null;
+        this._seams = null;
         this._settings = null;
     }
 
@@ -147,6 +153,31 @@ export default class AideasExtension extends Extension {
         else if (name === 'stop')
             this._stopOrResume()
                 .catch(error => logError(error, 'aideas: pausing the queue failed'));
+        else if (name === 'open')
+            this._openQueue();
+    }
+
+    /** The two preferences the editor item depends on, as the module reads them. */
+    _editorSettings() {
+        return {
+            repoPath: this._settings.get_string('repo-path'),
+            editorCommand: this._settings.get_string('editor-command'),
+        };
+    }
+
+    /**
+     * Open README.md in an editor, at the end of the `## Ideas` list.
+     *
+     * Synchronous and unwatched: the editor is launched and forgotten. What stays behind is the
+     * sentence under the item if it could not be launched — never a click that did nothing.
+     */
+    _openQueue() {
+        const { launched, reason } = openQueue({
+            ...this._editorSettings(),
+            ...this._seams,
+        });
+        this._actions.openOutcome = launched ? null : reason;
+        this._render();
     }
 
     /**
@@ -333,6 +364,11 @@ export default class AideasExtension extends Extension {
     _render() {
         if (this._indicator === null || this._client === null)
             return;
+        // Re-read every time rather than cached: both preferences and the file they point at
+        // can change while the menu sits open, and a stale "does not exist" is as misleading as
+        // a stale path.
+        this._actions.editor = describeOpen({ ...this._editorSettings(), ...this._seams });
+
         this._indicator.update({
             ...this._client.snapshot(),
             alwaysShow: this._settings.get_boolean('always-show'),
