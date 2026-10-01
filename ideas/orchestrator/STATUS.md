@@ -32,15 +32,21 @@ last_cycle_cost_usd: 0.0
       carries `GIT_TERMINAL_PROMPT=0`, `GIT_ASKPASS=true` and `BatchMode=yes`, proved with a
       stub `git` that sleeps and one that echoes its environment. `support.stub_binary()`
       generalises `stub_claude`.
-- [ ] **U3 — `orchestrator_state()` refreshes**: the lock gate, the rate limit, the ordering
-      before `queue_rows`, and the end-to-end test that an answered question becomes `ready`.
+- [x] **U3 — `orchestrator_state()` refreshes.** `refresh_payload()` runs before
+      `queue_rows`, so one request can never report a queue from before its own fetch, and
+      only when the lock says no cycle is running — asserted on the commit sha, not just on
+      the payload. Rate limited to one fetch per `ORCHESTRATOR_STATE_REFRESH_SECONDS`
+      (120), measured on `time.monotonic` with an injectable clock so no test sleeps; a
+      failed attempt starts the window too. The end-to-end case is the reported bug: an
+      unticked question answered and pushed by a second clone shows as `ready` on the next
+      poll, with no cycle having run. 7 tests.
 - [ ] **U4 — the `refresh` field** on the available body, and the status command's warning.
 - [ ] **U5 — the contract** in `ideas/aideas/docs/state-contract.md` and its exact-keys test.
 - [ ] **U6 — `SETUP.md`** and the hardened unit's `ReadWritePaths` note.
 - [ ] **U7 — 1.8**, `status: done`, suite green under `env -i`.
 
-Next: U3 — refresh before the queue is read, only when no cycle is running, at most once per
-ORCHESTRATOR_STATE_REFRESH_SECONDS.
+Next: U4 — the refresh field's shape asserted case by case, and the status command's
+warning line.
 
 Run the suite from the repo root:
 

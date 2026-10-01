@@ -19,8 +19,138 @@ Every remote here is a bare repository on disk. No network, no DNS, no real orig
 
 from __future__ import annotations
 
+import os
+
 import orchestrator as orch
 from tests import support
+
+
+class StateEndpointRefreshTests(support.GitSandbox):
+    """`/state` refreshes before it reads the queue, and only when nothing is running."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        import heartbeat_server as hb
+        self.hb = hb
+        hb.reset_refresh_state()
+        self.addCleanup(hb.reset_refresh_state)
+
+        self.origin = support.bare_remote(self.path("origin.git"))
+        self.seed = self.path("seed")
+        support.init_repo(self.seed, "README.md", "# Ideas\n\n## Ideas\n\n1. [demo](ideas/demo)\n")
+        support.write(self.seed / ".agent-config.yml", support.AGENT_CONFIG)
+        support.write(self.seed / "ideas" / "demo" / "STATUS.md",
+                      "status: in_progress\nversion: 0.1\n")
+        support.write(self.seed / "ideas" / "demo" / "PLAN.md",
+                      "# Plan\n\n## Open Questions\n\n- [ ] what colour should it be?\n")
+        support.commit_all(self.seed, "an idea with an unanswered question")
+        support.git("remote", "add", "origin", str(self.origin), cwd=self.seed)
+        support.git("push", "--quiet", "-u", "origin", "main", cwd=self.seed)
+
+        self.repo = self.path("clone")
+        support.git("clone", "--quiet", str(self.origin), str(self.repo), cwd=self.tmp)
+        os.environ["IDEAS_REPO_PATH"] = str(self.repo)
+
+    def answer_the_question_and_push(self) -> None:
+        """What the laptop does: tick the box, commit, push. No cycle runs."""
+        support.write(self.seed / "ideas" / "demo" / "PLAN.md",
+                      "# Plan\n\n## Open Questions\n\n- [x] what colour should it be? Blue.\n")
+        support.commit_all(self.seed, "answer the question")
+        support.git("push", "--quiet", "origin", "main", cwd=self.seed)
+
+    def idea_state(self, payload: dict) -> str:
+        return payload["ideas"][0]["state"]
+
+    # -- the bug itself ----------------------------------------------------------------
+
+    def test_an_answered_question_becomes_ready_without_a_cycle_running(self) -> None:
+        first = self.hb.orchestrator_state()
+        self.assertTrue(first["available"], first.get("reason"))
+        self.assertEqual(self.idea_state(first), "blocked")
+
+        self.answer_the_question_and_push()
+        self.hb.reset_refresh_state()  # the next poll is past the window
+
+        second = self.hb.orchestrator_state()
+
+        self.assertEqual(self.idea_state(second), "ready",
+                         "the panel still shows the tree the last cycle left behind")
+        self.assertEqual(second["refresh"]["state"], "current")
+
+    def test_the_refresh_happens_before_the_queue_is_read(self) -> None:
+        """One request must not report a queue from before its own fetch."""
+        self.answer_the_question_and_push()
+
+        payload = self.hb.orchestrator_state()
+
+        self.assertEqual(self.idea_state(payload), "ready")
+
+    # -- the lock gate -----------------------------------------------------------------
+
+    def test_a_running_cycle_means_the_tree_is_not_touched(self) -> None:
+        lock = orch.RepoLock(self.repo / ".orchestrator", 5, 30)
+        self.assertTrue(lock.acquire())
+        self.addCleanup(lock.release)
+        self.answer_the_question_and_push()
+        before = support.git("rev-parse", "HEAD", cwd=self.repo).stdout.strip()
+
+        payload = self.hb.orchestrator_state()
+
+        self.assertEqual(support.git("rev-parse", "HEAD", cwd=self.repo).stdout.strip(),
+                         before, "a GET moved the tree while a cycle was running")
+        self.assertEqual(payload["refresh"]["state"], "stale")
+        self.assertIn("a cycle is running", payload["refresh"]["reason"])
+
+    # -- the rate limit ----------------------------------------------------------------
+
+    def test_two_calls_inside_the_window_fetch_once(self) -> None:
+        stub = self.stub_binary("git", 'exec "$REAL_BINARY" "$@"')
+        clock = [1000.0]
+
+        self.hb.orchestrator_state(clock=lambda: clock[0])
+        after_first = len(stub.calls_matching("fetch"))
+        clock[0] += 1  # a second poll, well inside the 120 s window
+        self.hb.orchestrator_state(clock=lambda: clock[0])
+
+        self.assertEqual(after_first, 1, "the first call did not fetch")
+        self.assertEqual(len(stub.calls_matching("fetch")), 1,
+                         "the window did not stop the second fetch")
+
+    def test_a_call_past_the_window_fetches_again(self) -> None:
+        stub = self.stub_binary("git", 'exec "$REAL_BINARY" "$@"')
+        clock = [1000.0]
+
+        self.hb.orchestrator_state(clock=lambda: clock[0])
+        clock[0] += self.hb.REFRESH_SECONDS + 1
+        self.hb.orchestrator_state(clock=lambda: clock[0])
+
+        self.assertEqual(len(stub.calls_matching("fetch")), 2)
+
+    def test_a_skipped_refresh_keeps_reporting_current(self) -> None:
+        clock = [1000.0]
+        first = self.hb.orchestrator_state(clock=lambda: clock[0])
+        self.assertEqual(first["refresh"]["state"], "current")
+
+        clock[0] += 1
+        second = self.hb.orchestrator_state(clock=lambda: clock[0])
+
+        self.assertEqual(second["refresh"]["state"], "current",
+                         "inside the window is what 'current' means")
+
+    def test_a_failed_attempt_restarts_the_clock_too(self) -> None:
+        """A box with no network must not shell out on every single poll."""
+        support.git("remote", "set-url", "origin", str(self.path("gone.git")), cwd=self.repo)
+        stub = self.stub_binary("git", 'exec "$REAL_BINARY" "$@"')
+        clock = [1000.0]
+
+        failed = self.hb.orchestrator_state(clock=lambda: clock[0])
+        attempts = len(stub.calls_matching("fetch"))
+        clock[0] += 1
+        self.hb.orchestrator_state(clock=lambda: clock[0])
+
+        self.assertEqual(failed["refresh"]["state"], "stale")
+        self.assertEqual(len(stub.calls_matching("fetch")), attempts,
+                         "a failed fetch must still start the window")
 
 
 class RefreshCloneTests(support.GitSandbox):

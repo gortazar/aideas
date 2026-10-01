@@ -172,7 +172,8 @@ class GitSandbox(unittest.TestCase):
         ))
         self._saved_env = {key: os.environ.get(key) for key in (
             "HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_TERMINAL_PROMPT",
-            "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "XDG_CONFIG_HOME", "PATH")}
+            "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "XDG_CONFIG_HOME", "PATH",
+            "IDEAS_REPO_PATH")}
         os.environ["HOME"] = str(home)
         os.environ["GIT_CONFIG_GLOBAL"] = str(gitconfig)
         os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
