@@ -15,9 +15,7 @@
 //     connection says "Conexión rehusada".
 
 import { describeAddress } from './address.js';
-
-/** A reply larger than this is not a two-field JSON object. */
-const MAX_BODY_BYTES = 64 * 1024;
+import { replyObject, sentence } from './jsonReply.js';
 
 /** How long to wait for a box that has to read a queue and fork before answering. */
 export const DEFAULT_TIMEOUT_SECONDS = 15;
@@ -131,8 +129,9 @@ export function interpretCycleReply(status, rawBody) {
         };
     }
 
-    const body = typeof rawBody === 'string' ? rawBody : '';
-    if (body.length > MAX_BODY_BYTES) {
+    const { object: parsed, problem } = replyObject(rawBody);
+
+    if (problem === 'too-large') {
         return {
             started: false,
             gate: 'malformed',
@@ -140,16 +139,7 @@ export function interpretCycleReply(status, rawBody) {
         };
     }
 
-    let parsed = null;
-    try {
-        parsed = JSON.parse(body);
-    } catch {
-        parsed = null;
-    }
-
-    const usable = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
-
-    if (!usable) {
+    if (problem) {
         // A 200 with no usable body is not a start: claiming otherwise would show "starting…"
         // for a cycle nobody asked for.
         return {
@@ -165,9 +155,7 @@ export function interpretCycleReply(status, rawBody) {
         return { started: true, gate: null, reason: null };
 
     const gate = typeof parsed.gate === 'string' && parsed.gate !== '' ? parsed.gate : 'refused';
-    const reason = typeof parsed.reason === 'string' && parsed.reason.trim() !== ''
-        ? parsed.reason.trim().replace(/\s+/g, ' ')
-        : 'the orchestrator refused, without saying why';
+    const reason = sentence(parsed.reason) ?? 'the orchestrator refused, without saying why';
 
     return { started: false, gate, reason };
 }

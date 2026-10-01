@@ -21,10 +21,15 @@ The behaviour of each path is what a test needs to provoke:
                         proves a disabled extension left no timer behind still polling
     /cycles             every POST /cycle this server received, as JSON — which is how a test
                         knows the button really sent something, and what it sent
+    /stops              every POST /stop this server received, the same way
 
 POST /cycle answers whatever --cycle-mode says, so a test can have a box that starts a cycle,
 one that refuses at a named gate, one that predates the endpoint (404), one that rejects the
 secret (401) and one that rate-limits (429).
+
+POST /stop is different in one deliberate way: in its default mode it is **stateful**, and
+really flips the `paused` this server's /state reports. That is what lets a test press the
+button and then read the queue's state back, which is the whole behaviour of the pair.
 """
 import argparse
 import json
@@ -113,11 +118,28 @@ CYCLE_REPLIES = {
 }
 
 
+# What POST /stop answers, per --stop-mode. "live" is not in here: it is the stateful default,
+# computed from the flag the request just moved.
+STOP_REPLIES = {
+    "unsupported": (404, None),
+    "unauthorised": (401, None),
+    "server-gate": (200, {"paused": None, "changed": False, "gate": "server",
+                          "reason": "IDEAS_REPO_PATH is not set"}),
+    "write-gate": (200, {"paused": True, "changed": False, "gate": "write",
+                         "reason": "could not remove /repo/.orchestrator/stop: Is a directory"}),
+    "garbage": (200, "<html>not an answer</html>"),
+}
+
+
 def make_handler(options):
     # Counts every /state* read. /requests itself is not a read, so a test can poll it freely.
     served = {"count": 0}
     # Every POST /cycle, in order, with what it carried.
     cycles = []
+    # Every POST /stop, the same way, plus the flag they move. The flag is what /state reports,
+    # so a test can stop the queue and then watch the panel's own reading change.
+    stops = []
+    paused = {"value": options.paused}
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -130,6 +152,14 @@ def make_handler(options):
             self.end_headers()
             self.wfile.write(payload)
 
+        def _state(self, body):
+            """A state body with the pause flag this server is currently holding.
+
+            Merged at request time rather than baked into the constants, because POST /stop
+            moves it: the panel writes, then reads its own effect back.
+            """
+            return json.dumps(dict(body, paused=paused["value"]))
+
         def do_GET(self):  # noqa: N802 — the BaseHTTPRequestHandler spelling
             path = self.path.split("?", 1)[0]
 
@@ -139,6 +169,9 @@ def make_handler(options):
             if path == "/cycles":
                 self._send(200, json.dumps(cycles))
                 return
+            if path == "/stops":
+                self._send(200, json.dumps(stops))
+                return
             if path.startswith("/state"):
                 served["count"] += 1
 
@@ -147,15 +180,14 @@ def make_handler(options):
                     self._send(200, options.body)
                     return
                 if options.mode == "idle":
-                    self._send(200, json.dumps(IDLE))
+                    self._send(200, self._state(IDLE))
                     return
                 if options.mode == "all-blocked":
-                    self._send(200, json.dumps(ALL_BLOCKED))
+                    self._send(200, self._state(ALL_BLOCKED))
                     return
-                running = dict(RUNNING, cycle_started_at=time.time() - 720)
-                self._send(200, json.dumps(running))
+                self._send(200, self._state(dict(RUNNING, cycle_started_at=time.time() - 720)))
             elif path == "/state-idle":
-                self._send(200, json.dumps(IDLE))
+                self._send(200, self._state(IDLE))
             elif path == "/state-unavailable":
                 self._send(200, json.dumps(
                     {"available": False, "reason": "IDEAS_REPO_PATH is not set"}))
@@ -165,7 +197,7 @@ def make_handler(options):
                 self._send(200, b'{"available":true,"pad":"' + b"x" * (2 * 1024 * 1024) + b'"}')
             elif path == "/state-slow":
                 time.sleep(options.slow)
-                self._send(200, json.dumps(dict(RUNNING, cycle_started_at=time.time())))
+                self._send(200, self._state(dict(RUNNING, cycle_started_at=time.time())))
             elif path == "/state-500":
                 self._send(500, "boom", "text/plain")
             elif path == "/state-429":
@@ -186,6 +218,12 @@ def make_handler(options):
             except json.JSONDecodeError:
                 payload = {"unparseable": raw.decode("utf-8", "replace")}
 
+            if path == "/stop":
+                stops.append({"body": payload,
+                              "content_type": self.headers.get("Content-Type", "")})
+                self._stop(payload)
+                return
+
             if path != "/cycle":
                 self._send(404, "not found", "text/plain")
                 return
@@ -200,6 +238,30 @@ def make_handler(options):
                 self._send(status, body, "text/html")
             else:
                 self._send(status, json.dumps(body))
+
+        def _stop(self, payload):
+            """POST /stop. In "live" mode it really moves the flag /state reports."""
+            if options.stop_mode != "live":
+                status, body = STOP_REPLIES[options.stop_mode]
+                if body is None:
+                    self._send(status, "", "text/plain")
+                elif isinstance(body, str):
+                    self._send(status, body, "text/html")
+                else:
+                    self._send(status, json.dumps(body))
+                return
+
+            want = payload.get("resume") is not True
+            changed = paused["value"] != want
+            paused["value"] = want
+            if want:
+                reason = ("the queue is paused; a running cycle winds down at its next check"
+                          if changed else "the queue was already paused")
+            else:
+                reason = ("the queue is no longer paused" if changed
+                          else "the queue was not paused")
+            self._send(200, json.dumps(
+                {"paused": want, "changed": changed, "gate": None, "reason": reason}))
 
         def log_message(self, fmt, *args):
             pass  # quiet: the test's output is the test's
@@ -217,6 +279,11 @@ def main():
                         help="seconds /state-slow waits before answering")
     parser.add_argument("--cycle-mode", choices=tuple(CYCLE_REPLIES), default="started",
                         help="what POST /cycle answers")
+    parser.add_argument("--stop-mode", choices=("live", *STOP_REPLIES), default="live",
+                        help="what POST /stop answers. 'live' (the default) really moves the "
+                             "pause flag /state reports; the rest are fixed failures")
+    parser.add_argument("--paused", action="store_true",
+                        help="start with the queue already paused")
     parser.add_argument("--mode", choices=("running", "idle", "all-blocked"),
                         default="running",
                         help="what /state reports: a running cycle, an idle box with a blocked "

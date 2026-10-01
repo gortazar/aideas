@@ -70,7 +70,26 @@ update it is, and `AGENTS.md` makes that minor.
       pause-not-a-kill semantics, that resuming does not revive the cycle it stopped, the
       idempotency, why there is no rate limit, and the authorisation exposure stated plainly.
 
-Next: **U3** — `stopClient.js`, over the shared `soupTransport.post()`.
+- [x] **U3 — the client.** `src/lib/stopClient.js`, beside `cycleClient.js` and over the same
+      `soupTransport.post()`: one attempt to `{paused, changed, gate, reason}`, never rejecting,
+      refusing two outstanding posts, and the same code-to-phrase mapping — 404 as `this box
+      does not support stopping cycles`, since that is an un-updated box and not the user's
+      mistake. Two things are particular to it. **`paused` can be `null`, and `null` is not
+      `false`**: a box that could not look, a reply that never arrived and a body that is not an
+      answer all leave the panel not knowing, and "not paused" is a claim this module makes only
+      when the box made it — a 200 carrying neither a gate nor a usable `paused` is `malformed`,
+      not a success. And **the two directions are opposites**, so `resume` travels as a literal
+      boolean and `{"resume": "no"}` cannot mean the opposite of what it says.
+      `src/lib/jsonReply.js` now holds the body-parsing both writes share (too large, not JSON,
+      not an object), with the *wording* left to each client since the sentences name what was
+      being asked for. 28 unit tests (**329**, was 301) and **11 http tests** (**50**, was 39).
+      The stub server grew `POST /stop`, a `/stops` log, and — the part that matters — a
+      **stateful** pause flag: in its default mode the stop really moves what its `/state`
+      reports, so the http suite asserts the write and the read agreeing, which is the behaviour
+      of the pair and is exactly what a mocked transport cannot have.
+      `nix flake check`: 4 green.
+
+Next: **U4** — the stop/resume item in `menuModel.js`, as data.
 
 ## What 0.4 covered — two buttons, and the extension's first write
 
