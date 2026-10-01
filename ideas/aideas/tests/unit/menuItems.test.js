@@ -51,7 +51,7 @@ suite('a healthy menu', () => {
             'title', 'row', 'separator',
             'title', 'row', 'separator',
             'title', 'row', 'separator',
-            'action', 'action', 'separator',
+            'action', 'action', 'action', 'separator',
             'preferences',
         ]);
         assertDeepEquals(list.filter(i => i.type === 'title').map(i => i.text),
@@ -86,7 +86,7 @@ suite('an empty queue', () => {
 
     test('says so beneath the cycle line, not above it', () => {
         assertDeepEquals(types(list), ['header', 'separator', 'message', 'separator',
-            'action', 'action', 'separator', 'preferences']);
+            'action', 'action', 'action', 'separator', 'preferences']);
         assertEquals(list[0].text, 'Idle');
         assertEquals(list[2].text, 'The queue is empty');
         assertEquals(list[2].kind, 'empty');
@@ -101,7 +101,7 @@ suite('a failure', () => {
         });
 
         assertDeepEquals(types(list), ['message', 'separator', 'header', 'separator',
-            'action', 'action', 'separator', 'preferences']);
+            'action', 'action', 'action', 'separator', 'preferences']);
         assertEquals(list[0].text, 'Orchestrator unreachable');
         assertEquals(list[0].detail, '10.8.0.1:8787 · connection refused');
         assertEquals(list[0].kind, 'failure');
@@ -112,7 +112,7 @@ suite('a failure', () => {
         const list = items({ reading: unconfiguredReading() });
 
         assertDeepEquals(types(list), ['message', 'separator', 'header', 'separator',
-            'action', 'action', 'separator', 'preferences']);
+            'action', 'action', 'action', 'separator', 'preferences']);
         assertEquals(list[0].text, 'Set the orchestrator address in preferences');
         assertEquals(list[list.length - 1].type, 'preferences');
     });
@@ -130,7 +130,7 @@ suite('a failure', () => {
             'title', 'row', 'separator',
             'title', 'row', 'separator',
             'title', 'row', 'separator',
-            'action', 'action', 'separator',
+            'action', 'action', 'action', 'separator',
             'preferences',
         ]);
         assertEquals(list[0].text, 'Orchestrator unreachable');
@@ -165,7 +165,7 @@ suite('the questions under a blocked idea', () => {
             'header', 'separator',
             'title', 'row', 'question', 'question', 'separator',
             'title', 'row', 'separator',
-            'action', 'action', 'separator',
+            'action', 'action', 'action', 'separator',
             'preferences',
         ]);
     });
@@ -197,7 +197,7 @@ suite('the questions under a blocked idea', () => {
         assertDeepEquals(types(list), [
             'header', 'separator',
             'title', 'row', 'question', 'question', 'question', 'question-more', 'separator',
-            'action', 'action', 'separator',
+            'action', 'action', 'action', 'separator',
             'preferences',
         ]);
         assertEquals(list.find(item => item.type === 'question-more').text, '+4 more');
@@ -209,7 +209,7 @@ suite('the questions under a blocked idea', () => {
         ]) });
 
         assertDeepEquals(types(list), ['header', 'separator', 'title', 'row', 'separator',
-            'action', 'action', 'separator', 'preferences']);
+            'action', 'action', 'action', 'separator', 'preferences']);
     });
 
     test('a blocked row from a box that never sent texts renders as it always did', () => {
@@ -219,7 +219,7 @@ suite('the questions under a blocked idea', () => {
         ]) });
 
         assertDeepEquals(types(list), ['header', 'separator', 'title', 'row', 'separator',
-            'action', 'action', 'separator', 'preferences']);
+            'action', 'action', 'action', 'separator', 'preferences']);
     });
 
     test('are dimmed with everything else in a stale reading', () => {
@@ -247,7 +247,7 @@ suite('the questions under a blocked idea', () => {
             'header', 'separator',
             'title', 'row', 'separator',
             'title', 'row', 'question', 'separator',
-            'action', 'action', 'separator',
+            'action', 'action', 'action', 'separator',
             'preferences',
         ]);
     });
@@ -263,7 +263,7 @@ suite('the questions under a blocked idea', () => {
         assertDeepEquals(types(list), [
             'header', 'separator',
             'title', 'row', 'question', 'row', 'question', 'separator',
-            'action', 'action', 'separator',
+            'action', 'action', 'action', 'separator',
             'preferences',
         ]);
         assertDeepEquals(list.filter(i => i.type === 'question').map(i => i.text),
@@ -278,9 +278,10 @@ suite('the footer', () => {
 
         const list = items({ reading: reading({}, ideas) });
 
-        assertDeepEquals(types(list.slice(-7)),
-            ['separator', 'footer', 'separator', 'action', 'action', 'separator', 'preferences']);
-        assertEquals(list[list.length - 6].text, '3 further entries not shown');
+        assertDeepEquals(types(list.slice(-8)),
+            ['separator', 'footer', 'separator', 'action', 'action', 'action',
+                'separator', 'preferences']);
+        assertEquals(list[list.length - 7].text, '3 further entries not shown');
     });
 });
 

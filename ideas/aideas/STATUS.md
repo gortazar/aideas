@@ -89,7 +89,26 @@ update it is, and `AGENTS.md` makes that minor.
       of the pair and is exactly what a mocked transport cannot have.
       `nix flake check`: 4 green.
 
-Next: **U4** — the stop/resume item in `menuModel.js`, as data.
+- [x] **U4 — the stop item, as data.** One item with three readings, because the stop file has
+      three meanings: `Stop the cycle` while one runs, `Pause the queue` when none does (the file
+      does the same thing; what it stops is the *next* cycle, and the label should say which of
+      the two just happened), and `Resume the queue` while it exists — that last one is not a
+      convenience but the half that keeps the button from being a trap. In flight it reads
+      `Stopping…` / `Pausing…` / `Resuming…`, so the label distinguishes the three even then.
+      **The panel now says `Paused` without being clicked**: the header is `Idle — paused` or
+      `Cycle running for 12 min, 1 agent — stopping`, and its detail line names
+      `.orchestrator/stop exists` — someone who finds the fleet paused with no panel in front of
+      them needs to know what to delete. `Run a cycle` goes insensitive while paused with `the
+      queue is paused` beneath it, rather than being clicked to find out; `Run anyway` is
+      asserted **absent** at the `stop-file` gate, which is 0.4's answered question holding under
+      a state the panel can now reach itself.
+      One standing line is worth naming: a paused *running* queue says `a cycle is still winding
+      down`, because nothing has gone wrong there — agents are checked between phases, so the
+      wind-down takes as long as they take, and silence would read as a button that did nothing.
+      `tests/unit/menuStop.test.js`, 27 tests (**356**, was 329). Fourteen existing layout
+      expectations were updated rather than worked around: the menu genuinely gained an item.
+
+Next: **U5** — wiring the item to the client in `extension.js`, with the brisk poll after a stop.
 
 ## What 0.4 covered — two buttons, and the extension's first write
 
