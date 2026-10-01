@@ -1,4 +1,4 @@
-// The preferences window: five settings and a button that tells you whether they work.
+// The preferences window: seven settings and a button that tells you whether they work.
 //
 // It runs in its own process, not in the Shell, so it may use Gtk and Adw freely — and it uses
 // the same transport, client and wording modules the extension does, which is the point: "Test

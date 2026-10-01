@@ -222,6 +222,44 @@ suite('a paused queue and the cycle button', () => {
         assertEquals(actions({ reading: idle }).cycle.sensitive, true);
     });
 
+    test('paused outranks running, because that is the order the preflight applies', () => {
+        // A paused box with a cycle winding down refuses at `stop-file`, not at `lock`. Naming
+        // the lock would name a gate the box would never have reached. Found in the compositor:
+        // the menu said `a cycle is already running` about a queue it had just paused.
+        const { cycle } = actions({ reading: stopping });
+
+        assertEquals(cycle.detail, 'the queue is paused');
+        assertEquals(cycle.sensitive, false);
+    });
+
+    test('a remembered refusal does not keep offering an override once the queue is paused', () => {
+        // The outcome of a click survives the state that produced it: a box refused at the
+        // heartbeat gate a minute ago can be paused now, and `Run anyway` provably cannot pass
+        // the stop file. Also found in the compositor.
+        const map = actions({
+            reading: pausedIdle,
+            actions: {
+                cycleOutcome: {
+                    started: false, gate: 'heartbeat',
+                    reason: 'A Claude Code session is active on this laptop',
+                },
+            },
+        });
+
+        assertEquals(map.override, undefined);
+    });
+
+    test('and still offers it when nothing is standing in the way', () => {
+        const map = actions({
+            reading: idle,
+            actions: {
+                cycleOutcome: { started: false, gate: 'heartbeat', reason: 'busy' },
+            },
+        });
+
+        assertEquals(map.override?.label, 'Run anyway');
+    });
+
     test('a refusal at the stop-file gate is never overridable', () => {
         // The way to run a cycle while paused is to resume, visibly. This is the answered
         // question from 0.4 holding under a state that can now be reached from the panel.

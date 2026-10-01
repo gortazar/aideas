@@ -36,6 +36,7 @@ cleanup() {
     done
     if [[ $KEEP -eq 0 ]]; then
         ci/nested-shell.sh stop --state "$STATE" >/dev/null 2>&1 || true
+        rm -rf "$STATE-fixtures"
     else
         echo "nested session left running: source $STATE/env"
     fi
@@ -89,6 +90,42 @@ s.close()
 ")
 echo "   nothing listening on 127.0.0.1:$DEAD_PORT"
 
+# A stub editor, and a queue for it to open. A real VSCodium cannot be installed into a nested
+# headless shell, and it is not what is being tested: what matters is the argv the extension
+# builds and that it really spawns something. The stub records its arguments and exits.
+# Beside $STATE, never inside it: `nested-shell.sh start` does `rm -rf "$STATE"`, so anything
+# put there before the Shell boots is deleted on the way up.
+echo "== a stub editor on PATH, and a fixture queue"
+FIXTURES="$STATE-fixtures"
+rm -rf "$FIXTURES"
+EDITOR_BIN="$FIXTURES/bin"
+EDITOR_ARGV="$FIXTURES/codium-argv"
+FIXTURE_REPO="$FIXTURES/queue"
+mkdir -p "$EDITOR_BIN" "$FIXTURE_REPO"
+rm -f "$EDITOR_ARGV"
+cat >"$EDITOR_BIN/codium" <<EOF
+#!/bin/sh
+printf '%s\n' "\$@" >>"$EDITOR_ARGV"
+EOF
+chmod +x "$EDITOR_BIN/codium"
+# Exported before the Shell starts, because discovery is GLib.find_program_in_path() inside the
+# Shell's own process: a PATH set afterwards would not be the one it looks along.
+export PATH="$EDITOR_BIN:$PATH"
+
+# Lines 1-9, so the last entry under ## Ideas is line 7 — which is where a new idea is typed.
+cat >"$FIXTURE_REPO/README.md" <<'EOF'
+# ideas
+
+## Ideas
+
+1. [alpha](ideas/alpha/) - the first one
+
+2. [beta](ideas/beta/) - the second one
+
+## Finished
+EOF
+echo "   stub editor at $EDITOR_BIN/codium, queue at $FIXTURE_REPO/README.md"
+
 echo "== booting a nested GNOME Shell"
 ci/nested-shell.sh stop --state "$STATE" >/dev/null 2>&1 || true
 ci/nested-shell.sh start \
@@ -122,7 +159,9 @@ python3 ci/smoke-assertions.py \
     --dead-port "$DEAD_PORT" \
     --schemadir "$SCHEMADIR" \
     --screenshots "$SCREENSHOTS" \
-    --interval "$INTERVAL"
+    --interval "$INTERVAL" \
+    --editor-argv "$EDITOR_ARGV" \
+    --fixture-repo "$FIXTURE_REPO"
 STATUS=$?
 set -e
 

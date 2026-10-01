@@ -264,12 +264,15 @@ function actionItems(reading, actions) {
         blocked = 'no orchestrator address is set';
     else if (unreachable)
         blocked = 'the box cannot be reached';
-    else if (running)
-        blocked = 'a cycle is already running';
+    // Paused before running, because that is the order `cycle_preflight()` applies: a paused box
+    // with a cycle winding down refuses at `stop-file`, not at `lock`. Naming the lock here
+    // would be naming a gate the box would not have reached.
     else if (paused)
         // Not "try and be refused": the stop-file gate is one of the three a `Run anyway`
         // deliberately cannot pass, so the way to run a cycle here is to resume, visibly.
         blocked = 'the queue is paused';
+    else if (running)
+        blocked = 'a cycle is already running';
 
     items.push({
         action: 'cycle',
@@ -280,8 +283,12 @@ function actionItems(reading, actions) {
 
     // Only after a refusal, and only for the gates that are about *when* it is convenient to
     // build. A pause, a spent budget or a held lock are not things to click past.
+    //
+    // `blocked === null` as well, which is not redundant: a refusal is remembered, and the box
+    // can move on from the state that produced it. An override left on screen after the queue
+    // has been paused would be offering to skip the one gate it provably cannot.
     const refusedGate = cycleOutcome && !cycleOutcome.started ? cycleOutcome.gate : null;
-    if (!cycleInFlight && OVERRIDABLE_GATES.includes(refusedGate)) {
+    if (!cycleInFlight && blocked === null && OVERRIDABLE_GATES.includes(refusedGate)) {
         items.push({
             action: 'override',
             label: 'Run anyway',

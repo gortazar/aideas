@@ -150,7 +150,37 @@ update it is, and `AGENTS.md` makes that minor.
       before `## Finished` at line 88, which is exactly where a new idea is typed. No codium
       process was left behind.
 
-Next: **U7** — the compositor: stop, resume and open activated in a nested shell.
+- [x] **U7 — the compositor.** The smoke test went from 78 checks to **110**, all green, and it
+      activates all three items for real. `Stop the cycle` produces exactly one `POST /stop`
+      without a resume, **the menu stays open**, and because the stub's `/stop` really moves the
+      flag its `/state` reports, the next reading changes under it: the item becomes `Resume the
+      queue`, the header reads `… — stopping`, and `.orchestrator/stop exists` appears beneath
+      it. `Resume` posts `resume: true` and puts all of that back. On an idle box the same item
+      is `Pause the queue` and the header becomes `Idle — paused`. `Add an idea` is activated
+      against a stub `codium` on `PATH` and asserted on its **argv**, which is everything the
+      extension decides: `[<repo>, --goto, <repo>/README.md:7]`.
+      Screenshot: `screenshots/menu-paused.png`, now in `README.md`.
+      **The compositor found three things no unit test did**, which is what it is for:
+      1. **`Run a cycle` named the wrong gate.** With a cycle winding down it said `a cycle is
+         already running`, but `cycle_preflight()` checks the stop file *first*, so the box
+         would have refused at `stop-file`. The model now orders paused before running, and
+         names the gate the box would really have reached.
+      2. **`Run anyway` outlived the refusal that produced it.** A box refused at the heartbeat
+         gate a minute ago can be paused now, and an override provably cannot pass the stop
+         file — so the item was offering to skip the one gate it cannot. It is now suppressed
+         whenever anything standing is already blocking `Run a cycle`.
+      3. **The smoke test could not read its own non-ASCII.** `unicode_escape` is a *latin-1*
+         codec, so `Idle — paused` arrived as `Idle â paused` and failed an assertion about a
+         string the extension had got exactly right. Every `·` in every detail line had been
+         arriving mangled since 0.1; no assertion had ever compared one.
+      Two smaller fixes to the harness itself: the fixtures now live beside `$STATE` rather than
+      inside it (`nested-shell.sh start` does `rm -rf "$STATE"`, so anything put there before the
+      Shell boots is deleted), and the icon-geometry check waits for an allocation instead of
+      comparing `null >= 8`, which raised a `TypeError` and took a whole run down rather than
+      failing one check.
+      402 unit tests (was 399 — two of the three findings got one each).
+
+Next: **U8** — the version bump and the documentation.
 
 ## What 0.4 covered — two buttons, and the extension's first write
 
