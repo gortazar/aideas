@@ -172,7 +172,8 @@ class GitSandbox(unittest.TestCase):
         ))
         self._saved_env = {key: os.environ.get(key) for key in (
             "HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_TERMINAL_PROMPT",
-            "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "XDG_CONFIG_HOME", "PATH")}
+            "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "XDG_CONFIG_HOME", "PATH",
+            "IDEAS_REPO_PATH")}
         os.environ["HOME"] = str(home)
         os.environ["GIT_CONFIG_GLOBAL"] = str(gitconfig)
         os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
@@ -195,6 +196,32 @@ class GitSandbox(unittest.TestCase):
         """An Orchestrator over `repo`, with no heartbeat and the sandbox config."""
         return orch.Orchestrator(repo, "")
 
+    def stub_binary(self, name: str, body: str) -> "StubBinary":
+        """Put a fake `<name>` first on PATH, and record how it is called.
+
+        The seam is PATH because that is where the real substitution happens: the orchestrator
+        spawns `claude` and `git` by name, so a stub found first is substituted exactly where
+        the real one would be. `body` is shell with "$@" as the arguments; INVOCATION_LOG has
+        already received the argv, and REAL_BINARY holds the path to the genuine tool, so a
+        stub can intercept one subcommand and delegate the rest.
+        """
+        bin_dir = self.tmp / "stub-bin"
+        bin_dir.mkdir(exist_ok=True)
+        log_file = bin_dir / f"{name}-invocations.log"
+        real = shutil.which(name) or ""
+        script = bin_dir / name
+        script.write_text(
+            "#!/bin/sh\n"
+            f'INVOCATION_LOG="{log_file}"\n'
+            f'REAL_BINARY="{real}"\n'
+            'printf "%s\\n" "$*" >> "$INVOCATION_LOG"\n'
+            f"{body}\n"
+        )
+        script.chmod(0o755)
+        if str(bin_dir) not in os.environ.get("PATH", "").split(os.pathsep)[:1]:
+            os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        return StubBinary(bin_dir=bin_dir, script=script, log_file=log_file)
+
     def stub_claude(self, body: str) -> "StubClaude":
         """Put a fake `claude` first on PATH, and record how it is called.
 
@@ -209,24 +236,12 @@ class GitSandbox(unittest.TestCase):
         and RESULT_FILE, the path the orchestrator will read the result JSON from (the stub's
         own stdout, which the orchestrator redirects there).
         """
-        bin_dir = self.tmp / "stub-bin"
-        bin_dir.mkdir(exist_ok=True)
-        log_file = bin_dir / "invocations.log"
-        script = bin_dir / "claude"
-        script.write_text(
-            "#!/bin/sh\n"
-            f'INVOCATION_LOG="{log_file}"\n'
-            'printf "%s\\n" "$*" >> "$INVOCATION_LOG"\n'
-            f"{body}\n"
-        )
-        script.chmod(0o755)
-        os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
-        return StubClaude(bin_dir=bin_dir, script=script, log_file=log_file)
+        return self.stub_binary("claude", body)
 
 
 @dataclass
-class StubClaude:
-    """A fake `claude` on PATH, and the record of how it was called."""
+class StubBinary:
+    """A fake executable on PATH, and the record of how it was called."""
     bin_dir: Path
     script: Path
     log_file: Path
@@ -239,6 +254,13 @@ class StubClaude:
     @property
     def calls(self) -> int:
         return len(self.invocations())
+
+    def calls_matching(self, needle: str) -> list[str]:
+        return [line for line in self.invocations() if needle in line]
+
+
+# The original name, kept because the agent-failure suite reads well with it.
+StubClaude = StubBinary
 
 
 # A result JSON shaped exactly like the one an exhausted model limit produced: `subtype` says

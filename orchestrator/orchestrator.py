@@ -60,8 +60,10 @@ from pathlib import Path
 # with a test suite of its own, in orchestrator/tests/. 1.7 stops a failed agent reading as a
 # quiet one: a result JSON saying the run failed no longer writes `in_progress`, a session id
 # that no longer resolves is dropped and the agent respawned once without `--resume`, and a
-# cycle in which every agent failed exits non-zero.
-ORCHESTRATOR_VERSION = "1.7"
+# cycle in which every agent failed exits non-zero. 1.8 makes GET /state answer for `origin`
+# rather than for whatever the last cycle left in the working tree: it fast-forwards the clone
+# before reading the queue, and says in the body whether that worked.
+ORCHESTRATOR_VERSION = "1.8"
 
 UNLIMITED = {"unlimited", "none", "off"}
 
@@ -2063,6 +2065,125 @@ def set_paused(repo: Path, paused: bool, note: str = "") -> bool:
     return True
 
 
+STATE_FETCH_TIMEOUT_SECONDS = float(
+    os.environ.get("ORCHESTRATOR_STATE_FETCH_TIMEOUT_SECONDS", "5"))
+
+
+def local_refresh_blocker(repo: Path) -> tuple[str | None, str]:
+    """`(reason this clone cannot be fast-forwarded, its upstream ref)` — no network.
+
+    The three refusals that can be decided without talking to a remote, in one place because
+    two callers need them and in the same words: `refresh_clone`, which then fetches, and
+    `upstream_gap`, which only reports. Splitting the wording between the endpoint and the
+    status command is exactly how the two drift into disagreeing about the same clone.
+
+    Dirtiness is measured on **tracked files only**. A fast-forward does not touch a
+    submodule's working tree, only its gitlink, and an untracked file in the way makes git
+    refuse the checkout rather than lose anything. Counting submodule state would leave the
+    real box permanently dirty, since a gitlink a cycle moved is an everyday state, and the
+    refresh would then never run at all.
+    """
+    if not (repo / ".git").exists():
+        return f"{repo} is not a git clone", ""
+
+    dirty = git("status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all",
+                cwd=repo)
+    if dirty.returncode != 0:
+        return f"{repo} is not a git clone", ""
+    if dirty.stdout.strip():
+        return "the working tree has uncommitted changes", ""
+
+    upstream = git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", cwd=repo)
+    tracking = upstream.stdout.strip()
+    if upstream.returncode != 0 or not tracking:
+        return "no upstream branch is configured", ""
+    return None, tracking
+
+
+def upstream_gap(repo: Path) -> tuple[bool, str | None]:
+    """Is this clone level with its upstream, judged without touching the network?
+
+    `refresh_clone`'s read-only sibling, for `orchestrator.py status`. A status command must
+    not block on a remote — it is run interactively and expected to answer at once — and it
+    certainly must not move a working tree, which is why it does not simply call its sibling:
+    a cycle may be building in that tree, and only the endpoint holds the lock check.
+
+    It therefore answers from the last fetch, which is what "may be behind" means in the line
+    it feeds. The endpoint is what actually refreshes.
+    """
+    blocker, tracking = local_refresh_blocker(repo)
+    if blocker:
+        return False, blocker
+    behind = git("rev-list", "--count", f"HEAD..{tracking}", cwd=repo).stdout.strip()
+    if behind.isdigit() and int(behind) > 0:
+        plural = "" if behind == "1" else "s"
+        return False, (f"{behind} commit{plural} behind {tracking} as of the last fetch; "
+                       f"GET /state refreshes, or run `git pull`")
+    return True, None
+
+
+def refresh_clone(repo: Path, *, timeout: float | None = None) -> tuple[bool, str | None]:
+    """Bring `repo` up to its upstream if that can be done without deciding anything.
+
+    `/state` answers out of the working tree, and the only `git pull` in the system runs at the
+    start of a cycle — so with the timer off the panel showed answered questions as `blocked`
+    for days. The honest question for a GET to answer is "what would the next cycle see", and
+    that is `origin`, not whatever the last cycle left behind.
+
+    Returns `(True, None)` when the clone is at its upstream's commit, and `(False, reason)`
+    otherwise, where the reason is a sentence meant to be shown to a person verbatim. It never
+    raises and it never decides anything a person should: it refuses in five ways, and each
+    refusal leaves the working tree byte-identical.
+
+      not a git clone            nothing to do
+      uncommitted changes        a fast-forward could clobber them
+      no upstream branch         detached HEAD, or a branch that tracks nothing
+      the fetch failed           unreachable, unauthenticated, or slower than `timeout`
+      the merge declined         this clone has commits origin does not: a person's problem
+
+    `merge --ff-only` is the whole reason this is safe to run from a GET: it either moves HEAD
+    along a line origin already has, or it refuses and changes nothing. There is no conflict
+    state to get stuck in and nothing to `--abort`. `pull()` has a merge fallback because a
+    cycle holds a lock and has a commit and a push to follow it; a GET has none of those.
+
+    Dirtiness is measured on **tracked files only**. A fast-forward does not touch a submodule's
+    working tree, only its gitlink, and an untracked file in the way makes git refuse the
+    checkout — which lands in the "declined" branch rather than losing anything. Counting
+    submodule state would leave the real box permanently dirty, since a gitlink a cycle moved is
+    an everyday state, and the refresh would then never run at all.
+    """
+    blocker, tracking = local_refresh_blocker(repo)
+    if blocker:
+        return False, blocker
+    remote = tracking.split("/", 1)[0]
+
+    # Non-interactive, always. A user unit started at login has no ssh-agent and no terminal,
+    # so a credential prompt would block this process for ever — and this process is also the
+    # one serving POST /heartbeat, whose absence reads as "the laptop is idle".
+    env = dict(os.environ)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GIT_ASKPASS"] = "true"
+    env["GIT_SSH_COMMAND"] = (env.get("GIT_SSH_COMMAND", "ssh")
+                              + " -o BatchMode=yes -o StrictHostKeyChecking=accept-new")
+    try:
+        fetched = subprocess.run(
+            ["git", "fetch", "--quiet", remote], cwd=repo, env=env,
+            capture_output=True, text=True,
+            timeout=STATE_FETCH_TIMEOUT_SECONDS if timeout is None else timeout)
+    except subprocess.TimeoutExpired:
+        return False, f"could not reach {remote}: the fetch timed out"
+    except OSError as exc:
+        return False, f"could not reach {remote}: {exc}"
+    if fetched.returncode != 0:
+        detail = (fetched.stderr.strip() or fetched.stdout.strip() or "git fetch failed")
+        return False, f"could not reach {remote}: {detail.splitlines()[0]}"
+
+    merged = git("merge", "--ff-only", "--quiet", tracking, cwd=repo)
+    if merged.returncode != 0:
+        return False, (f"this clone has diverged from {tracking}; it needs a person")
+    return True, None
+
+
 def lock_status(repo: Path) -> tuple[bool, list[str], float | None, int | None]:
     """(running, agents, acquired_at, age_seconds) from the cycle lock's metadata.
 
@@ -2240,6 +2361,16 @@ def cmd_status(repo: Path, heartbeat_url: str) -> int:
     entries = queue.entries()
 
     print(f"Orchestrator  v{ORCHESTRATOR_VERSION}   repo {repo}")
+
+    # The same question /state answers, in the same words. These two have been one
+    # implementation since 1.4 and splitting them is precisely how they drift: a panel saying
+    # the clone is behind while `status` says nothing is a worse bug than either alone.
+    # Read-only here — `status` reports, it does not fetch — so this says "may be", and the
+    # endpoint is what actually refreshes.
+    fresh, why = upstream_gap(repo)
+    if not fresh:
+        print(f"  WARNING: this clone may be behind origin — {why}")
+
     for line in heartbeat_report(heartbeat_url):
         print(line)
 

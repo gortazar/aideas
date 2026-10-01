@@ -1,5 +1,5 @@
-status: not_started
-version: 1.7
+status: done
+version: 1.8
 started_at: 2026-09-15T18:39:34+02:00
 last_session_id: c42e4c48-8bfe-49f0-accb-f4d4d5588837
 last_run: 2026-09-28T18:48:58+02:00
@@ -17,109 +17,122 @@ last_cycle_cost_usd: 0.0
 
 ## Units
 
-**1.7 — a failed agent must not read as a quiet one.** Six units, one commit each.
-The 1.6 release was verified first: `check-release.sh` reports orchestrator-v1.6 published,
-its checksum matching the bytes served and its packed `orchestrator.py` declaring 1.6. That
-closes the one item the previous entry left open.
+**1.8 — `/state` must answer for `origin`, not the local clone.** Seven units, one commit each.
 
-- [x] **U1 — `stub_claude` and `test_agent_failure.py`.** `support.py` gains a fake `claude`
-      first on `PATH` that records every argv, plus `LIMIT_RESULT` (the exact observed
-      payload: `subtype: success` *and* `is_error: true`) and `HEALTHY_RESULT`. Four fixture
-      tests assert the stub really is what runs, is executable, logs its calls and leaves
-      `PATH` restored. `agent_failure()` lands with its six classifier tests green.
-      **Committed red on purpose:** 5 `finalize`/`record_usage` cases fail, which is U2's
-      specification. 82 tests, 5 failing.
-- [x] **U2 — `agent_failure` wired in.** `finalize` returns early on a failed result: no
-      `rewrite_status`, so `status:`, `started_at`, `version` and the staleness clock are
-      all untouched. It logs the model's own sentence and the consequence
-      (`status left at not_started — nothing was built this cycle`), and
-      `note_agent_failure` inserts a `— failed: <reason>` line under `## Log` in the shape
-      `LOG_ENTRY_RE` matches. `record_usage` writes `<phase>-failed` and the reason, which
-      covers the planning pass too. The merge, worktree removal and branch delete all still
-      run, so a resumed agent that hit the limit on its last turn keeps its commits.
-      82 tests green.
-- [x] **U3 — the dead session id.** Each agent's stderr is captured to `<out>.err` (it was
-      inherited and lost, which is why a CLI that refused to start left no trace at all).
-      `recover_dead_sessions` sleeps once for the whole set (`early_exit_probe_seconds`,
-      default 5, 0.3 in tests), then `poll()`s: an agent that exited non-zero with
-      `No conversation found with session ID` gets its session file deleted and is respawned
-      once without `--resume`. A limit failure is *not* respawned. Two bugs the tests
-      caught: the respawn truncated the stderr that explains it (now opened for append),
-      and every spawn leaked two file descriptors (now closed once the child holds them —
-      the suite runs clean under `-W error::ResourceWarning`). 89 tests green.
-- [x] **U4 — the cycle's own verdict.** `cycle_exit_code()` returns 1 when every agent
-      failed, with one summary line naming the distinct reasons; 0 with a WARNING when some
-      failed and some worked, because real work landed; 0 and silence otherwise. An agent
-      with no result JSON is not counted — that is the killed-agent case, which has its own
-      report. Verified that both orchestrator units are `Type=oneshot` with no `Restart=`,
-      so a failed cycle marks the unit failed without looping (the `Restart=always` in
-      install.sh belongs to the heartbeat server). **Incidental fix found by the stub:** a
-      config with no `max_cycle_cost_usd` passed `--max-budget-usd ''`, which the CLI
-      rejects, so every agent died before starting — the same invisible failure this entry
-      is about. An absent limit now means no flag. 102 tests green.
-- [x] **U5 — `ORCHESTRATOR_VERSION = "1.7"`**, its one-line entry in the version comment,
-      and `version: 1.7` here. `scripts/check-version.sh` confirms the two agree; neither
-      it nor `check-release.sh` needed editing, since both read the version rather than
-      hardcoding it.
-- [x] **U6 — `status: done` at 1.7.** 102 tests green four ways: normally, under `env -i`
-      with `LC_ALL=C`, `HOME=/nonexistent`, an antipodean `TZ` and **no `claude` on `PATH`**,
-      under a comma-decimal locale, and under `-W error::ResourceWarning`. The clean-
-      environment run caught a real defect in this entry's own tests: one of them reached a
-      state where `run()` legitimately archives `PLAN.md` and drafts a new one, so it invoked
-      the **real** `claude`. It passed here and would have failed on CI, which has none
-      installed. Every test that calls `run()` now stubs the CLI.
+- [x] **U1 — 1.7 shipped.** `check-release.sh` reports `orchestrator-v1.7` published
+      2026-09-28, checksum matching the bytes served, packed `orchestrator.py` declaring 1.7,
+      and the `install.sh` asset identical to the one inside the tarball. No force dispatch
+      was needed. That closes the one item 1.7 could not verify from inside its own session.
+- [x] **U2 — `refresh_clone()` and the decision table.** One function next to `lock_status`,
+      returning `(ok, reason)` and never raising: it refuses for a non-clone, a dirty tree
+      (tracked files only), a missing upstream, a failed or timed-out fetch, and a diverged
+      clone. `merge --ff-only` is what makes it safe from a GET — it either moves HEAD along a
+      line origin already has or changes nothing. 12 tests, one per row, each refusal asserted
+      to leave `rev-parse HEAD` and `git status` byte-identical. The fetch is bounded and
+      carries `GIT_TERMINAL_PROMPT=0`, `GIT_ASKPASS=true` and `BatchMode=yes`, proved with a
+      stub `git` that sleeps and one that echoes its environment. `support.stub_binary()`
+      generalises `stub_claude`.
+- [x] **U3 — `orchestrator_state()` refreshes.** `refresh_payload()` runs before
+      `queue_rows`, so one request can never report a queue from before its own fetch, and
+      only when the lock says no cycle is running — asserted on the commit sha, not just on
+      the payload. Rate limited to one fetch per `ORCHESTRATOR_STATE_REFRESH_SECONDS`
+      (120), measured on `time.monotonic` with an injectable clock so no test sleeps; a
+      failed attempt starts the window too. The end-to-end case is the reported bug: an
+      unticked question answered and pushed by a second clone shows as `ready` on the next
+      poll, with no cycle having run. 7 tests.
+- [x] **U4 — the `refresh` field and the status line.** Keys are exactly `state`, `reason`,
+      `checked_at`, `age_seconds`; `state` is the closed pair `current`/`stale`; `reason` is
+      null when current; `checked_at` is the last **success** and `age_seconds` its integer
+      age; a box that has never managed a refresh reports nulls, not a third state. An
+      `available: false` body still carries nothing but `reason`, and a refresh that raises
+      degrades to `stale` instead of 500ing. `orchestrator.py status` prints the same
+      sentence — but **read-only**: `upstream_gap()` answers from the last fetch rather than
+      calling its mutating sibling, because `status` is interactive and a cycle may be
+      building in that tree. `local_refresh_blocker()` holds the three network-free refusals
+      so both callers word them identically. 133 tests.
+- [x] **U5 — the contract.** `state-contract.md` gains `refresh` in the available-body key
+      table, a `### Freshness` section carrying the decision table and the closed two-word
+      vocabulary, and a line under *What the extension must not assume*: `stale` is an
+      ordinary state and a consumer that ignores the key stays correct. The exact-keys
+      assertion in `ideas/aideas/tests/test_state_contract.py` gains `refresh`, plus one
+      test of its shape. Both suites green: 133 orchestrator, 114 aideas. **No extension
+      source touched** — rendering the field is the aideas idea's own entry, and the key is
+      additive precisely so an extension that ignores it keeps working.
+- [x] **U6 — what refreshing needs from the box.** `SETUP.md` gains a subsection under
+      `/state`, and `idea-heartbeat.service` the matching commented lines. Checking the real
+      unit rather than assuming turned up two requirements beyond the planned
+      `ReadWritePaths`: `RestrictAddressFamilies` omits `AF_UNIX`, which both an ssh-agent
+      socket and `systemd-resolved` need, and `ProtectHome=yes` makes a clone under `/home`
+      invisible to that unit for reading as much as for writing. `origin` here is SSH
+      (`git@github.com:gortazar/aideas.git`), so the `BatchMode=yes` in the fetch is load
+      bearing, not decorative. All of it is optional: a box that cannot refresh reports
+      `stale` with the reason and serves the queue it had.
+- [x] **U7 — 1.8 and `status: done`.** `ORCHESTRATOR_VERSION`, the version comment and
+      `version:` here all say 1.8, asserted by `check-version.sh`. 133 orchestrator tests
+      green four ways — normally, under `env -i` with `LC_ALL=C`, `HOME=/nonexistent`, an
+      antipodean `TZ` and nothing on `PATH` but `/usr/bin` and `/bin`, under a comma-decimal
+      locale, and under `-W error::ResourceWarning` — plus 114 aideas contract tests.
 
-Run the suite from the repo root:
+Run the suites from the repo root:
 
     python3 -m unittest discover -s orchestrator/tests -t orchestrator
+    python3 -m unittest discover -s ideas/aideas/tests
 
 ## What `done` covers
 
 Every feature in this entry's `PLAN.md` is delivered, tested and committed.
 
-- **A failed agent is reported as failed.** `agent_failure()` reads `is_error` first, because
-  in the observed payload it was the only field that was right, and treats a non-`success`
-  subtype as a failure too. `finalize` then leaves the idea's status, `started_at` and
-  version exactly as they were — which matters beyond honesty, since writing `in_progress`
-  started the staleness clock `pick_ideas` deprioritises on.
-- **The failure outlives the cycle.** A `— failed: <reason>` line goes into the idea's
-  STATUS.md log in the shape `LOG_ENTRY_RE` matches, so it survives the next
-  `rewrite_status` and rides into the next agent's briefing.
-- **A dead session id recovers itself.** stderr is captured, one bounded probe finds the
-  agent that refused to start, its useless session id is deleted and it is respawned once
-  without `--resume`. A model-limit failure is deliberately not respawned.
-- **A cycle where every agent failed exits non-zero**, so it appears in `systemctl --failed`
-  rather than as a clean run. Partial failure stays 0, because real work landed.
-- **Two bugs found while testing, both fixed:** the respawn truncated the stderr that
-  explained it, and a config without `max_cycle_cost_usd` passed `--max-budget-usd ''`, which
-  the CLI rejects outright — killing every agent before it started, silently, under 1.6.
+- **`/state` answers for `origin`.** `refresh_clone()` fast-forwards the clone, and
+  `orchestrator_state()` calls it *before* `queue_rows`, so one request can never report a
+  queue from before its own fetch. The reported bug is a test: an unticked question answered
+  and pushed by another clone shows as `ready` on the next poll, with no cycle having run.
+- **Every refusal is decided, not discovered.** Nine rows, each with its own sentence and its
+  own test, and each refusal asserted to leave `rev-parse HEAD` and `git status`
+  byte-identical. `merge --ff-only` is what makes a GET safe to do this at all.
+- **A GET never touches a tree a cycle is building in.** Gated on the lock the function
+  already reads, and asserted on the commit sha rather than on the payload.
+- **Bounded and non-interactive.** One fetch per 120 s on a monotonic clock, abandoned after
+  5 s, with `GIT_TERMINAL_PROMPT=0`, `GIT_ASKPASS=true` and `BatchMode=yes` — proved by a stub
+  `git` that sleeps and one that echoes its environment. This process also serves
+  `POST /heartbeat`, and a heartbeat that does not land reads as an idle laptop.
+- **The contract records it**, with the decision table and the closed two-word vocabulary, and
+  the exact-keys test that keeps the document true was updated in the same commit.
+- **`status` tells the same story read-only.** `upstream_gap()` answers from the last fetch:
+  a status command must not block on the network, and must not move a tree a cycle may be in.
 
 ## Not verified from inside this session
 
-**`scripts/check-release.sh` has not been run for 1.7, because the release cannot exist yet.**
-An agent may not push this repository; `release-orchestrator.yml` fires on the push the
-orchestrator makes *after* this cycle, reading the `status: done` above. This is the same
-position 1.6 ended in, and 1.6 published correctly — verified at the start of this session:
-
-    checking gortazar/aideas orchestrator-v1.6 ... PASS: published, verified and installable
+**`scripts/check-release.sh` has not been run for 1.8**, because the release cannot exist yet:
+an agent may not push this repository, and `release-orchestrator.yml` fires on the push the
+orchestrator makes *after* this cycle, reading the `status: done` above. 1.6 and 1.7 both ended
+in this position and both published correctly; 1.7 was verified at the start of this session.
 
 **First thing to run next**, and the recovery if it reports nothing:
 
     ideas/orchestrator/scripts/check-release.sh
     gh workflow run release-orchestrator.yml --repo gortazar/aideas -f force=true
 
-CI has likewise never run remotely for this entry, for the same reason. The suite is green
-locally on `/usr/bin/python3` 3.12 with nothing on `PATH` but `/usr/bin` and `/bin`, which is
-a closer approximation of the runner than the developer shell is.
+CI has not run remotely for this entry either, for the same reason. Both suites are green
+locally on `/usr/bin/python3` 3.12 with nothing on `PATH` but `/usr/bin` and `/bin`.
+
+**The refresh has never run on the real box.** Everything here is proved against bare
+repositories on disk; whether `idea-heartbeat.service` can actually write the clone and fetch
+non-interactively is a property of that machine, which is why `SETUP.md` now carries the two
+requirements and a command to check them. A box where it does not work reports `stale` with
+the reason rather than failing, so the worst case is the pre-1.8 behaviour, labelled.
 
 ## Follow-ups, deliberately not done here
 
-- **No backoff after a model limit**, per the answered open question: the next cycle tries
-  again and fails again, now loudly. If the retry noise matters in practice it should be its
-  own entry, not a widening of this one.
-- **`planning_pass` still raises `FileNotFoundError` when `claude` is absent**, taking the
-  cycle down with a traceback. That is loud rather than silent, so it is outside this entry's
-  subject, but `claude_missing_reason()` already exists and `cycle_preflight` could use it.
+- **The extension does not render `refresh` yet.** That is the `aideas` idea's work under its
+  own entry; the key is additive so an extension ignoring it stays correct. Until then the
+  panel is fresh but does not say so.
+- **`release-orchestrator.yml` hardcodes 1.6's headline** in the release title, so 1.7 is
+  published as "rescued work reaches the remote, and there are tests". Cosmetic, and that file
+  is outside this entry's stated scope.
+- **A long fetch still blocks `POST /heartbeat`**, since one thread serves everything. Bounded
+  at 5 s, which is the mitigation the entry chose; a background refresh the GET kicks but never
+  waits on is the larger fix, and belongs to its own entry.
+- **No backoff after a model limit**, and **`planning_pass` still raises `FileNotFoundError`
+  when `claude` is absent** — both carried over from 1.7, both still outside scope.
 - The root `sonar-project.properties` still lists `orchestrator` under `sonar.sources`, so
-  `orchestrator/tests/` is analysed as production code. That file is outside this entry's
-  scope and `gortazar/aideas` is ungated, so it cannot block.
+  `orchestrator/tests/` is analysed as production code.

@@ -52,6 +52,76 @@ CYCLE_MIN_SECONDS = float(os.environ.get("ORCHESTRATOR_CYCLE_MIN_SECONDS", "30")
 # process, and a test resets it.
 _last_launch = 0.0
 
+# How often GET /state may shell out to `git fetch`. The panel polls every 60 s, so at 120 s
+# at most every other poll costs a fetch and a push shows up within about two minutes. The
+# server is a single-threaded HTTPServer: every second spent fetching is a second in which
+# POST /heartbeat waits, and a heartbeat that does not land reads as an idle laptop.
+REFRESH_SECONDS = float(os.environ.get("ORCHESTRATOR_STATE_REFRESH_SECONDS", "120"))
+
+# The last refresh *attempt*, on a monotonic clock — a wall clock that steps backwards over
+# NTP or a suspend would otherwise freeze the refresh for as long as the step. A failed
+# attempt starts the window exactly as a successful one does, so a box with no network does
+# not shell out on every poll.
+_last_refresh_attempt: float | None = None
+# The outcome of that attempt, carried between polls so a request inside the window can report
+# what the last real one found.
+_refresh_reason: str | None = None
+# Unix seconds of the last *successful* refresh, or None. Mirrors cycle_started_at exactly, so
+# a consumer has no new idiom to learn.
+_refresh_ok_at: float | None = None
+
+
+def reset_refresh_state():
+    """Forget the refresh window. For tests, and for the same reason _last_launch has one."""
+    global _last_refresh_attempt, _refresh_reason, _refresh_ok_at
+    _last_refresh_attempt = None
+    _refresh_reason = None
+    _refresh_ok_at = None
+
+
+def refresh_payload(repo, *, running, clock=None, now=None, refresh=None):
+    """Bring the clone up to date if allowed, and describe the result for the body.
+
+    `state` is a closed two-word vocabulary. `current` means a fetch succeeded within the
+    refresh window and the clone is at its upstream's commit; `stale` means everything else,
+    with `reason` a sentence meant to be shown verbatim. There is deliberately no third word
+    for "never checked": a box that cannot fetch is serving data it cannot vouch for, which is
+    exactly what `stale` means, and the reason says which case it is — one fewer branch for
+    every consumer.
+
+    A running cycle is reported as `stale` without touching anything. The orchestrator pulls at
+    the start of every cycle, so the clone is about as fresh as it can be; the point is that a
+    GET must never move a tree out from under a cycle that is building in it.
+    """
+    global _last_refresh_attempt, _refresh_reason, _refresh_ok_at
+    clock = clock or time.monotonic
+    now = now or time.time
+    refresh = refresh or _orch.refresh_clone
+
+    def body(state, reason):
+        age = None if _refresh_ok_at is None else round(now() - _refresh_ok_at)
+        return {"state": state, "reason": reason,
+                "checked_at": _refresh_ok_at, "age_seconds": age}
+
+    if running:
+        return body("stale", "a cycle is running; the clone is refreshed at the start "
+                             "of each cycle")
+
+    moment = clock()
+    inside_window = (_last_refresh_attempt is not None
+                     and moment - _last_refresh_attempt < REFRESH_SECONDS)
+    if not inside_window:
+        _last_refresh_attempt = moment
+        try:
+            ok, reason = refresh(repo)
+        except Exception as exc:  # noqa: BLE001 — /state degrades, it never 500s
+            ok, reason = False, f"the refresh failed: {exc}"
+        _refresh_reason = None if ok else reason
+        if ok:
+            _refresh_ok_at = now()
+
+    return body("current" if _refresh_reason is None else "stale", _refresh_reason)
+
 
 def load_state():
     if os.path.exists(STATE_PATH):
@@ -68,7 +138,7 @@ def save_state(state):
     os.replace(tmp, STATE_PATH)
 
 
-def orchestrator_state():
+def orchestrator_state(*, clock=None, now=None, refresh=None):
     """Live cycle state plus the state of every idea in the queue.
 
     Liveness and the agent list both come from the lock's metadata, which a running cycle
@@ -76,6 +146,12 @@ def orchestrator_state():
     is alive and says what it is working on, so a reader can never see one without the
     other. A lock whose last renewal is older than its TTL means nothing is running — the
     cycle was killed, suspended or crashed.
+
+    The clone is brought up to its upstream *before* the queue is read, so that one request
+    can never report a queue from before its own fetch. This endpoint used to answer out of
+    whatever the last cycle left behind, which meant a question answered and pushed from the
+    laptop stayed `blocked` in the panel until a cycle happened to run — days, with the timer
+    off. What a reader wants to know is what the next cycle would see, and that is `origin`.
     """
     repo_path = os.environ.get("IDEAS_REPO_PATH")
     if not repo_path or _orch is None:
@@ -88,6 +164,10 @@ def orchestrator_state():
     # running" cannot mean one thing to this endpoint and another to the button beside it.
     running, agents, since, age = _orch.lock_status(repo)
 
+    # Before queue_rows, which reads the files this may have just moved.
+    refresh_state = refresh_payload(repo, running=running, clock=clock, now=now,
+                                    refresh=refresh)
+
     try:
         ideas = _orch.queue_rows(repo, tuple(agents))
     except Exception as exc:  # noqa: BLE001 — a malformed README must not 500 the endpoint
@@ -99,6 +179,9 @@ def orchestrator_state():
         "agents": agents,
         "cycle_started_at": since,
         "lock_age_seconds": None if age is None else round(age),
+        # Whether this body is answering for `origin` or only for the local clone, and when it
+        # last managed to check. `stale` is an ordinary state, not an error.
+        "refresh": refresh_state,
         # The stop file, which nothing in the orchestrator ever removes. Reported because it
         # is the one thing about the queue a reader cannot deduce: a paused box looks exactly
         # like an idle one until something tries to start a cycle and is refused.
