@@ -2034,6 +2034,35 @@ def is_paused(repo: Path) -> bool:
         return False
 
 
+def set_paused(repo: Path, paused: bool, note: str = "") -> bool:
+    """Create or remove the stop file. Returns whether it changed anything.
+
+    The whole of `POST /stop` except the HTTP, so the server never builds that path by hand and
+    a test can assert the file rather than a string. Idempotent in both directions: pausing a
+    paused queue and resuming an unpaused one are both "nothing to do", not errors.
+
+    An existing stop file is never rewritten — whoever left it may have written something in it,
+    and this is a switch, not a log. `note` is only for the file this call creates: it is what
+    tells someone who finds the file a week later where it came from.
+
+    Raises `OSError` when the write genuinely fails; a caller that must not fail reports that
+    rather than swallowing it, because a stop that silently did nothing is the worst outcome
+    available here.
+    """
+    path = stop_file_path(repo)
+    if paused:
+        if path.exists():
+            return False
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"{note}\n" if note else "")
+        return True
+
+    if not path.exists():
+        return False
+    path.unlink()
+    return True
+
+
 def lock_status(repo: Path) -> tuple[bool, list[str], float | None, int | None]:
     """(running, agents, acquired_at, age_seconds) from the cycle lock's metadata.
 

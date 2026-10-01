@@ -51,7 +51,26 @@ update it is, and `AGENTS.md` makes that minor.
       be the same fact, and a paused *running* cycle is both at once — the stop file winds a
       cycle down, it does not kill it. 4 new unit tests (**301**, was 297).
 
-Next: **U2** — `set_paused()` and `POST /stop`, with its idempotency in both directions.
+- [x] **U2 — `set_paused()` and `POST /stop`.** The panel's second write. `set_paused(repo,
+      paused, note=…)` in `orchestrator.py` is the file write itself — idempotent both ways,
+      returning whether it changed anything, never rewriting a stop file someone else left, and
+      raising rather than swallowing a failed write. `request_stop()` in `heartbeat_server.py`
+      is the endpoint: no gates (the file only ever makes the orchestrator do *less*), **no rate
+      limit** (a launch costs money, a stop costs nothing, and the moment someone hammers this
+      is the moment they most want it to work), both directions, and `{paused, changed, gate,
+      reason}` — where `changed: false` is a normal 200 meaning "already in that state", and
+      `paused: null` with `gate: server` is a box that cannot look refusing to invent the fact
+      it was asked for. Only a literal `true` resumes: `{"resume": "no"}` must not mean the
+      opposite of what it says.
+      `tests/test_stop_endpoint.py`, **26 tests** (**113 python**, was 87), with the filesystem
+      really there — the file is the endpoint, so nothing is injected. Seven of them run the
+      real `Handler` over loopback, which is what proves the routing, the shared authorisation
+      (401 writes nothing), the 404, and the round trip the panel makes: stop, then read
+      `paused: true` back from `/state`. The contract gains a full `POST /stop` section: the
+      pause-not-a-kill semantics, that resuming does not revive the cycle it stopped, the
+      idempotency, why there is no rate limit, and the authorisation exposure stated plainly.
+
+Next: **U3** — `stopClient.js`, over the shared `soupTransport.post()`.
 
 ## What 0.4 covered — two buttons, and the extension's first write
 
