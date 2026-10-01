@@ -226,7 +226,7 @@ Units, each one commit, tests first:
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **Should "stop" leave the queue paused until someone resumes it, or only stop the cycle that
+- [x] **Should "stop" leave the queue paused until someone resumes it, or only stop the cycle that
       is running?** The plan assumes the first, because that is what the stop file *is*: a pause
       switch nothing ever clears, so the button creates it, the panel then shows `Paused` and offers
       `Resume the queue`. The alternative is a one-shot stop — the extension creates the file, waits
@@ -235,7 +235,7 @@ Units, each one commit, tests first:
       wind-down to clean up after itself (a screen lock, a logout or a crash mid-wind-down would
       leave the fleet paused with nothing on screen saying so), and of losing the ability to pause
       the queue while nothing is running at all.
-- [ ] **When the orchestrator is on another machine, should "Add an idea" still open the local
+- [x] **When the orchestrator is on another machine, should "Add an idea" still open the local
       checkout?** The plan assumes yes, with the path named in the menu item so it is visible before
       the click: the extension has no way to edit a file on the box, and a local clone is what a
       person would edit anyway before pushing. The alternative is to make the item insensitive
@@ -243,7 +243,7 @@ Units, each one commit, tests first:
       address) — safer against typing an idea into a stale clone that never gets pushed, and it
       disables the button entirely in the deployment where the box is remote, which is the one
       `SETUP.md` describes as normal.
-- [ ] **Should a paused queue change the panel icon, or only the menu?** The plan assumes the menu
+- [x] **Should a paused queue change the panel icon, or only the menu?** The plan assumes the menu
       only: the header reads `Idle — paused`, the items say the rest, and no new artwork ships. The
       alternative is a fifth bulb — 0.3 shipped four symbolic bulbs and an `allBlocked` variant
       precisely so that a state worth noticing is visible without opening the menu, and "paused"
