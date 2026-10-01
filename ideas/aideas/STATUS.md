@@ -1,4 +1,4 @@
-status: in_progress
+status: done
 version: 0.5
 started_at: 2026-08-14T15:31:00+02:00
 last_session_id: 35386b06-271b-4df6-8da8-1c51dd289449
@@ -246,6 +246,17 @@ the editor argv against this laptop's actual codium, whose saved state recorded 
 the line the module computed. What is **not** proven from here is unchanged from every entry: an
 agent may not push this repo, so the release publishes on merge and `make check-release` is how
 to confirm it.
+
+**The release.** `aideas-shell-v0.5` publishes when this reaches `main`: `release-aideas.yml`
+runs on push, reads `version: 0.5` and `status: done` from this file, and tags itself — an agent
+may not push this repo, so a tag made in this worktree would never arrive. `src/`, `Makefile` and
+`flake.nix` all changed, so the path filter fires. Afterwards, one command says whether it did:
+
+```sh
+cd ideas/aideas && make check-release
+```
+
+If it has not published, the Actions tab, then `Run workflow` with *force*.
 
 **One thing worth saying plainly.** The riskiest part of this entry is not code. The stop file
 outlives the click, the cycle, the panel and the reboot, and nothing in the orchestrator ever
