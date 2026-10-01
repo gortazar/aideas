@@ -108,7 +108,26 @@ update it is, and `AGENTS.md` makes that minor.
       `tests/unit/menuStop.test.js`, 27 tests (**356**, was 329). Fourteen existing layout
       expectations were updated rather than worked around: the menu genuinely gained an item.
 
-Next: **U5** — wiring the item to the client in `extension.js`, with the brisk poll after a stop.
+- [x] **U5 — the wiring.** `extension.js` connects the item to `StopClient`, keeps the in-flight
+      state the menu is built from, polls `/state` immediately afterwards (the header saying
+      `Paused` is the real feedback for this click, and it comes from `/state`, not from the
+      reply), and watches the wind-down.
+      **Which direction the click means is read off the reading, never remembered.** The stop
+      file is the state; the panel only ever reports it. A panel holding its own idea of "paused"
+      would disagree with `rm` the moment anybody used it — and that file is explicitly something
+      a person removes by hand.
+      The wind-down window is **150 s**, taken from what a wind-down actually costs rather than
+      copied from `/cycle`'s 45: the supervising loop checks the stop file every 5 s
+      (`orchestrator.py:1228`), `agent_grace_seconds` is 90, and the cycle then still commits,
+      merges and pushes while holding its lock, so `running` stays true well after the last agent
+      has gone. Past that it says `Still winding down — agents finish their step first`, which is
+      the truth rather than a timeout dressed as a failure. The watch is cancelled by the next
+      click, so it can never overwrite the answer to a resume, and by `disable()`, so no timer
+      survives a screen lock. `indicator.js` needed no change: 0.4's `action` case is generic.
+      `nix flake check`: 4 green. This unit is verified in the compositor at U7, which is where
+      `extension.js` can be exercised at all.
+
+Next: **U6** — `editorLauncher.js` and the two new preferences.
 
 ## What 0.4 covered — two buttons, and the extension's first write
 

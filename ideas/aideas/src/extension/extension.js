@@ -19,6 +19,7 @@ import { IdleWatcher } from './idleWatcher.js';
 import { SoupTransport } from './lib/soupTransport.js';
 import { StateClient } from './lib/stateClient.js';
 import { CycleClient } from './lib/cycleClient.js';
+import { StopClient } from './lib/stopClient.js';
 import { PollScheduler } from './lib/scheduler.js';
 
 /** The scheduler's timer seam, as GLib provides it. */
@@ -36,6 +37,15 @@ const nowSeconds = () => GLib.get_real_time() / 1e6;
 const CONFIRM_SECONDS = 45;
 const CONFIRM_INTERVAL_SECONDS = 5;
 
+// How long to keep watching a cycle we asked to stop, before saying out loud that it is still
+// going. Taken from what a wind-down actually costs rather than copied from the number above:
+// the supervising loop checks the stop file every 5 s, `agent_grace_seconds` is 90, and the
+// cycle then still commits, merges and pushes while holding its lock — so `running` stays true
+// for a good while after the last agent has gone. 150 s covers the first two with room for the
+// third; past that the extension stops guessing and says so.
+const WIND_DOWN_SECONDS = 150;
+const WIND_DOWN_INTERVAL_SECONDS = 5;
+
 export default class AideasExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
@@ -47,12 +57,19 @@ export default class AideasExtension extends Extension {
         });
 
         this._cycleClient = new CycleClient({ transport: this._transport });
+        this._stopClient = new StopClient({ transport: this._transport });
 
-        // What the two items are doing right now, and what the last click came back with. The
-        // menu is built from this as much as from the reading.
-        this._actions = { refreshing: false, cycleInFlight: false, cycleOutcome: null };
+        // What the items are doing right now, and what the last click came back with. The menu
+        // is built from this as much as from the reading.
+        this._actions = {
+            refreshing: false,
+            cycleInFlight: false, cycleOutcome: null,
+            stopInFlight: null, stopOutcome: null,
+        };
         this._confirmUntil = 0;
         this._confirmTimer = null;
+        this._windDownUntil = 0;
+        this._windDownTimer = null;
 
         this._indicator = new AideasIndicator({
             onOpenPreferences: () => this.openPreferences(),
@@ -95,6 +112,7 @@ export default class AideasExtension extends Extension {
             GLib.source_remove(this._confirmTimer);
             this._confirmTimer = null;
         }
+        this._stopWatching();
         this._scheduler?.stop();
         this._scheduler = null;
 
@@ -114,6 +132,7 @@ export default class AideasExtension extends Extension {
         this._transport = null;
         this._client = null;
         this._cycleClient = null;
+        this._stopClient = null;
         this._actions = null;
         this._settings = null;
     }
@@ -125,6 +144,9 @@ export default class AideasExtension extends Extension {
         else if (name === 'cycle' || name === 'override')
             this._startCycle(name === 'override')
                 .catch(error => logError(error, 'aideas: starting a cycle failed'));
+        else if (name === 'stop')
+            this._stopOrResume()
+                .catch(error => logError(error, 'aideas: pausing the queue failed'));
     }
 
     /**
@@ -202,6 +224,95 @@ export default class AideasExtension extends Extension {
                 this._scheduler?.pollNow();
                 return GLib.SOURCE_CONTINUE;
             });
+    }
+
+    /**
+     * Pause the queue, or — when it already is — let it go again.
+     *
+     * Which of the two is decided from the reading on screen, not from a separate toggle this
+     * extension keeps: the stop file is the state, and the panel is only ever reporting it. A
+     * panel that remembered its own idea of "paused" would disagree with `rm` the moment anyone
+     * used it, and the file is explicitly something a person can remove by hand.
+     */
+    async _stopOrResume() {
+        // A wind-down being watched belongs to the request that started it. Letting its timer
+        // outlive this click would let "Still winding down" overwrite the answer to a resume.
+        this._stopWatching();
+
+        const resume = this._client?.snapshot()?.reading?.paused === true;
+        this._actions.stopInFlight = resume ? 'resume' : 'stop';
+        this._actions.stopOutcome = null;
+        this._render();
+
+        let outcome;
+        try {
+            outcome = await this._stopClient.requestStop({
+                host: this._settings.get_string('orchestrator-host'),
+                port: this._settings.get_int('orchestrator-port'),
+                secret: this._settings.get_string('orchestrator-secret'),
+                resume,
+            });
+        } finally {
+            this._actions.stopInFlight = null;
+        }
+
+        this._actions.stopOutcome = outcome;
+        this._render();
+
+        // The header saying `paused` is the real feedback for this click, and it comes from
+        // /state rather than from the reply, so read it back at once instead of waiting out the
+        // poll interval.
+        this._scheduler?.pollNow();
+
+        if (outcome.gate === null && outcome.paused === true)
+            this._watchWindDown();
+    }
+
+    /**
+     * Keep an eye on a cycle that was asked to stop, and say so if it is still going.
+     *
+     * Not a timeout dressed as a failure: the file is on disk either way and the header keeps
+     * saying `Paused`. What this produces is the one sentence that is actually true after a
+     * couple of minutes — the agents are finishing their step — rather than a menu that shows
+     * "the queue is paused" beside a cycle that is visibly still running.
+     */
+    _watchWindDown() {
+        if (!this._client?.snapshot()?.reading?.running)
+            return;
+
+        this._windDownUntil = nowSeconds() + WIND_DOWN_SECONDS;
+        if (this._windDownTimer)
+            return;
+
+        this._windDownTimer = GLib.timeout_add_seconds(
+            GLib.PRIORITY_DEFAULT, WIND_DOWN_INTERVAL_SECONDS, () => {
+                const reading = this._client?.snapshot()?.reading;
+                if (!reading?.running) {
+                    this._windDownTimer = null;
+                    return GLib.SOURCE_REMOVE;
+                }
+                if (nowSeconds() >= this._windDownUntil) {
+                    this._windDownTimer = null;
+                    this._actions.stopOutcome = {
+                        paused: true,
+                        changed: false,
+                        gate: null,
+                        reason: 'Still winding down — agents finish their step first',
+                    };
+                    this._render();
+                    return GLib.SOURCE_REMOVE;
+                }
+                this._scheduler?.pollNow();
+                return GLib.SOURCE_CONTINUE;
+            });
+    }
+
+    /** Drop the wind-down watch, if there is one. */
+    _stopWatching() {
+        if (this._windDownTimer) {
+            GLib.source_remove(this._windDownTimer);
+            this._windDownTimer = null;
+        }
     }
 
     /** One reading, then redraw. Never throws: it is a timer callback. */
