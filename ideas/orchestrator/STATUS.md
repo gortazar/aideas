@@ -138,3 +138,5 @@ the reason rather than failing, so the worst case is the pre-1.8 behaviour, labe
   when `claude` is absent** — both carried over from 1.7, both still outside scope.
 - The root `sonar-project.properties` still lists `orchestrator` under `sonar.sources`, so
   `orchestrator/tests/` is analysed as production code.
+
+<!-- orchestrator: no v1.8 release in gortazar/aideas when this entry was retired. -->

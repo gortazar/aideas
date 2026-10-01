@@ -73,16 +73,6 @@ makes position a safe identity: the active list only ever holds work still to do
 
 3. [meet](ideas/meet) - Add the rooms of each instance below the instance name, and a button next to the name to open that room specifically. The button must get you to the call itself, not the room homepage. 
 
-4. [orchestrator](ideas/orchestrator) - `/state` reports whatever the last cycle left in the local clone, so the GNOME panel showed two ideas as blocked for days after their questions
-   were answered and pushed. Minor update, 1.8. The heartbeat server reads the working tree at `IDEAS_REPO_PATH` and nothing in it ever fetches — the only `git pull` in the system
-   runs at the *start* of a cycle. The indicator was polling correctly every 60 seconds and getting a byte-identical answer each time, which is indistinguishable from a dead
-   refresh, so this reads to a user as two separate bugs. **`origin/main` is the truth, not the working tree**: the orchestrator pulls before it does anything, so what `/state`
-   should answer is what the *next* cycle would see. Refresh before answering, rate-limited so a 60-second poll does not fetch every time, and only when no cycle is running —
-   `orchestrator_state()` already calls `lock_status`, so it knows. Use `git fetch` plus `git merge --ff-only`, which cannot conflict and simply declines if the clone has diverged.
-   Decide and write down what happens in the cases that makes a GET mutate a working tree: a dirty tree, a clone that has genuinely diverged, a fetch that fails because the network
-   is down. Stale data shown silently is the bug being fixed, so the honest answer is probably to serve what it has and say in the payload that it is out of date — which means a
-   field the extension can render, and that is a contract change `ideas/aideas/docs/state-contract.md` has to record. Cover it in `orchestrator/tests/`.
-
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
@@ -288,3 +278,13 @@ makes position a safe identity: the active list only ever holds work still to do
    one of them fail should not look like a successful cycle in the log. Cover all three in `orchestrator/tests/`, which this idea now owns.
 
 32. [aideas](ideas/aideas) - Add a button to start a new cycle. Add another button to open codium with the readme so that new ideas can be added. Add a button to stop the cycle. (finished 2026-10-01, v0.5)
+
+33. [orchestrator](ideas/orchestrator) - `/state` reports whatever the last cycle left in the local clone, so the GNOME panel showed two ideas as blocked for days after their questions (finished 2026-10-01, v1.8)
+   were answered and pushed. Minor update, 1.8. The heartbeat server reads the working tree at `IDEAS_REPO_PATH` and nothing in it ever fetches — the only `git pull` in the system
+   runs at the *start* of a cycle. The indicator was polling correctly every 60 seconds and getting a byte-identical answer each time, which is indistinguishable from a dead
+   refresh, so this reads to a user as two separate bugs. **`origin/main` is the truth, not the working tree**: the orchestrator pulls before it does anything, so what `/state`
+   should answer is what the *next* cycle would see. Refresh before answering, rate-limited so a 60-second poll does not fetch every time, and only when no cycle is running —
+   `orchestrator_state()` already calls `lock_status`, so it knows. Use `git fetch` plus `git merge --ff-only`, which cannot conflict and simply declines if the clone has diverged.
+   Decide and write down what happens in the cases that makes a GET mutate a working tree: a dirty tree, a clone that has genuinely diverged, a fetch that fails because the network
+   is down. Stale data shown silently is the bug being fixed, so the honest answer is probably to serve what it has and say in the payload that it is out of date — which means a
+   field the extension can render, and that is a contract change `ideas/aideas/docs/state-contract.md` has to record. Cover it in `orchestrator/tests/`.
