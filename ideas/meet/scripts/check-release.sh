@@ -26,6 +26,31 @@ asset="${UUID}.shell-extension.zip"
 fail_count=0
 fail() { printf 'FAIL: %s\n' "$1" >&2; fail_count=$((fail_count + 1)); }
 
+# Everything below is public, so curl is the first choice and needs no credentials.
+#
+# It falls back to `gh` because an unauthenticated api.github.com allows 60 requests an hour
+# per address, and this script spends several of them per run. Over that limit the API
+# answers 403, `curl -f` turns that into a non-zero exit, and the script would report "no
+# release tagged v0.2" — which is not what went wrong and sends you looking at the release
+# workflow instead of at a rate limit. A just-published release can 404 for a moment too.
+# `gh` is authenticated and has its own, far larger, allowance, so a disagreement between
+# the two paths is itself informative. Neither path is given a token *by this script*.
+fetch_json() { # <api-path>
+    curl -fsS "https://api.github.com/$1" 2>/dev/null && return 0
+    command -v gh >/dev/null 2>&1 || return 1
+    gh api "$1" 2>/dev/null
+}
+
+fetch_file() { # <url> <api-path-or-empty> <output> [accept]
+    curl -fsSL "$1" -o "$3" 2>/dev/null && return 0
+    [ -n "$2" ] || return 1
+    command -v gh >/dev/null 2>&1 || return 1
+    # Both of these endpoints answer with JSON metadata unless asked for the bytes, and
+    # they do not agree on how to ask: a release asset wants octet-stream, a file in the
+    # repository wants the raw media type.
+    gh api -H "Accept: ${4:-application/octet-stream}" "$2" > "$3" 2>/dev/null
+}
+
 echo "checking $REPO $tag"
 
 # 1. The tag. Without it the release workflow never ran at all.
@@ -37,7 +62,7 @@ else
 fi
 
 # 2. The release itself.
-release="$(curl -fsS "https://api.github.com/repos/${REPO}/releases/tags/${tag}" 2>/dev/null || true)"
+release="$(fetch_json "repos/${REPO}/releases/tags/${tag}" || true)"
 if [ -z "$release" ]; then
     fail "no release tagged ${tag} on ${REPO}"
     echo
@@ -63,11 +88,14 @@ done
 if command -v unzip >/dev/null 2>&1; then
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' EXIT
-    if curl -fsSL "https://github.com/${REPO}/releases/download/${tag}/${asset}" \
-        -o "${tmp}/${asset}" 2>/dev/null; then
+    asset_id="$(printf '%s' "$release" | jq -r --arg n "$asset" \
+        '.assets[] | select(.name == $n) | .id')"
+    if fetch_file "https://github.com/${REPO}/releases/download/${tag}/${asset}" \
+        "repos/${REPO}/releases/assets/${asset_id}" "${tmp}/${asset}"; then
         listing="$(unzip -l "${tmp}/${asset}" 2>/dev/null || true)"
         for entry in metadata.json extension.js prefs.js LICENSE \
             lib/destinations.js lib/launcher.js lib/menu.js lib/settings.js \
+            lib/rooms.js lib/client.js lib/keyring.js lib/secret-store.js \
             icons/openvidu-meet-symbolic.svg schemas/gschemas.compiled; do
             grep -q " ${entry}\$" <<< "$listing" || fail "the published zip is missing ${entry}"
         done
@@ -85,7 +113,9 @@ else
 fi
 
 # 5. The installer someone will actually pipe into a shell.
-if curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/install.sh" -o /dev/null 2>/dev/null; then
+if fetch_file "https://raw.githubusercontent.com/${REPO}/main/install.sh" \
+    "repos/${REPO}/contents/install.sh?ref=main" /dev/null \
+    "application/vnd.github.raw"; then
     echo "  install.sh is reachable on main"
 else
     fail "install.sh is not reachable at the URL the README tells people to curl"
