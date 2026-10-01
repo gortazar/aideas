@@ -16,7 +16,7 @@ update it is, so `AGENTS.md`'s default applies: **minor**.
 
 Branch `agent/meet/2026-10-01` on `gortazar/meet`.
 
-### Units — 5 of 9 done
+### Units — 6 of 9 done
 
 - [x] **U1 — the room model.** `src/lib/rooms.js`: what a room is (`id`, `name`, `status`,
       `createdAt`, `joinUrl`), that the link taken is the **anonymous moderator** one, and
@@ -57,8 +57,16 @@ Branch `agent/meet/2026-10-01` on `gortazar/meet`.
       be a dialog — and a lookup arriving after the user has edited the list is dropped
       rather than written over their edit. Writes are debounced by 400 ms, flushed on
       `close-request`, and a failed store marks its own row. 6 tests, **279** in the suite.
-- [ ] **U5 — the room rows and the join button in the shell.** **Next.**
-- [ ] U6 — the request itself: libsoup3, the cancellable, the timeout.
+- [x] **U5 — the room rows and the join button in the shell.** A custom `RoomMenuItem`:
+      a label plus an `St.Button` with Adwaita's call icon, its own accessible name
+      (*Join <room>*) and its own keyboard focus. The button activates the item rather than
+      launching directly, so the two ways into a room are one handler and both close the
+      menu; a room with no vouched-for link is insensitive and buttonless. Failure messages
+      now go through **`redactSecrets`** — the way a role link would reach the screen is not
+      that anybody writes it into a message, but that a launch fails and GIO quotes the URI
+      it was given. The teardown hygiene test is checked per class now, and both directions
+      verified by mutation. 15 tests, **291** in the suite.
+- [ ] **U6 — the request itself: libsoup3, the cancellable, the timeout.** **Next.**
 - [ ] U7 — the nested shell: a stub instance, the assertions, the screenshots.
 - [ ] U8 — ship `v0.2`.
 
