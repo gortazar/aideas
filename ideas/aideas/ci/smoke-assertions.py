@@ -25,6 +25,7 @@ or at a port with nothing on it. Nothing here restarts the Shell.
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -64,8 +65,23 @@ def probe(method, *args):
     out = result.stdout.strip()
     # gdbus prints ('the value',); the payload is JSON or a short word.
     if out.startswith("('") and out.endswith("',)"):
-        return out[2:-3].encode().decode("unicode_escape")
+        return unescape(out[2:-3])
     return out
+
+
+def unescape(payload):
+    """Undo gdbus's escaping without mangling anything outside ASCII.
+
+    gdbus escapes quotes and backslashes but prints non-ASCII as raw UTF-8, which Python has
+    already decoded by the time we see it. `unicode_escape` is a *latin-1* codec, so running it
+    over an em dash produces mojibake: that is how `Idle — paused` arrived here as `Idle â
+    paused` and failed an assertion about a string the extension had got exactly right. Round
+    trip through bytes so the escapes are processed and the text is not.
+    """
+    return (payload.encode("utf-8")
+            .decode("unicode_escape")
+            .encode("latin-1", "backslashreplace")
+            .decode("utf-8", "replace"))
 
 
 def describe():
@@ -82,6 +98,30 @@ def posted(port):
     """Every POST /cycle that stub received, in order, with what it carried."""
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/cycles", timeout=10) as response:
         return json.load(response)
+
+
+def stopped(port):
+    """Every POST /stop that stub received, in order, with what it carried."""
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/stops", timeout=10) as response:
+        return json.load(response)
+
+
+def usable_geometry(geometry):
+    """The icon's rectangle, if it has one — an actor with no allocation yet reports null."""
+    if not isinstance(geometry, dict):
+        return None
+    sides = [geometry.get(key) for key in ("x", "y", "width", "height")]
+    if not all(isinstance(side, (int, float)) for side in sides):
+        return None
+    return geometry if geometry["width"] >= 8 and geometry["height"] >= 8 else None
+
+
+def launched_argv(path):
+    """What the stub editor was given, one argument per line, or None if it never ran."""
+    if not os.path.exists(path):
+        return None
+    with open(path) as handle:
+        return handle.read().splitlines()
 
 
 def item_labelled(panel, first_label):
@@ -160,6 +200,10 @@ def main():
     parser.add_argument("--screenshots", required=True)
     parser.add_argument("--interval", type=int, default=10,
                         help="the poll interval the session was configured with")
+    parser.add_argument("--editor-argv", required=True,
+                        help="file the stub editor appends its arguments to, one per line")
+    parser.add_argument("--fixture-repo", required=True,
+                        help="a directory holding a README.md with a ## Ideas section")
     options = parser.parse_args()
     settings = Settings(options.schemadir)
 
@@ -200,10 +244,14 @@ def main():
           "resolved to the shipped file, so the loader found it",
           f"iconFile={icon_file}")
 
-    geometry = panel.get("iconGeometry") or {}
-    check(geometry.get("width", 0) >= 8 and geometry.get("height", 0) >= 8,
-          "and it has a real size on the stage",
-          f"geometry={geometry}")
+    # An actor that has not been allocated yet reports NaN for its transformed size, which
+    # JSON.stringify turns into null — so this waits for a real allocation and then compares
+    # defensively. It used to compare `geometry.get("width", 0) >= 8` directly, which raised a
+    # TypeError against that null and took the whole run down instead of failing one check.
+    geometry = wait_until(lambda: usable_geometry(describe().get("iconGeometry")), 20,
+                          what="the icon to be allocated on the stage") or {}
+    check(bool(geometry), "and it has a real size on the stage",
+          f"geometry={describe().get('iconGeometry')}")
 
     shoot(f"{options.screenshots}/panel-running.png")
     if geometry:
@@ -258,7 +306,8 @@ def main():
     # Rows and questions are read-only: answering a blocked idea means editing PLAN.md on the
     # box. Since 0.4 the menu also has items that *do* act, so the rule is no longer "only
     # Preferences reacts" but "nothing from the queue does".
-    may_react = {"Check now", "Run a cycle", "Run anyway", "Preferences"}
+    may_react = {"Check now", "Run a cycle", "Run anyway", "Preferences",
+                 "Stop the cycle", "Pause the queue", "Resume the queue", "Add an idea"}
     reactive = [item["labels"][0] for item in panel["items"]
                 if item["reactive"] and item["labels"]]
     check(set(reactive) <= may_react,
@@ -410,6 +459,130 @@ def main():
     check(item_labelled(describe(), "Check now")["reactive"] is True,
           "while Check now stays live — resetting the backoff is what it is for")
     probe("CloseMenu")
+
+    # --- stopping a running cycle --------------------------------------------------------
+    #
+    # The stub's POST /stop really moves the flag its /state reports, so this is the round
+    # trip: press the item, and watch the panel's own reading change under it.
+    print("\nStop the cycle")
+    probe("OpenMenu")
+    stop_item = item_labelled(describe(), "Stop the cycle")
+    check(stop_item is not None, "a running cycle offers Stop the cycle",
+          " | ".join(menu_labels(describe())))
+    check(stop_item is not None and stop_item["reactive"] is True, "and it can be clicked")
+    check(probe("Activate", "Stop the cycle") == "activated", "the item activates")
+
+    stops = wait_until(lambda: stopped(options.running_port) or None, 25, what="the POST /stop")
+    check(stops is not None and len(stops) == 1, "the box receives exactly one POST /stop",
+          f"{stops!r}")
+    check(stops is not None and stops[0]["body"].get("resume") is None,
+          "a stop carries no resume at all", f"{stops!r}")
+    check(describe().get("menuOpen") is True,
+          "and the menu stays open, which is where the whole answer appears")
+
+    resume_item = wait_until(lambda: item_labelled(describe(), "Resume the queue"), 30,
+                             what="the item to become Resume")
+    check(resume_item is not None, "the item becomes Resume the queue once the box is paused",
+          " | ".join(menu_labels(describe())))
+    labels = menu_labels(describe())
+    check(any(text.endswith("— stopping") for text in labels),
+          "and the header says the cycle is stopping, not stopped", " | ".join(labels))
+    check(any(".orchestrator/stop exists" in text for text in labels),
+          "naming the file, which is what to delete when there is no panel",
+          " | ".join(labels))
+    cycle_item = item_labelled(describe(), "Run a cycle")
+    check(cycle_item is not None and cycle_item["reactive"] is False,
+          "Run a cycle is insensitive while the queue is paused", f"{cycle_item!r}")
+    check(cycle_item is not None
+          and any("queue is paused" in text for text in cycle_item["labels"]),
+          "saying so before it is clicked", f"{cycle_item!r}")
+    check(item_labelled(describe(), "Run anyway") is None,
+          "and no Run anyway: the way to run a cycle while paused is to resume, visibly")
+    probe("ShootMenu", f"{options.screenshots}/menu-paused.png")
+    time.sleep(3)
+
+    print("\nResume the queue")
+    check(probe("Activate", "Resume the queue") == "activated", "the item activates")
+    resumed = wait_until(
+        lambda: [p for p in stopped(options.running_port) if p["body"].get("resume") is True]
+        or None, 25, what="the resuming POST")
+    check(resumed is not None, "and posts with resume: true",
+          f"{stopped(options.running_port)!r}")
+    back_to_stop = wait_until(lambda: item_labelled(describe(), "Stop the cycle"), 30,
+                              what="the item to go back to Stop")
+    check(back_to_stop is not None, "the item goes back to Stop the cycle",
+          " | ".join(menu_labels(describe())))
+    labels = menu_labels(describe())
+    check(not any(".orchestrator/stop exists" in text for text in labels),
+          "and the header stops saying paused", " | ".join(labels))
+    probe("CloseMenu")
+
+    # --- pausing a queue where nothing is running -----------------------------------------
+    print("\nPause the queue (nothing running)")
+    settings.point_at(options.idle_port)
+    wait_until(lambda: describe().get("icon") == "aideas-bulb-blocked-symbolic", 40,
+               what="the idle box's reading")
+    probe("OpenMenu")
+    pause_item = item_labelled(describe(), "Pause the queue")
+    check(pause_item is not None,
+          "with nothing running, the same file pauses the queue instead",
+          " | ".join(menu_labels(describe())))
+    before_stops = len(stopped(options.idle_port))
+    check(probe("Activate", "Pause the queue") == "activated", "the item activates")
+    check(wait_until(lambda: len(stopped(options.idle_port)) > before_stops, 25,
+                     what="the POST") is not None,
+          "and the box receives a POST /stop")
+    paused_header = wait_until(
+        lambda: "Idle — paused" in menu_labels(describe()), 30, what="the paused header")
+    check(paused_header is not None, "the header reads 'Idle — paused'",
+          " | ".join(menu_labels(describe())))
+    check(probe("Activate", "Resume the queue") == "activated", "and resume puts it back")
+    check(wait_until(lambda: "Idle" in menu_labels(describe()), 30,
+                     what="the header to go back to Idle") is not None,
+          "the header is plain Idle again")
+    probe("CloseMenu")
+
+    # --- opening the queue in an editor ---------------------------------------------------
+    #
+    # The one item that does something local. The editor is a stub script on PATH: what is
+    # being checked is the argv, which is everything the extension actually decides.
+    print("\nAdd an idea")
+    probe("OpenMenu")
+    open_item = item_labelled(describe(), "Add an idea")
+    check(open_item is not None, "there is an Add an idea item",
+          " | ".join(menu_labels(describe())))
+    check(open_item is not None and open_item["reactive"] is False,
+          "which is insensitive until a repository path is set", f"{open_item!r}")
+    check(open_item is not None
+          and any("preferences" in text for text in open_item["labels"]),
+          "and says which preference to set, rather than nothing", f"{open_item!r}")
+    check(probe("Activate", "Add an idea") == "insensitive",
+          "activating it does nothing at all")
+    check(not os.path.exists(options.editor_argv),
+          "and nothing was launched", f"{options.editor_argv}")
+    probe("CloseMenu")
+
+    settings.set("repo-path", options.fixture_repo)
+    probe("OpenMenu")
+    ready = wait_until(
+        lambda: (item_labelled(describe(), "Add an idea") or {}).get("reactive") is True
+        and item_labelled(describe(), "Add an idea"), 25, what="the item to go live")
+    check(ready is not None, "a configured repository makes it clickable",
+          f"{item_labelled(describe(), 'Add an idea')!r}")
+    readme = f"{options.fixture_repo}/README.md"
+    check(ready is not None and readme in ready["labels"],
+          "and it names the file it will open, before the click", f"{ready!r}")
+
+    check(probe("Activate", "Add an idea") == "activated", "the item activates")
+    argv = wait_until(lambda: launched_argv(options.editor_argv), 25,
+                      what="the editor to be launched")
+    check(argv is not None, "the editor really is spawned", f"{argv!r}")
+    check(argv == [options.fixture_repo, "--goto", f"{readme}:7"],
+          "with the repository, and the README at the end of the ## Ideas list",
+          f"{argv!r}")
+    probe("CloseMenu")
+
+    settings.point_at(options.running_port)
     settings.set("always-show", "false")
 
     # --- the button follows the cycle ------------------------------------------------------

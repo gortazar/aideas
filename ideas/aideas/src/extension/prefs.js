@@ -1,4 +1,4 @@
-// The preferences window: five settings and a button that tells you whether they work.
+// The preferences window: seven settings and a button that tells you whether they work.
 //
 // It runs in its own process, not in the Shell, so it may use Gtk and Adw freely — and it uses
 // the same transport, client and wording modules the extension does, which is the point: "Test
@@ -27,6 +27,7 @@ export default class AideasPreferences extends ExtensionPreferences {
 
         const page = new Adw.PreferencesPage();
         page.add(this._orchestratorGroup(settings));
+        page.add(this._queueGroup(settings));
         page.add(this._pollingGroup(settings));
         window.add(page);
 
@@ -81,6 +82,50 @@ export default class AideasPreferences extends ExtensionPreferences {
         group.add(secret);
 
         group.add(this._testRow(settings));
+        return group;
+    }
+
+    /**
+     * Where the queue is on *this* machine, and what opens it.
+     *
+     * Both empty by default. There is no safe guess at a repository path: an editor that
+     * silently opens the wrong checkout loses the idea you just typed into it, so the menu item
+     * stays grey and says so rather than trying `~/aideas` and hoping.
+     */
+    _queueGroup(settings) {
+        const group = new Adw.PreferencesGroup({
+            title: 'The queue on this machine',
+            description: 'Ideas are written into README.md, which is a file on this computer — ' +
+                'a clone of the repository if the orchestrator is on another box. The menu ' +
+                'item names the path it will open before you click it.',
+        });
+
+        const repo = new Adw.EntryRow({
+            title: 'Repository path',
+            text: settings.get_string('repo-path'),
+        });
+        repo.connect('changed', () => settings.set_string('repo-path', repo.get_text()));
+        group.add(repo);
+
+        const editor = new Adw.EntryRow({
+            title: 'Editor command',
+            text: settings.get_string('editor-command'),
+        });
+        editor.connect('changed', () =>
+            settings.set_string('editor-command', editor.get_text()));
+        group.add(editor);
+
+        // Said once here rather than in both rows' subtitles: EntryRow shows a subtitle only
+        // until it is focused, which is exactly when somebody is reading it.
+        group.add(new Adw.ActionRow({
+            title: 'Leave the command empty to look for codium, then vscodium, then the '
+                + 'Flatpak. Set it and it is used as given, with the repository and the file '
+                + 'appended — which is also how to use a different editor.',
+            cssClasses: ['dim-label'],
+            titleLines: 0,
+            activatable: false,
+        }));
+
         return group;
     }
 

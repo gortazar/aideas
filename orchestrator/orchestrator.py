@@ -657,7 +657,7 @@ class Orchestrator:
 
         self.config = Config(load_config(repo / ".agent-config.yml"))
         self.usage_log = self.state_dir / "usage.log"
-        self.stop_file = self.state_dir / "stop"
+        self.stop_file = stop_file_path(repo)
         self.agents_md = repo / "AGENTS.md"
 
         self.started_at = time.time()
@@ -2007,6 +2007,60 @@ class Preflight:
     ok: bool
     gate: str | None = None
     reason: str | None = None
+
+
+def stop_file_path(repo: Path) -> Path:
+    """Where the stop file lives. One definition, so nothing builds that path by hand.
+
+    `Orchestrator.stop_file` is this, `GET /state` reports on this, and `POST /stop` writes
+    this — a panel that showed "paused" from a different path than the one `stop_requested()`
+    polls would be worse than showing nothing at all.
+    """
+    return repo / ".orchestrator" / "stop"
+
+
+def is_paused(repo: Path) -> bool:
+    """Is the queue paused — does the stop file exist?
+
+    The one fact about the stop file that `GET /state` carries. `exists()` rather than
+    `is_file()` deliberately: that is what `Orchestrator.stop_requested()` asks, so whatever
+    pauses the orchestrator also shows as paused here.
+    """
+    try:
+        return stop_file_path(repo).exists()
+    except OSError:
+        # A path that cannot even be stat()ed is not a paused queue, and /state must not fail
+        # because IDEAS_REPO_PATH points at something strange.
+        return False
+
+
+def set_paused(repo: Path, paused: bool, note: str = "") -> bool:
+    """Create or remove the stop file. Returns whether it changed anything.
+
+    The whole of `POST /stop` except the HTTP, so the server never builds that path by hand and
+    a test can assert the file rather than a string. Idempotent in both directions: pausing a
+    paused queue and resuming an unpaused one are both "nothing to do", not errors.
+
+    An existing stop file is never rewritten — whoever left it may have written something in it,
+    and this is a switch, not a log. `note` is only for the file this call creates: it is what
+    tells someone who finds the file a week later where it came from.
+
+    Raises `OSError` when the write genuinely fails; a caller that must not fail reports that
+    rather than swallowing it, because a stop that silently did nothing is the worst outcome
+    available here.
+    """
+    path = stop_file_path(repo)
+    if paused:
+        if path.exists():
+            return False
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"{note}\n" if note else "")
+        return True
+
+    if not path.exists():
+        return False
+    path.unlink()
+    return True
 
 
 def lock_status(repo: Path) -> tuple[bool, list[str], float | None, int | None]:

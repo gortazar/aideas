@@ -18,13 +18,18 @@ export class StubServer {
      * @param {number} [options.slow]  seconds /state-slow waits before answering
      * @param {string} [options.body]  exact body for /state
      */
-    constructor({ slow = 30, body = null, cycleMode = null } = {}) {
+    constructor({ slow = 30, body = null, cycleMode = null, stopMode = null,
+        paused = false } = {}) {
         const argv = ['python3', GLib.build_filenamev([testsDir(), 'stub-state-server.py']),
             '--slow', String(slow)];
         if (body !== null)
             argv.push('--body', body);
         if (cycleMode !== null)
             argv.push('--cycle-mode', cycleMode);
+        if (stopMode !== null)
+            argv.push('--stop-mode', stopMode);
+        if (paused)
+            argv.push('--paused');
 
         this._process = new Gio.Subprocess({
             argv,

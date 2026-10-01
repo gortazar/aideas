@@ -1,14 +1,15 @@
 # The orchestrator's HTTP contract
 
-Two endpoints the aideas panel uses: `GET /state`, which is everything it *reads*, and
-`POST /cycle`, which is the one thing it *writes*. This document specifies both, and
-`tests/test_state_contract.py`, `tests/test_cycle_preflight.py` and
-`tests/test_cycle_endpoint.py` assert them against fixture repositories, so the endpoints and
+Three endpoints the aideas panel uses: `GET /state`, which is everything it *reads*, and
+`POST /cycle` and `POST /stop`, which are the two things it *writes* — start a cycle, and pause
+or resume the queue. This document specifies all three, and `tests/test_state_contract.py`,
+`tests/test_cycle_preflight.py`, `tests/test_cycle_endpoint.py` and
+`tests/test_stop_endpoint.py` assert them against fixture repositories, so the endpoints and
 the extension cannot drift apart while they live in one repository.
 
 Until 0.3 this document opened by saying `/state` was "the only thing the aideas panel
 indicator reads", which was true and is still true of reading. The panel now also asks for a
-cycle to be started.
+cycle to be started, and for the queue to be paused.
 
 The endpoint is served by `orchestrator/heartbeat_server.py` (`orchestrator_state()`), and
 every per-idea row comes from `orchestrator.queue_rows()` — the same function
@@ -18,9 +19,10 @@ it does not gain a judgement.
 
 ## Transport
 
-- Plain HTTP, unauthenticated. Reads are protected by the server binding to a VPN address
-  (`HEARTBEAT_BIND_IP`), which is what the rest of the system already assumes; `POST
-  /heartbeat`'s shared secret does not apply to `GET`.
+- Plain HTTP; reads are unauthenticated. Reads are protected by the server binding to a VPN
+  address (`HEARTBEAT_BIND_IP`), which is what the rest of the system already assumes; `POST
+  /heartbeat`'s shared secret does not apply to `GET`. Both writes take that secret, and both
+  accept anything when the box has none set.
 - Always `200` with `Content-Type: application/json` when the path is `/state`. Failure is
   reported *inside* the body via `available: false`, never as a status code. A non-200 is
   therefore a bug or a different server, and the extension treats it as unreachable.
@@ -59,6 +61,7 @@ cause could omit it — so a consumer substitutes its own wording when it is mis
   "agents": ["aideas", "vacas"],
   "cycle_started_at": 1755180000.0,
   "lock_age_seconds": 42,
+  "paused": false,
   "ideas": [ ...rows... ]
 }
 ```
@@ -70,14 +73,23 @@ cause could omit it — so a consumer substitutes its own wording when it is mis
 | `agents`           | array of slug       | what that cycle currently holds. Empty when `running` is false. Length is the agent count.              |
 | `cycle_started_at` | unix seconds, or `null` | when the lock was acquired. `null` when nothing is running, or when the lock has no `acquired_at`.  |
 | `lock_age_seconds` | int, or `null`      | seconds since the lock was last renewed. `null` when there is no readable lock. Present **even when `running` is false** — a climbing age on a dead cycle is the visible symptom of a box that stopped renewing. |
+| `paused`           | bool                | `.orchestrator/stop` exists, so no cycle will start and a running one is winding down. New in 0.5; **absent on an older box, where a reader must take it as `false`** rather than guess. |
 | `ideas`            | array of row        | one row per `## Ideas` entry in `README.md`, in queue order. May be empty.                              |
 
 `running`, `agents` and `cycle_started_at` all come from one write of the lock's
 `meta.json`, which a live cycle rewrites every `lock_renew_seconds`. That is deliberate: a
 reader can never see liveness without seeing what it is working on.
 
-`## Finished` entries are **not** returned. Neither is anything about budget, schedule or
-the stop file.
+`paused` and `running` are independent, and both are routinely true at once: the stop file
+winds a cycle down rather than killing it, so a stopped cycle keeps renewing its lock,
+committing and merging for as long as its agents take to reach their next check. "Paused"
+means *no new cycle will start*, not "nothing is happening right now".
+
+Until 0.5 this section said that nothing about the stop file was returned, which made a paused
+queue indistinguishable from an idle one until something tried to start a cycle and was refused
+at the `stop-file` gate. `paused` is that gate's own fact, reported before it is hit.
+
+`## Finished` entries are **not** returned. Neither is anything about budget or schedule.
 
 ### A row
 
@@ -267,3 +279,89 @@ A box whose heartbeat receiver is sandboxed **must** set it — `idea-heartbeat.
 a cycle `fork()`ed from inside it would start, find no `claude`, and fail every agent. Pointing
 it at `systemctl start idea-orchestrator.service` makes systemd supply the cycle's environment
 instead. `SETUP.md` has both forms.
+
+
+## `POST /stop`
+
+Pauses the queue, or resumes it. New in 0.5; a box that does not serve it answers **404**, read
+the same way as `/cycle`'s — "this box is older than this extension", not "the click failed".
+
+It writes `.orchestrator/stop`, the same file a person creates with
+
+```sh
+touch "$IDEAS_REPO_PATH/.orchestrator/stop"   # pause
+rm    "$IDEAS_REPO_PATH/.orchestrator/stop"   # resume
+```
+
+**That file is a pause switch, not a kill.** Three consequences a client must render honestly:
+
+- **Stopping is not instant.** `Orchestrator.stop_requested()` is polled between phases and
+  between agents; a running cycle then winds its agents down over `agent_grace_seconds` and
+  **still commits, merges and pushes**. So `running` stays `true` for as long as the agents take
+  to reach their next check — minutes, legitimately — and a client that showed "stopped"
+  immediately would be lying.
+- **Nothing in the orchestrator ever removes it.** No code path deletes the stop file; `/stop`
+  with `resume: true` and a person with `rm` are the only two ways out. A client that can create
+  one must therefore also offer to remove it, and must show `paused` while it exists.
+- **It outlives everything.** The cycle, this server, the reboot. It pauses the *next* cycle as
+  much as the current one, which is why it can be set while nothing is running at all.
+
+Resuming does **not** revive the cycle it stopped. `request_stop()` sets the cycle's stop reason
+once and it stays set for the life of that process, so removing the file mid-wind-down only
+allows the *next* cycle to start.
+
+### Request
+
+```json
+{ "secret": "…", "resume": false }
+```
+
+| key | meaning |
+|-----|---------|
+| `secret` | the shared secret, exactly as `POST /cycle` and `POST /heartbeat` take it. Required only when the box has `HEARTBEAT_SHARED_SECRET` set |
+| `resume` | optional. **Only a literal `true`** removes the stop file; anything else — absent, `false`, `"no"`, `0` — is a stop. The two directions are opposites, so a truthy string must not be allowed to mean the wrong one |
+
+### Response
+
+Always JSON, always the same four keys:
+
+```json
+{ "paused": true,  "changed": true,  "gate": null,     "reason": "the queue is paused; a running cycle winds down at its next check" }
+{ "paused": true,  "changed": false, "gate": null,     "reason": "the queue was already paused" }
+{ "paused": null,  "changed": false, "gate": "server", "reason": "IDEAS_REPO_PATH is not set" }
+```
+
+| key | type | meaning |
+|-----|------|---------|
+| `paused` | bool, or `null` | the state the queue is in now. `null` only alongside a `gate`: the server could not look, and will not invent the one fact it was asked for |
+| `changed` | bool | whether this request did anything. `false` means it was already in that state — **a normal 200**, not an error |
+| `gate` | string, or `null` | `null` when the request was carried out. `server` when this box cannot do it at all; `write` when the file could not be created or removed |
+| `reason` | string | a sentence written to be shown to a person |
+
+### Statuses
+
+| status | meaning |
+|--------|---------|
+| `200` | understood. Read `gate` — `null` means it was done, and `changed` says whether anything moved |
+| `401` | the box has a shared secret and the request did not match it. **Nothing is written** |
+| `404` | this box does not serve `/stop`: it predates 0.5 |
+
+### Idempotency, and no rate limit
+
+Pausing a paused queue and resuming an unpaused one both answer `200` with `changed: false` and
+leave the filesystem alone — an existing stop file is never rewritten, because whoever left it
+may have written something in it. A file this endpoint creates carries a line naming the panel
+and the time, so that whoever finds it a week later can tell where it came from; `resume`
+removes the file whatever wrote it.
+
+**`/stop` is never rate-limited**, deliberately unlike `/cycle`. A launch costs money, so that
+one has a 30 s limit; a second stop costs nothing, and the one situation in which someone presses
+this repeatedly is the situation in which they most want it to work.
+
+### Authorisation, stated plainly
+
+The same posture as `/cycle`: when the box has no `HEARTBEAT_SHARED_SECRET`, any request on that
+socket is accepted. So on a box with no secret, anyone who can reach the VPN address can pause
+the fleet. That is cheaper to abuse than `/cycle` and cheaper to recover from — pausing is
+reversible where spending is not — but it is a real exposure, and the answer to it is the
+shared secret, which both endpoints take the same way.

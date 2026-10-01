@@ -214,6 +214,25 @@ A `404` means the box is older than the extension; `started: true` means *launch
 finished — the cycle re-checks its own gates and may still exit, which is why the panel keeps
 watching `/state` afterwards.
 
+#### Letting the panel pause the queue
+
+The menu's *Stop the cycle* posts to `/stop` on the same receiver, with the same shared secret
+and the same open-when-there-is-none posture. It needs no configuration at all: unlike `/cycle`
+it starts nothing, it only writes `.orchestrator/stop` — so there is no sandbox to work around
+and no permission to grant. It is not rate-limited either, deliberately: a launch costs money,
+a stop costs nothing, and the moment somebody presses it repeatedly is the moment they most
+want it to work.
+
+```bash
+curl -s -X POST -H 'Content-Type: application/json' -d '{}' http://<box-vpn-ip>:8787/stop
+# {"paused": true, "changed": true, "gate": null, "reason": "the queue is paused; …"}
+curl -s -X POST -H 'Content-Type: application/json' \
+  -d '{"resume": true}' http://<box-vpn-ip>:8787/stop
+```
+
+`GET /state` carries `paused` alongside `running`, so the panel can show a paused queue without
+being clicked. See **Stopping gracefully** for what pausing actually does to a cycle in flight.
+
 To check what the extension will see, from the laptop, without installing anything:
 
 ```bash
@@ -341,6 +360,23 @@ rm    "$IDEAS_REPO_PATH/.orchestrator/stop"   # resume
 # Stop the cycle that's running now
 sudo systemctl stop idea-orchestrator.service
 ```
+
+The aideas panel can set and clear that file itself — *Stop the cycle* and *Resume the queue*
+in its menu, over `POST /stop` on the heartbeat receiver (`ideas/aideas/README.md`). It is the
+same file with the same meaning, and the two routes are interchangeable: a file created by
+`touch` is removed by the menu, and the other way round. Two things are worth knowing whichever
+route you use.
+
+**Nothing in the orchestrator ever removes it.** `orchestrator.py status` says `PAUSED … remove
+it to resume`, and the panel shows `Idle — paused` with the file's path beneath it, but no code
+path deletes it. A stop file left behind is a fleet that quietly builds nothing, and it looks
+exactly like a broken orchestrator until somebody goes and looks.
+
+**Pausing does not stop a cycle quickly.** The file is checked between phases and between
+agents, so a cycle takes as long to wind down as its agents take to reach their next check —
+`agent_grace_seconds` after that, plus the commit, the merge and the push. `GET /state` reports
+`running: true` and `paused: true` for the whole of that, which is the honest answer rather than
+a tidy one.
 
 The third is `max_cycle_minutes`: the cycle stops its own agents at that point. That's
 what keeps a long cycle from being SIGKILLed halfway through a merge, so keep the ordering

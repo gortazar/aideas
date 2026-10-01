@@ -1,5 +1,5 @@
-status: not_started
-version: 0.4
+status: done
+version: 0.5
 started_at: 2026-08-14T15:31:00+02:00
 last_session_id: 35386b06-271b-4df6-8da8-1c51dd289449
 last_run: 2026-08-25T11:01:19+02:00
@@ -27,7 +27,245 @@ already exists; "Run a cycle" makes the extension *write* for the first time, to
 that spends real money, whose launch path differs between the box and this laptop and whose
 failure modes are environmental — and therefore invisible to every headless test.
 
-## This entry (0.4) — two buttons, and the extension's first write
+Difficulty estimate: **medium**, as PLAN.md said. One of the three buttons shipped in 0.4; the
+cost of this entry is that "stop the cycle" is the stop *file* — a pause switch nothing ever
+clears — so the extension has to own a state it has never shown, a second write endpoint, and a
+wind-down that takes minutes and looks like nothing happening.
+
+**This entry is version 0.5, assumed minor.** The `README.md` entry does not say which kind of
+update it is, and `AGENTS.md` makes that minor.
+
+## This entry (0.5) — stopping a cycle, and opening the queue where ideas are written
+
+- [x] **U1 — `paused` in `/state`.** The stop file is now a fact the panel can read without
+      clicking anything. `stop_file_path(repo)` and `is_paused(repo)` in `orchestrator.py` are
+      the single definition of where that file lives and what it means —
+      `Orchestrator.stop_file` is now that same call, so the path the panel reports on cannot
+      drift from the one `stop_requested()` polls. `orchestrator_state()` carries `paused`;
+      `state.js` carries it into the reading, where a box too old to serve the key reads as
+      **not** paused (the only safe default — a wrongly shown "Paused" is a lie the user cannot
+      check from the panel).
+      `docs/state-contract.md` gains the key, and loses the sentence that said nothing about the
+      stop file was returned. 7 new contract tests (**87 python**, was 79), including the one
+      that matters most: `paused` and the `stop-file` gate the preflight applies are asserted to
+      be the same fact, and a paused *running* cycle is both at once — the stop file winds a
+      cycle down, it does not kill it. 4 new unit tests (**301**, was 297).
+
+- [x] **U2 — `set_paused()` and `POST /stop`.** The panel's second write. `set_paused(repo,
+      paused, note=…)` in `orchestrator.py` is the file write itself — idempotent both ways,
+      returning whether it changed anything, never rewriting a stop file someone else left, and
+      raising rather than swallowing a failed write. `request_stop()` in `heartbeat_server.py`
+      is the endpoint: no gates (the file only ever makes the orchestrator do *less*), **no rate
+      limit** (a launch costs money, a stop costs nothing, and the moment someone hammers this
+      is the moment they most want it to work), both directions, and `{paused, changed, gate,
+      reason}` — where `changed: false` is a normal 200 meaning "already in that state", and
+      `paused: null` with `gate: server` is a box that cannot look refusing to invent the fact
+      it was asked for. Only a literal `true` resumes: `{"resume": "no"}` must not mean the
+      opposite of what it says.
+      `tests/test_stop_endpoint.py`, **26 tests** (**113 python**, was 87), with the filesystem
+      really there — the file is the endpoint, so nothing is injected. Seven of them run the
+      real `Handler` over loopback, which is what proves the routing, the shared authorisation
+      (401 writes nothing), the 404, and the round trip the panel makes: stop, then read
+      `paused: true` back from `/state`. The contract gains a full `POST /stop` section: the
+      pause-not-a-kill semantics, that resuming does not revive the cycle it stopped, the
+      idempotency, why there is no rate limit, and the authorisation exposure stated plainly.
+
+- [x] **U3 — the client.** `src/lib/stopClient.js`, beside `cycleClient.js` and over the same
+      `soupTransport.post()`: one attempt to `{paused, changed, gate, reason}`, never rejecting,
+      refusing two outstanding posts, and the same code-to-phrase mapping — 404 as `this box
+      does not support stopping cycles`, since that is an un-updated box and not the user's
+      mistake. Two things are particular to it. **`paused` can be `null`, and `null` is not
+      `false`**: a box that could not look, a reply that never arrived and a body that is not an
+      answer all leave the panel not knowing, and "not paused" is a claim this module makes only
+      when the box made it — a 200 carrying neither a gate nor a usable `paused` is `malformed`,
+      not a success. And **the two directions are opposites**, so `resume` travels as a literal
+      boolean and `{"resume": "no"}` cannot mean the opposite of what it says.
+      `src/lib/jsonReply.js` now holds the body-parsing both writes share (too large, not JSON,
+      not an object), with the *wording* left to each client since the sentences name what was
+      being asked for. 28 unit tests (**329**, was 301) and **11 http tests** (**50**, was 39).
+      The stub server grew `POST /stop`, a `/stops` log, and — the part that matters — a
+      **stateful** pause flag: in its default mode the stop really moves what its `/state`
+      reports, so the http suite asserts the write and the read agreeing, which is the behaviour
+      of the pair and is exactly what a mocked transport cannot have.
+      `nix flake check`: 4 green.
+
+- [x] **U4 — the stop item, as data.** One item with three readings, because the stop file has
+      three meanings: `Stop the cycle` while one runs, `Pause the queue` when none does (the file
+      does the same thing; what it stops is the *next* cycle, and the label should say which of
+      the two just happened), and `Resume the queue` while it exists — that last one is not a
+      convenience but the half that keeps the button from being a trap. In flight it reads
+      `Stopping…` / `Pausing…` / `Resuming…`, so the label distinguishes the three even then.
+      **The panel now says `Paused` without being clicked**: the header is `Idle — paused` or
+      `Cycle running for 12 min, 1 agent — stopping`, and its detail line names
+      `.orchestrator/stop exists` — someone who finds the fleet paused with no panel in front of
+      them needs to know what to delete. `Run a cycle` goes insensitive while paused with `the
+      queue is paused` beneath it, rather than being clicked to find out; `Run anyway` is
+      asserted **absent** at the `stop-file` gate, which is 0.4's answered question holding under
+      a state the panel can now reach itself.
+      One standing line is worth naming: a paused *running* queue says `a cycle is still winding
+      down`, because nothing has gone wrong there — agents are checked between phases, so the
+      wind-down takes as long as they take, and silence would read as a button that did nothing.
+      `tests/unit/menuStop.test.js`, 27 tests (**356**, was 329). Fourteen existing layout
+      expectations were updated rather than worked around: the menu genuinely gained an item.
+
+- [x] **U5 — the wiring.** `extension.js` connects the item to `StopClient`, keeps the in-flight
+      state the menu is built from, polls `/state` immediately afterwards (the header saying
+      `Paused` is the real feedback for this click, and it comes from `/state`, not from the
+      reply), and watches the wind-down.
+      **Which direction the click means is read off the reading, never remembered.** The stop
+      file is the state; the panel only ever reports it. A panel holding its own idea of "paused"
+      would disagree with `rm` the moment anybody used it — and that file is explicitly something
+      a person removes by hand.
+      The wind-down window is **150 s**, taken from what a wind-down actually costs rather than
+      copied from `/cycle`'s 45: the supervising loop checks the stop file every 5 s
+      (`orchestrator.py:1228`), `agent_grace_seconds` is 90, and the cycle then still commits,
+      merges and pushes while holding its lock, so `running` stays true well after the last agent
+      has gone. Past that it says `Still winding down — agents finish their step first`, which is
+      the truth rather than a timeout dressed as a failure. The watch is cancelled by the next
+      click, so it can never overwrite the answer to a resume, and by `disable()`, so no timer
+      survives a screen lock. `indicator.js` needed no change: 0.4's `action` case is generic.
+      `nix flake check`: 4 green. This unit is verified in the compositor at U7, which is where
+      `extension.js` can be exercised at all.
+
+- [x] **U6 — the editor launcher.** `src/lib/editorLauncher.js`: discovery, argv, the README line
+      and the failure phrases, all through injected seams so no test ever launches anything —
+      which matters more than usual here, since a test that really spawned would open a window on
+      whoever ran it. Discovery tries `codium`, `vscodium`, then `com.vscodium.codium`; the third
+      is the Flatpak, which works through the same "is this program on PATH" seam because a
+      Flatpak install *exports* its app id as a wrapper onto `PATH`. A configured
+      `editor-command` is used **verbatim**, shell-split but never looked for — that is also how
+      somebody who wants a different editor gets one.
+      The item is insensitive with `set the repository path in preferences` when `repo-path` is
+      empty and with `<path>/README.md does not exist` when it is wrong; when it is right the
+      detail line is the path itself. `repo-path` and `editor-command` joined the schema and the
+      preferences window as a new **The queue on this machine** group. 33 launcher tests + 11
+      menu tests (**399 unit**, was 356); seven more layout expectations updated.
+      **The Flatpak risk PLAN.md raised does not apply to this laptop**: codium here is a *snap*
+      with **classic** confinement, so there is no filesystem sandbox to defeat.
+      **Verified for real, once, against that codium** — the one thing no headless test can say.
+      The exact argv the extension builds
+      (`codium <worktree> --goto <worktree>/README.md:86`) opened a window, and after closing it
+      codium's own `state.vscdb` for that workspace recorded
+      `"cursorState":[{…"position":{"lineNumber":86,"column":1}}]` — line 86 being the last entry
+      before `## Finished` at line 88, which is exactly where a new idea is typed. No codium
+      process was left behind.
+
+- [x] **U7 — the compositor.** The smoke test went from 78 checks to **110**, all green, and it
+      activates all three items for real. `Stop the cycle` produces exactly one `POST /stop`
+      without a resume, **the menu stays open**, and because the stub's `/stop` really moves the
+      flag its `/state` reports, the next reading changes under it: the item becomes `Resume the
+      queue`, the header reads `… — stopping`, and `.orchestrator/stop exists` appears beneath
+      it. `Resume` posts `resume: true` and puts all of that back. On an idle box the same item
+      is `Pause the queue` and the header becomes `Idle — paused`. `Add an idea` is activated
+      against a stub `codium` on `PATH` and asserted on its **argv**, which is everything the
+      extension decides: `[<repo>, --goto, <repo>/README.md:7]`.
+      Screenshot: `screenshots/menu-paused.png`, now in `README.md`.
+      **The compositor found three things no unit test did**, which is what it is for:
+      1. **`Run a cycle` named the wrong gate.** With a cycle winding down it said `a cycle is
+         already running`, but `cycle_preflight()` checks the stop file *first*, so the box
+         would have refused at `stop-file`. The model now orders paused before running, and
+         names the gate the box would really have reached.
+      2. **`Run anyway` outlived the refusal that produced it.** A box refused at the heartbeat
+         gate a minute ago can be paused now, and an override provably cannot pass the stop
+         file — so the item was offering to skip the one gate it cannot. It is now suppressed
+         whenever anything standing is already blocking `Run a cycle`.
+      3. **The smoke test could not read its own non-ASCII.** `unicode_escape` is a *latin-1*
+         codec, so `Idle — paused` arrived as `Idle â paused` and failed an assertion about a
+         string the extension had got exactly right. Every `·` in every detail line had been
+         arriving mangled since 0.1; no assertion had ever compared one.
+      Two smaller fixes to the harness itself: the fixtures now live beside `$STATE` rather than
+      inside it (`nested-shell.sh start` does `rm -rf "$STATE"`, so anything put there before the
+      Shell boots is deleted), and the icon-geometry check waits for an allocation instead of
+      comparing `null >= 8`, which raised a `TypeError` and took a whole run down rather than
+      failing one check.
+      402 unit tests (was 399 — two of the three findings got one each).
+
+- [x] **U8 — the bump and the docs.** `version: 0.5` here, in `metadata.json` and in `flake.nix`,
+      which the release workflow asserts are one string. `README.md` becomes **The three things
+      the menu does**, with sections on stopping-as-a-pause (why `Stopping…` is honest, why
+      Resume exists, why resuming does not revive the cycle it stopped), on `Add an idea` and
+      its two preferences, and on what the two writes expose when the box has no secret.
+      `SETUP.md` gains the panel's half of the stop file under **Stopping gracefully** — the two
+      routes are interchangeable, nothing ever removes the file, and pausing is not quick — plus
+      **Letting the panel pause the queue**, which needs no configuration at all, unlike
+      `/cycle`.
+      **The real exercise, by hand, over real HTTP.** A receiver with a shared secret, pointed at
+      a **scratch** repository — deliberately not this one, because a stop file here would wind
+      down the very cycle writing this and pause every cycle after it, which is a thing to
+      demonstrate rather than to do:
+
+      | asked | answered |
+      | --- | --- |
+      | `GET /state` before | `paused: false` |
+      | `POST /stop`, no secret | **401**, and the file was **not** created |
+      | `POST /stop` with it | `{"paused": true, "changed": true, "gate": null, …}`, file holds `paused by the aideas panel at 2026-10-01T09:30:34+0200` |
+      | `GET /state` after | `paused: true` |
+      | `POST /stop` again | `changed: false`, `the queue was already paused` |
+      | `POST /cycle` with `override: true` | `{"gate": "stop-file", "reason": "Paused: .orchestrator/stop exists"}` |
+      | `POST /stop` `resume` | `changed: true`, and the file is gone |
+      | `POST /stop` `resume` again | `changed: false`, `the queue was not paused` |
+      | `POST /stopp` | **404** |
+
+      So the override being refused at the stop file — 0.4's answered question — holds in reality
+      and not only in a fixture.
+
+Next: nothing — every unit is done. See **What 0.5 covers** below.
+
+## What 0.5 covers
+
+The two buttons the entry asked for that did not already exist, and the state the first of them
+creates. Green at 0.5:
+
+| Suite | Covers | Result |
+| --- | --- | --- |
+| `make test-unit` | the pure logic, now including the stop client, the stop item and the editor launcher | **402 pass** |
+| `make test-http` | real libsoup, now including `POST /stop` against a stateful stub | **50 pass** |
+| `make test-contract` | `/state`, the preflight, `POST /cycle` and **`POST /stop` with the filesystem** | **113 pass** |
+| `make smoke` | the extension in a nested headless GNOME Shell, clicking all three items | **110 pass** |
+| `make test-pack` / `test-release` / `test-install` | the release path, untouched this entry | **7 / 19 / 39 pass** |
+| `nix flake check` | lint, unit, http, bundle | **4 green** |
+
+| What the entry asked for | Where it landed |
+| --- | --- |
+| A button to start a new cycle | shipped in 0.4; unchanged except that it now says `the queue is paused` |
+| A button to stop the cycle | `Stop the cycle` → `POST /stop` → `.orchestrator/stop`, with `Stopping…` while it winds down |
+| A button to open codium with the readme | `Add an idea` → `codium <repo> --goto <repo>/README.md:<line>`, at the end of `## Ideas` |
+| The pause being visible without a click | `paused` in `/state`; `Idle — paused`, `… — stopping`, and the file named in the header |
+| The way out of a pause nothing else clears | `Resume the queue`, the same endpoint with `resume: true` |
+| Never pausing the fleet by accident | the file is the state; the panel reads it rather than remembering its own |
+| A stop that is never rate-limited | deliberately unlike `/cycle`: a launch costs money, a stop costs nothing |
+| Never guessing where the repository is | both preferences empty by default; the item names the path, or the preference |
+| No shell, ever | the editor is an argv; the repository path is one element of it |
+| Failures from codes, not messages | `spawnFailureReason()`, as `soupTransport.js` has done since 0.1 |
+| The contract documenting all of it | `docs/state-contract.md`: `paused`, and a full `POST /stop` section |
+
+**What is proven where.** The endpoint is proven against a real filesystem and a real HTTP
+handler (113 contract tests, seven of them over loopback); the client against real libsoup and a
+stub whose `/stop` really moves its own `/state`; the three items in a real GNOME Shell, clicked;
+the editor argv against this laptop's actual codium, whose saved state recorded the cursor on
+the line the module computed. What is **not** proven from here is unchanged from every entry: an
+agent may not push this repo, so the release publishes on merge and `make check-release` is how
+to confirm it.
+
+**The release.** `aideas-shell-v0.5` publishes when this reaches `main`: `release-aideas.yml`
+runs on push, reads `version: 0.5` and `status: done` from this file, and tags itself — an agent
+may not push this repo, so a tag made in this worktree would never arrive. `src/`, `Makefile` and
+`flake.nix` all changed, so the path filter fires. Afterwards, one command says whether it did:
+
+```sh
+cd ideas/aideas && make check-release
+```
+
+If it has not published, the Actions tab, then `Run workflow` with *force*.
+
+**One thing worth saying plainly.** The riskiest part of this entry is not code. The stop file
+outlives the click, the cycle, the panel and the reboot, and nothing in the orchestrator ever
+removes it — so the failure mode is a fleet that quietly builds nothing for a week. That is why
+`paused` in `/state` was the *first* unit rather than a decoration on the last, why the header
+says it with the menu closed, and why the file's own path is on screen for someone who no longer
+has a panel in front of them.
+
+## What 0.4 covered — two buttons, and the extension's first write
 
 - [x] **U1 — one preflight, shared.** `cycle_preflight(repo, heartbeat=…, override=…)` in
       `orchestrator.py` applies the gates in the order `run()` applied them — stop file,

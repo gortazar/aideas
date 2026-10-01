@@ -99,6 +99,10 @@ def orchestrator_state():
         "agents": agents,
         "cycle_started_at": since,
         "lock_age_seconds": None if age is None else round(age),
+        # The stop file, which nothing in the orchestrator ever removes. Reported because it
+        # is the one thing about the queue a reader cannot deduce: a paused box looks exactly
+        # like an idle one until something tries to start a cycle and is refused.
+        "paused": _orch.is_paused(repo),
         "ideas": ideas,
     }
 
@@ -206,6 +210,49 @@ def request_cycle(*, override=False, spawn=spawn_cycle, now=None):
                  "command": " ".join(argv)}
 
 
+def request_stop(*, resume=False):
+    """Pause the queue, or resume it. Returns (http_status, body).
+
+    The whole of POST /stop except the HTTP. Deliberately unlike `/cycle` in three ways:
+
+    - **No gates.** Stopping is always allowed. There is nothing to protect against: the file
+      only ever makes the orchestrator do less.
+    - **No rate limit.** A launch costs money, so `/cycle` has one; a second stop costs nothing,
+      and the one situation where someone presses this repeatedly is the situation where they
+      most want it to work.
+    - **Both directions.** Nothing in the orchestrator ever removes the stop file, so a button
+      that could only create one would pause the fleet for ever. `resume=True` is the way out,
+      and it removes a file set by any means, not only one this endpoint wrote.
+
+    `changed: false` is a normal 200: it means the queue was already in the state asked for.
+    """
+    repo_path = os.environ.get("IDEAS_REPO_PATH")
+    if not repo_path or _orch is None:
+        # `paused: null` rather than false: this server cannot look, and claiming "not paused"
+        # about a repository it cannot find would be inventing the one fact it was asked for.
+        return 200, {"paused": None, "changed": False, "gate": "server",
+                     "reason": "IDEAS_REPO_PATH is not set" if not repo_path
+                               else "orchestrator module could not be imported"}
+
+    repo = Path(repo_path)
+    want = not resume
+    note = f"paused by the aideas panel at {time.strftime('%Y-%m-%dT%H:%M:%S%z')}"
+    try:
+        changed = _orch.set_paused(repo, want, note=note)
+    except OSError as exc:  # noqa: BLE001 — a failed write must answer, not 500
+        return 200, {"paused": _orch.is_paused(repo), "changed": False, "gate": "write",
+                     "reason": f"could not {'create' if want else 'remove'} "
+                               f"{_orch.stop_file_path(repo)}: {exc}"}
+
+    if want:
+        reason = ("the queue is paused; a running cycle winds down at its next check"
+                  if changed else "the queue was already paused")
+    else:
+        reason = ("the queue is no longer paused" if changed
+                  else "the queue was not paused")
+    return 200, {"paused": want, "changed": changed, "gate": None, "reason": reason}
+
+
 class Handler(BaseHTTPRequestHandler):
     def _authorized(self, body_secret):
         if not SECRET:
@@ -221,7 +268,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_POST(self):
-        if self.path not in ("/heartbeat", "/cycle"):
+        if self.path not in ("/heartbeat", "/cycle", "/stop"):
             self.send_response(404)
             self.end_headers()
             return
@@ -242,6 +289,14 @@ class Handler(BaseHTTPRequestHandler):
         # button that cannot say which one said no reports nothing at all.
         if self.path == "/cycle":
             status, body = request_cycle(override=payload.get("override") is True)
+            self._json(status, body)
+            return
+
+        # The other write: the stop file. `is True`, not truthiness — stop and resume are
+        # opposites, and `{"resume": "no"}` is exactly the shape a hand-written request gets
+        # wrong. Anything that is not literally true is a stop.
+        if self.path == "/stop":
+            status, body = request_stop(resume=payload.get("resume") is True)
             self._json(status, body)
             return
 

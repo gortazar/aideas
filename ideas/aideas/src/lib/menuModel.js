@@ -45,8 +45,13 @@ function plural(count, noun) {
  * count is dropped when the lock listed none — both are shapes the contract allows.
  */
 function cycleText(reading, now) {
+    // The stop file, said in the one line somebody reads at a glance. The two cases are
+    // genuinely different: a paused idle queue will not start anything, while a paused running
+    // one is winding down and still committing — "stopping", not "stopped".
+    const paused = reading.paused === true;
+
     if (!reading.running)
-        return 'Idle';
+        return paused ? 'Idle — paused' : 'Idle';
 
     const elapsed = reading.cycleStartedAt === null
         ? null
@@ -54,10 +59,11 @@ function cycleText(reading, now) {
     const agents = reading.agents.length > 0
         ? `, ${plural(reading.agents.length, 'agent')}`
         : '';
+    const suffix = paused ? ' — stopping' : '';
 
     return elapsed === null
-        ? `Cycle running${agents}`
-        : `Cycle running for ${elapsed}${agents}`;
+        ? `Cycle running${agents}${suffix}`
+        : `Cycle running for ${elapsed}${agents}${suffix}`;
 }
 
 /**
@@ -77,7 +83,12 @@ function readingDetail(reading, now, fetchedAt, { stale = false } = {}) {
         : (stale ? `last good reading ${age}` : `updated ${age}`);
 
     const lockAge = formatDuration(reading.lockAgeSeconds);
-    return detail(updated, lockAge === null ? null : `lock renewed ${lockAge} ago`);
+    return detail(
+        updated,
+        lockAge === null ? null : `lock renewed ${lockAge} ago`,
+        // Named, not just reported: this panel can create that file, and someone who finds the
+        // fleet paused with no panel in front of them needs to know what to delete.
+        reading.paused === true ? '.orchestrator/stop exists' : null);
 }
 
 /**
@@ -215,10 +226,15 @@ const OVERRIDABLE_GATES = ['allowed-hours', 'heartbeat'];
  * failure the "Run a cycle" button has to avoid.
  */
 function actionItems(reading, actions) {
-    const { refreshing = false, cycleInFlight = false, cycleOutcome = null } = actions ?? {};
+    const {
+        refreshing = false, cycleInFlight = false, cycleOutcome = null,
+        stopInFlight = null, stopOutcome = null,
+        editor = null, openOutcome = null,
+    } = actions ?? {};
     const unconfigured = reading.status === Status.UNCONFIGURED;
     const unreachable = reading.status === Status.UNREACHABLE;
     const running = reading.status === Status.OK && reading.running;
+    const paused = reading.status === Status.OK && reading.paused === true;
 
     const items = [];
 
@@ -248,6 +264,13 @@ function actionItems(reading, actions) {
         blocked = 'no orchestrator address is set';
     else if (unreachable)
         blocked = 'the box cannot be reached';
+    // Paused before running, because that is the order `cycle_preflight()` applies: a paused box
+    // with a cycle winding down refuses at `stop-file`, not at `lock`. Naming the lock here
+    // would be naming a gate the box would not have reached.
+    else if (paused)
+        // Not "try and be refused": the stop-file gate is one of the three a `Run anyway`
+        // deliberately cannot pass, so the way to run a cycle here is to resume, visibly.
+        blocked = 'the queue is paused';
     else if (running)
         blocked = 'a cycle is already running';
 
@@ -255,13 +278,17 @@ function actionItems(reading, actions) {
         action: 'cycle',
         label: cycleInFlight ? 'Cycle starting…' : 'Run a cycle',
         detail: blocked ?? cycleDetail(),
-        sensitive: !cycleInFlight && !unconfigured && !unreachable && !running,
+        sensitive: !cycleInFlight && !unconfigured && !unreachable && !running && !paused,
     });
 
     // Only after a refusal, and only for the gates that are about *when* it is convenient to
     // build. A pause, a spent budget or a held lock are not things to click past.
+    //
+    // `blocked === null` as well, which is not redundant: a refusal is remembered, and the box
+    // can move on from the state that produced it. An override left on screen after the queue
+    // has been paused would be offering to skip the one gate it provably cannot.
     const refusedGate = cycleOutcome && !cycleOutcome.started ? cycleOutcome.gate : null;
-    if (!cycleInFlight && OVERRIDABLE_GATES.includes(refusedGate)) {
+    if (!cycleInFlight && blocked === null && OVERRIDABLE_GATES.includes(refusedGate)) {
         items.push({
             action: 'override',
             label: 'Run anyway',
@@ -270,7 +297,81 @@ function actionItems(reading, actions) {
         });
     }
 
+    items.push(stopItem({ paused, running, unconfigured, unreachable },
+        stopInFlight, stopOutcome));
+
+    items.push(openItem(editor, openOutcome));
+
     return items;
+}
+
+/**
+ * Opening the queue in an editor — the one item here that has nothing to do with the box.
+ *
+ * The queue is `README.md` on this laptop, so this item is live whatever the orchestrator is
+ * doing: writing an idea down is always possible. What it does depend on is two preferences, and
+ * when either is wrong the item is **insensitive with the reason**, never a silent no-op. When
+ * both are right the detail line is the path itself: an editor that opens the wrong checkout
+ * loses the idea you just typed into it, and seeing the path first is the cheap guard.
+ */
+function openItem(editor, outcome) {
+    // No editor information at all means the extension has not worked out where the repository
+    // is — which is the same situation as not having one configured, and reads the same way.
+    const problem = editor === null
+        ? 'set the repository path in preferences'
+        : editor.problem;
+
+    return {
+        action: 'open',
+        label: 'Add an idea',
+        detail: outcome ?? problem ?? editor?.path ?? null,
+        sensitive: problem === null,
+    };
+}
+
+/**
+ * One item with three readings, because the stop file has three meanings.
+ *
+ * It stops a running cycle, it pauses a queue where nothing is running, and — because nothing in
+ * the orchestrator ever removes it — it has to offer its own undo. That last reading is not a
+ * convenience: a button that could only ever create the file would pause the fleet for ever, and
+ * the symptom of that is an orchestrator that looks broken rather than paused.
+ */
+function stopItem({ paused, running, unconfigured, unreachable }, inFlight, outcome) {
+    const label = (() => {
+        if (inFlight === 'resume')
+            return 'Resuming…';
+        if (inFlight)
+            return running ? 'Stopping…' : 'Pausing…';
+        if (paused)
+            return 'Resume the queue';
+        // With nothing known about the box, "Stop the cycle" would assert there is one.
+        return running ? 'Stop the cycle' : 'Pause the queue';
+    })();
+
+    const standing = (() => {
+        if (unconfigured)
+            return 'no orchestrator address is set';
+        if (unreachable)
+            return 'the box cannot be reached';
+        // Not a failure and not a timeout: agents are checked between phases, so a wind-down
+        // takes as long as they take. Saying nothing here reads as a button that did nothing.
+        if (paused && running)
+            return 'a cycle is still winding down';
+        return null;
+    })();
+
+    return {
+        action: 'stop',
+        label,
+        // In flight, the label is the whole message. Otherwise the last outcome — which is the
+        // box's own sentence, refusal or not — outranks the standing line, except for the two
+        // that say clicking cannot work at all.
+        detail: inFlight
+            ? null
+            : ((unconfigured || unreachable) ? standing : (outcome?.reason ?? standing)),
+        sensitive: !inFlight && !unconfigured && !unreachable,
+    };
 }
 
 /**

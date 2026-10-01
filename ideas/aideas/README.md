@@ -26,6 +26,12 @@ That screenshot is the extension reading the orchestrator that was building it a
 `aideas` running for 10 minutes, three ideas blocked on unanswered questions, and a second
 `restore-wss` entry queued behind the first.
 
+![the menu with the queue paused](screenshots/menu-paused.png)
+
+And that one is a queue that has just been stopped: the header says the cycle is *stopping*
+rather than stopped, the stop file is named so you know what to delete, `Run a cycle` has gone
+grey saying why, and the item that stopped it now offers to let it go again.
+
 ![preferences](screenshots/preferences.png)
 
 ## What it shows, and what it decides
@@ -40,7 +46,8 @@ cannot drift apart while they live in one repo.
 | The menu | Where it comes from |
 | --- | --- |
 | `Cycle running for 12 min, 2 agents` / `Idle` | `running`, `agents`, `cycle_started_at` |
-| `updated 8 s ago · lock renewed 42 s ago` | when the reading was taken, and `lock_age_seconds` |
+| `Idle — paused` / `… — stopping` | `paused` — the stop file, reported before anything is clicked |
+| `updated 8 s ago · lock renewed 42 s ago · .orchestrator/stop exists` | when the reading was taken, `lock_age_seconds`, and `paused` |
 | **Running** — slug, version, how long the cycle has run | rows with `state: running` |
 | **Blocked** — slug, `2 unanswered questions`, then the questions themselves | rows with `state: blocked`, and their `open_question_texts` |
 | **Ready** — slug, `minor update -> v0.3`, with the next one marked | rows with `state: ready` |
@@ -53,9 +60,9 @@ The orchestrator folds each question out of `PLAN.md` and bounds it; the extensi
 Rows are read-only: answering a blocked idea means editing its `PLAN.md` on the box, which is
 not something a panel menu should do.
 
-## The two things the menu does
+## The three things the menu does
 
-Beneath the queue, above *Preferences*:
+Beneath the queue, above *Preferences*: start a cycle, stop one, and write an idea down.
 
 **Check now** reads `/state` immediately. Worth having in three situations: the box was down and
 the poller has backed off to five minutes (a click resets that), you have just answered a
@@ -88,10 +95,76 @@ The item goes insensitive, with the reason beneath it, whenever clicking could n
 work. A box answering `available: false` is *reachable*, so the item stays live there — it can be
 told to try, and the answer will be honest either way.
 
-Starting a cycle needs the box's `HEARTBEAT_SHARED_SECRET` if it has one; set it in
-preferences. Reading the queue needs no secret. The secret lives in GSettings, which anything in
-your session can read — it is the same secret the heartbeat hook already holds in its
-environment, so it adds no new class of exposure, but it is not a vault.
+### Stopping, which is a pause
+
+**Stop the cycle** — `Pause the queue` when nothing is running — creates `.orchestrator/stop`,
+the same file as
+
+```sh
+touch "$IDEAS_REPO_PATH/.orchestrator/stop"
+```
+
+Three things about that file shape what the menu says, and none of them are cosmetic:
+
+- **It is a pause, not a kill.** The orchestrator checks it between phases and between agents;
+  a running cycle then winds its agents down over `agent_grace_seconds` and **still commits,
+  merges and pushes**. So the item reads `Stopping…`, the header reads
+  `Cycle running for 12 min, 2 agents — stopping`, and if the cycle is still going a couple of
+  minutes later the item says `Still winding down — agents finish their step first`. None of
+  that is an error; it is what stopping costs.
+- **Nothing in the orchestrator ever removes it.** That is why the item becomes
+  **Resume the queue** while the file exists, and why the header says `Idle — paused` with
+  `.orchestrator/stop exists` beneath it. A panel that could create that file and then say
+  nothing about it would pause the fleet for ever and look like a broken orchestrator.
+- **It outlives everything** — the cycle, the server, the reboot — and it pauses the *next*
+  cycle as much as the current one. Which is why there is something to pause even when nothing
+  is running.
+
+While the queue is paused, **Run a cycle** is insensitive and says `the queue is paused`. There
+is deliberately no `Run anyway` for it: the way to run a cycle while paused is to resume, where
+you can see it.
+
+Resuming does **not** revive the cycle it stopped. Once a cycle has been told to stop it stays
+told; removing the file only lets the *next* one start.
+
+### Add an idea
+
+The queue is `README.md`, and adding an idea means typing a numbered entry under `## Ideas`.
+**Add an idea** opens that file in VSCodium, with the cursor at the end of the list — opening at
+line 1 would be correct and useless.
+
+This is the one item that has nothing to do with the box: it opens a file on *this* computer,
+so it works whatever the orchestrator is doing. It needs two preferences, and says which one is
+missing rather than guessing:
+
+| It says | Set |
+| --- | --- |
+| `set the repository path in preferences` | **Repository path** — where the repository is on this machine |
+| `<path>/README.md does not exist` | the same, correctly |
+| `no codium found — set the editor command in preferences` | **Editor command** |
+
+When both are right, the item's detail line is **the path it will open**. That is the point of
+it: if the orchestrator is on another box, this is a *clone*, and an idea typed into a stale
+checkout reaches nobody — so the path is something you can see before you click rather than
+after you have written into it.
+
+Leave **Editor command** empty to look for `codium`, then `vscodium`, then the Flatpak's
+exported `com.vscodium.codium`. Set it and it is used as given, split like a shell command line
+with the repository and the file appended — which is also how to use a different editor
+entirely. A Flatpak VSCodium can only open paths its sandbox permits; if yours opens an empty
+window, that is why, and a native or snap install is the fix.
+
+### The secret, and what the two writes expose
+
+Starting a cycle and pausing the queue both need the box's `HEARTBEAT_SHARED_SECRET` if it has
+one; set it in preferences. Reading the queue needs no secret. The secret lives in GSettings,
+which anything in your session can read — it is the same secret the heartbeat hook already
+holds in its environment, so it adds no new class of exposure, but it is not a vault.
+
+If the box has **no** secret set, both writes accept any request that reaches the socket, which
+is the posture `POST /heartbeat` has always had. For `/stop` that means anyone who can reach the
+VPN address can pause the fleet. It is cheap to abuse and cheap to undo — pausing is reversible
+where spending is not — but it is real, and the shared secret is the answer to it.
 
 ## The bulb
 
@@ -119,17 +192,20 @@ good reading dated beneath it — one dropped poll on a VPN should not blink the
 
 ## Behaviour worth knowing
 
-- **It spawns nothing, and writes one thing.** GJS and libsoup only, which is what the GNOME
-  Extensions review guidelines require and why `/state` exists at all. The single write is
-  `POST /cycle`, which asks the box to start a cycle and is the whole of "Run a cycle".
+- **It talks to the box over HTTP, and spawns exactly one thing.** GJS and libsoup only for the
+  orchestrator, which is what the GNOME Extensions review guidelines require and why `/state`
+  exists at all. The two writes are `POST /cycle` and `POST /stop`. The one process it ever
+  starts is the editor, from *Add an idea*, as an argv — never through a shell.
 - **Polling pauses completely** while the session is locked (GNOME disables the extension) or
   idle (Mutter's idle monitor). A laptop asleep on a desk does not wake up to talk to a VPN
   host. Every 30 s otherwise, configurable 10–300 s, 5 s while the menu is open, backing off to
   five minutes while the box is unreachable.
 - **"Cannot reach the orchestrator" is an ordinary state**, rendered calmly — and kept distinct
   from "the box answered and cannot read its queue", because those mean opposite things.
-- **No secret is stored.** `GET /state` is unauthenticated and protected by the server binding
-  to a VPN address, which is what the rest of the system already assumes.
+- **Reading needs no secret.** `GET /state` is unauthenticated and protected by the server
+  binding to a VPN address, which is what the rest of the system already assumes. The two
+  writes take the box's shared secret when it has one — see above for what it means when it
+  does not.
 
 ## Diagnosing a setup
 

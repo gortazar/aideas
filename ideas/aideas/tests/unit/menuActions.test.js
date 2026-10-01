@@ -195,18 +195,20 @@ suite('where they sit', () => {
         assertEquals(types[types.length - 2], 'separator');
         assertEquals(types[types.length - 3], 'action');
         assertEquals(types[types.length - 4], 'action');
-        assertEquals(types[types.length - 5], 'separator',
+        assertEquals(types[types.length - 5], 'action');
+        assertEquals(types[types.length - 6], 'action');
+        assertEquals(types[types.length - 7], 'separator',
             'the actions are their own block, not an appendix to the queue');
     });
 
-    test('three of them once an override is offered', () => {
+    test('five of them once an override is offered', () => {
         const list = menuItems(built({
             reading: idle,
             actions: { cycleOutcome: { started: false, gate: 'heartbeat', reason: 'busy' } },
         }));
 
         assertDeepEquals(list.filter(i => i.type === 'action').map(i => i.action),
-            ['refresh', 'cycle', 'override']);
+            ['refresh', 'cycle', 'override', 'stop', 'open']);
     });
 
     test('each carries what the widget layer needs and nothing more', () => {
