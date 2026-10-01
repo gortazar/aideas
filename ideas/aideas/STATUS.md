@@ -1,5 +1,5 @@
 status: in_progress
-version: 0.4
+version: 0.5
 started_at: 2026-08-14T15:31:00+02:00
 last_session_id: 35386b06-271b-4df6-8da8-1c51dd289449
 last_run: 2026-08-25T11:01:19+02:00
@@ -180,7 +180,79 @@ update it is, and `AGENTS.md` makes that minor.
       failing one check.
       402 unit tests (was 399 — two of the three findings got one each).
 
-Next: **U8** — the version bump and the documentation.
+- [x] **U8 — the bump and the docs.** `version: 0.5` here, in `metadata.json` and in `flake.nix`,
+      which the release workflow asserts are one string. `README.md` becomes **The three things
+      the menu does**, with sections on stopping-as-a-pause (why `Stopping…` is honest, why
+      Resume exists, why resuming does not revive the cycle it stopped), on `Add an idea` and
+      its two preferences, and on what the two writes expose when the box has no secret.
+      `SETUP.md` gains the panel's half of the stop file under **Stopping gracefully** — the two
+      routes are interchangeable, nothing ever removes the file, and pausing is not quick — plus
+      **Letting the panel pause the queue**, which needs no configuration at all, unlike
+      `/cycle`.
+      **The real exercise, by hand, over real HTTP.** A receiver with a shared secret, pointed at
+      a **scratch** repository — deliberately not this one, because a stop file here would wind
+      down the very cycle writing this and pause every cycle after it, which is a thing to
+      demonstrate rather than to do:
+
+      | asked | answered |
+      | --- | --- |
+      | `GET /state` before | `paused: false` |
+      | `POST /stop`, no secret | **401**, and the file was **not** created |
+      | `POST /stop` with it | `{"paused": true, "changed": true, "gate": null, …}`, file holds `paused by the aideas panel at 2026-10-01T09:30:34+0200` |
+      | `GET /state` after | `paused: true` |
+      | `POST /stop` again | `changed: false`, `the queue was already paused` |
+      | `POST /cycle` with `override: true` | `{"gate": "stop-file", "reason": "Paused: .orchestrator/stop exists"}` |
+      | `POST /stop` `resume` | `changed: true`, and the file is gone |
+      | `POST /stop` `resume` again | `changed: false`, `the queue was not paused` |
+      | `POST /stopp` | **404** |
+
+      So the override being refused at the stop file — 0.4's answered question — holds in reality
+      and not only in a fixture.
+
+Next: nothing — every unit is done. See **What 0.5 covers** below.
+
+## What 0.5 covers
+
+The two buttons the entry asked for that did not already exist, and the state the first of them
+creates. Green at 0.5:
+
+| Suite | Covers | Result |
+| --- | --- | --- |
+| `make test-unit` | the pure logic, now including the stop client, the stop item and the editor launcher | **402 pass** |
+| `make test-http` | real libsoup, now including `POST /stop` against a stateful stub | **50 pass** |
+| `make test-contract` | `/state`, the preflight, `POST /cycle` and **`POST /stop` with the filesystem** | **113 pass** |
+| `make smoke` | the extension in a nested headless GNOME Shell, clicking all three items | **110 pass** |
+| `make test-pack` / `test-release` / `test-install` | the release path, untouched this entry | **7 / 19 / 39 pass** |
+| `nix flake check` | lint, unit, http, bundle | **4 green** |
+
+| What the entry asked for | Where it landed |
+| --- | --- |
+| A button to start a new cycle | shipped in 0.4; unchanged except that it now says `the queue is paused` |
+| A button to stop the cycle | `Stop the cycle` → `POST /stop` → `.orchestrator/stop`, with `Stopping…` while it winds down |
+| A button to open codium with the readme | `Add an idea` → `codium <repo> --goto <repo>/README.md:<line>`, at the end of `## Ideas` |
+| The pause being visible without a click | `paused` in `/state`; `Idle — paused`, `… — stopping`, and the file named in the header |
+| The way out of a pause nothing else clears | `Resume the queue`, the same endpoint with `resume: true` |
+| Never pausing the fleet by accident | the file is the state; the panel reads it rather than remembering its own |
+| A stop that is never rate-limited | deliberately unlike `/cycle`: a launch costs money, a stop costs nothing |
+| Never guessing where the repository is | both preferences empty by default; the item names the path, or the preference |
+| No shell, ever | the editor is an argv; the repository path is one element of it |
+| Failures from codes, not messages | `spawnFailureReason()`, as `soupTransport.js` has done since 0.1 |
+| The contract documenting all of it | `docs/state-contract.md`: `paused`, and a full `POST /stop` section |
+
+**What is proven where.** The endpoint is proven against a real filesystem and a real HTTP
+handler (113 contract tests, seven of them over loopback); the client against real libsoup and a
+stub whose `/stop` really moves its own `/state`; the three items in a real GNOME Shell, clicked;
+the editor argv against this laptop's actual codium, whose saved state recorded the cursor on
+the line the module computed. What is **not** proven from here is unchanged from every entry: an
+agent may not push this repo, so the release publishes on merge and `make check-release` is how
+to confirm it.
+
+**One thing worth saying plainly.** The riskiest part of this entry is not code. The stop file
+outlives the click, the cycle, the panel and the reboot, and nothing in the orchestrator ever
+removes it — so the failure mode is a fleet that quietly builds nothing for a week. That is why
+`paused` in `/state` was the *first* unit rather than a decoration on the last, why the header
+says it with the menu closed, and why the file's own path is on screen for someone who no longer
+has a panel in front of them.
 
 ## What 0.4 covered — two buttons, and the extension's first write
 
