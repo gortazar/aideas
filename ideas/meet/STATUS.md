@@ -16,9 +16,15 @@ last_cycle_cost_usd: 0.0
 `status: done`, per the cycle header. The `README.md` entry does not say which kind of
 update it is, so `AGENTS.md`'s default applies: **minor**.
 
-Branch `agent/meet/2026-10-01` on `gortazar/meet`.
+Branch `agent/meet/2026-10-01` on `gortazar/meet`, pull request
+[#4](https://github.com/gortazar/meet/pull/4).
 
-### Units — 7 of 9 done
+The previous cycle's sweep rescued U7 to `agent/meet-sweep`; that commit sat directly on
+this branch's tip, so it was reworded onto `agent/meet/2026-10-01` rather than opened as a
+second pull request. The gitlink here stays on `origin/main` until #4 merges — a pin to a
+commit that exists only on a branch resolves nowhere once the branch is squashed away.
+
+### Units — 8 of 9 done
 
 - [x] **U1 — the room model.** `src/lib/rooms.js`: what a room is (`id`, `name`, `status`,
       `createdAt`, `joinUrl`), that the link taken is the **anonymous moderator** one, and
@@ -78,8 +84,40 @@ Branch `agent/meet/2026-10-01` on `gortazar/meet`.
       in principle, no synchronous spelling appears anywhere, and no credential reaches
       anything that writes text. Both halves verified by mutation. 7 tests, **298** in the
       suite.
-- [ ] **U7 — the nested shell**: a stub instance, the assertions, the screenshots. **Next.**
-- [ ] U8 — ship `v0.2`.
+- [x] **U7 — the nested shell. 50 checks, all passing on GNOME Shell 46.** The rooms are
+      listed under their instance, most recent first, closed ones included; the join button
+      is drawn, says *Join Weekly sync* to a screen reader and takes keyboard focus; pressing
+      it reaches the stub browser with the **role link, secret and all**; and a room whose
+      link the instance withheld is listed with no button. Two of the four states are end to
+      end — a real `gnome-keyring-daemon` on the session bus stores and reads back a key,
+      and a real libsoup request to a real closed port renders *Could not reach …* while
+      that instance's own row goes on working. Screenshots retaken, `rooms.png` added.
+- [ ] **U8 — ship `v0.2`.** **Next.**
+
+**What the nested shell could not prove, and why.** The *rooms* and *refused* states have
+their room state injected into the indicator; everything around that is real — the payload
+is parsed by the extension's own `parseRooms`, the rows are real widgets in a real shell,
+and the click goes through the real launcher to the real default handler. What is skipped is
+the HTTP response itself. The extension refuses anything but `https:`, so a stub instance
+would need a certificate this machine trusts, and there is no way to arrange one here:
+**glib-networking honours no environment override for its trust anchors** — `SSL_CERT_FILE`
+and a p11-kit user config were both tried and both ignored — and **user namespaces are
+unavailable in this sandbox**, so `bwrap` cannot bind a CA bundle over the system one
+either. Every branch of `readRoomsResponse` is covered exhaustively by the headless suite
+instead, and the failure direction of the real transport is covered by the unreachable
+check. This is the one place the plan's wording ("a local HTTP server answering
+`/api/v1/rooms`") could not be met as written, and it is met as closely as an https-only
+extension allows.
+
+**Two real bugs the nested shell caught**, both of which look fine in a diff:
+
+- **`PopupBaseMenuItem` runs its params through `Params.parse`, which throws on any key it
+  does not know** — and `style` is not one of them. The throw is at construction time, so it
+  took the whole menu with it. The indent is set after `super._init` now.
+- **`RoomMenuItem` set `label_actor` but not `label`.** `label` is the name `PopupMenuItem`
+  gives its own, and therefore the one everything else looks for. The room rows were on
+  screen and invisible to anything asking the menu what it held — the driver included, which
+  is how it showed up as four failing checks rather than as a wrong-looking screenshot.
 
 **Two things U2 added that the plan does not list**, both stated here rather than buried:
 
@@ -211,15 +249,3 @@ both ship with the next version.
 Difficulty estimate: **medium**, as the plan says — the model and the menu are small, but a
 network call from inside the compositor brings a credential to store, a request to cancel,
 and four failure states that all have to read as menu rows.
-
-## Rescued work waiting for a pull request
-
-The cycle that ended 2026-10-01T09:42:36+02:00 could not push `ideas/meet/upstream` to its default branch: that branch
-requires a pull request. The commits are on **`agent/meet-sweep`** (f3db3060) in that repository,
-and nowhere else that outlives this clone — the gitlink recorded here points at f3db3060,
-so until the branch lands, this pin names a commit that is not on the default branch.
-
-First unit of the next cycle: turn it into a pull request, get it merged, and bump the pin.
-From the repo root:
-
-    cd ideas/meet/upstream && gh pr create --head agent/meet-sweep --fill
