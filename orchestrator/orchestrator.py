@@ -2063,6 +2063,83 @@ def set_paused(repo: Path, paused: bool, note: str = "") -> bool:
     return True
 
 
+STATE_FETCH_TIMEOUT_SECONDS = float(
+    os.environ.get("ORCHESTRATOR_STATE_FETCH_TIMEOUT_SECONDS", "5"))
+
+
+def refresh_clone(repo: Path, *, timeout: float | None = None) -> tuple[bool, str | None]:
+    """Bring `repo` up to its upstream if that can be done without deciding anything.
+
+    `/state` answers out of the working tree, and the only `git pull` in the system runs at the
+    start of a cycle — so with the timer off the panel showed answered questions as `blocked`
+    for days. The honest question for a GET to answer is "what would the next cycle see", and
+    that is `origin`, not whatever the last cycle left behind.
+
+    Returns `(True, None)` when the clone is at its upstream's commit, and `(False, reason)`
+    otherwise, where the reason is a sentence meant to be shown to a person verbatim. It never
+    raises and it never decides anything a person should: it refuses in five ways, and each
+    refusal leaves the working tree byte-identical.
+
+      not a git clone            nothing to do
+      uncommitted changes        a fast-forward could clobber them
+      no upstream branch         detached HEAD, or a branch that tracks nothing
+      the fetch failed           unreachable, unauthenticated, or slower than `timeout`
+      the merge declined         this clone has commits origin does not: a person's problem
+
+    `merge --ff-only` is the whole reason this is safe to run from a GET: it either moves HEAD
+    along a line origin already has, or it refuses and changes nothing. There is no conflict
+    state to get stuck in and nothing to `--abort`. `pull()` has a merge fallback because a
+    cycle holds a lock and has a commit and a push to follow it; a GET has none of those.
+
+    Dirtiness is measured on **tracked files only**. A fast-forward does not touch a submodule's
+    working tree, only its gitlink, and an untracked file in the way makes git refuse the
+    checkout — which lands in the "declined" branch rather than losing anything. Counting
+    submodule state would leave the real box permanently dirty, since a gitlink a cycle moved is
+    an everyday state, and the refresh would then never run at all.
+    """
+    if not (repo / ".git").exists():
+        return False, f"{repo} is not a git clone"
+
+    dirty = git("status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all",
+                cwd=repo)
+    if dirty.returncode != 0:
+        return False, f"{repo} is not a git clone"
+    if dirty.stdout.strip():
+        return False, "the working tree has uncommitted changes"
+
+    upstream = git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", cwd=repo)
+    tracking = upstream.stdout.strip()
+    if upstream.returncode != 0 or not tracking:
+        return False, "no upstream branch is configured"
+    remote = tracking.split("/", 1)[0]
+
+    # Non-interactive, always. A user unit started at login has no ssh-agent and no terminal,
+    # so a credential prompt would block this process for ever — and this process is also the
+    # one serving POST /heartbeat, whose absence reads as "the laptop is idle".
+    env = dict(os.environ)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GIT_ASKPASS"] = "true"
+    env["GIT_SSH_COMMAND"] = (env.get("GIT_SSH_COMMAND", "ssh")
+                              + " -o BatchMode=yes -o StrictHostKeyChecking=accept-new")
+    try:
+        fetched = subprocess.run(
+            ["git", "fetch", "--quiet", remote], cwd=repo, env=env,
+            capture_output=True, text=True,
+            timeout=STATE_FETCH_TIMEOUT_SECONDS if timeout is None else timeout)
+    except subprocess.TimeoutExpired:
+        return False, f"could not reach {remote}: the fetch timed out"
+    except OSError as exc:
+        return False, f"could not reach {remote}: {exc}"
+    if fetched.returncode != 0:
+        detail = (fetched.stderr.strip() or fetched.stdout.strip() or "git fetch failed")
+        return False, f"could not reach {remote}: {detail.splitlines()[0]}"
+
+    merged = git("merge", "--ff-only", "--quiet", tracking, cwd=repo)
+    if merged.returncode != 0:
+        return False, (f"this clone has diverged from {tracking}; it needs a person")
+    return True, None
+
+
 def lock_status(repo: Path) -> tuple[bool, list[str], float | None, int | None]:
     """(running, agents, acquired_at, age_seconds) from the cycle lock's metadata.
 
