@@ -59,6 +59,7 @@ cause could omit it — so a consumer substitutes its own wording when it is mis
   "agents": ["aideas", "vacas"],
   "cycle_started_at": 1755180000.0,
   "lock_age_seconds": 42,
+  "paused": false,
   "ideas": [ ...rows... ]
 }
 ```
@@ -70,14 +71,23 @@ cause could omit it — so a consumer substitutes its own wording when it is mis
 | `agents`           | array of slug       | what that cycle currently holds. Empty when `running` is false. Length is the agent count.              |
 | `cycle_started_at` | unix seconds, or `null` | when the lock was acquired. `null` when nothing is running, or when the lock has no `acquired_at`.  |
 | `lock_age_seconds` | int, or `null`      | seconds since the lock was last renewed. `null` when there is no readable lock. Present **even when `running` is false** — a climbing age on a dead cycle is the visible symptom of a box that stopped renewing. |
+| `paused`           | bool                | `.orchestrator/stop` exists, so no cycle will start and a running one is winding down. New in 0.5; **absent on an older box, where a reader must take it as `false`** rather than guess. |
 | `ideas`            | array of row        | one row per `## Ideas` entry in `README.md`, in queue order. May be empty.                              |
 
 `running`, `agents` and `cycle_started_at` all come from one write of the lock's
 `meta.json`, which a live cycle rewrites every `lock_renew_seconds`. That is deliberate: a
 reader can never see liveness without seeing what it is working on.
 
-`## Finished` entries are **not** returned. Neither is anything about budget, schedule or
-the stop file.
+`paused` and `running` are independent, and both are routinely true at once: the stop file
+winds a cycle down rather than killing it, so a stopped cycle keeps renewing its lock,
+committing and merging for as long as its agents take to reach their next check. "Paused"
+means *no new cycle will start*, not "nothing is happening right now".
+
+Until 0.5 this section said that nothing about the stop file was returned, which made a paused
+queue indistinguishable from an idle one until something tried to start a cycle and was refused
+at the `stop-file` gate. `paused` is that gate's own fact, reported before it is hit.
+
+`## Finished` entries are **not** returned. Neither is anything about budget or schedule.
 
 ### A row
 

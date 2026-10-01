@@ -15,6 +15,7 @@ function body(overrides = {}) {
         agents: [],
         cycle_started_at: null,
         lock_age_seconds: null,
+        paused: false,
         ideas: [],
         ...overrides,
     };
@@ -75,6 +76,32 @@ suite('parseState › the available body', () => {
     test('anything but a literal true is not running', () => {
         for (const value of [1, 'true', 'yes', {}, [], null, undefined])
             assertEquals(parseState(body({ running: value })).running, false, `for ${JSON.stringify(value)}`);
+    });
+
+    test('the stop file comes through as paused', () => {
+        assertEquals(parseState(body({ paused: true })).paused, true);
+        assertEquals(parseState(body({ paused: false })).paused, false);
+    });
+
+    test('a box too old to know about the stop file reads as not paused', () => {
+        // A 0.4 box serves no `paused` key at all. Guessing would be the one wrong answer
+        // here: it would put "Paused" on screen for a queue that is running perfectly well.
+        const old = body();
+        delete old.paused;
+
+        assertEquals(parseState(old).paused, false);
+    });
+
+    test('anything but a literal true is not paused', () => {
+        for (const value of [1, 'true', 'yes', {}, [], null, undefined])
+            assertEquals(parseState(body({ paused: value })).paused, false, `for ${JSON.stringify(value)}`);
+    });
+
+    test('paused and running are independent — a cycle winds down while paused', () => {
+        const reading = parseState(body({ running: true, paused: true }));
+
+        assertEquals(reading.running, true);
+        assertEquals(reading.paused, true);
     });
 
     test('a negative lock age is clock skew, clamped and rounded', () => {

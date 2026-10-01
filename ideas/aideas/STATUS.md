@@ -1,4 +1,4 @@
-status: not_started
+status: in_progress
 version: 0.4
 started_at: 2026-08-14T15:31:00+02:00
 last_session_id: 35386b06-271b-4df6-8da8-1c51dd289449
@@ -27,7 +27,33 @@ already exists; "Run a cycle" makes the extension *write* for the first time, to
 that spends real money, whose launch path differs between the box and this laptop and whose
 failure modes are environmental — and therefore invisible to every headless test.
 
-## This entry (0.4) — two buttons, and the extension's first write
+Difficulty estimate: **medium**, as PLAN.md said. One of the three buttons shipped in 0.4; the
+cost of this entry is that "stop the cycle" is the stop *file* — a pause switch nothing ever
+clears — so the extension has to own a state it has never shown, a second write endpoint, and a
+wind-down that takes minutes and looks like nothing happening.
+
+**This entry is version 0.5, assumed minor.** The `README.md` entry does not say which kind of
+update it is, and `AGENTS.md` makes that minor.
+
+## This entry (0.5) — stopping a cycle, and opening the queue where ideas are written
+
+- [x] **U1 — `paused` in `/state`.** The stop file is now a fact the panel can read without
+      clicking anything. `stop_file_path(repo)` and `is_paused(repo)` in `orchestrator.py` are
+      the single definition of where that file lives and what it means —
+      `Orchestrator.stop_file` is now that same call, so the path the panel reports on cannot
+      drift from the one `stop_requested()` polls. `orchestrator_state()` carries `paused`;
+      `state.js` carries it into the reading, where a box too old to serve the key reads as
+      **not** paused (the only safe default — a wrongly shown "Paused" is a lie the user cannot
+      check from the panel).
+      `docs/state-contract.md` gains the key, and loses the sentence that said nothing about the
+      stop file was returned. 7 new contract tests (**87 python**, was 79), including the one
+      that matters most: `paused` and the `stop-file` gate the preflight applies are asserted to
+      be the same fact, and a paused *running* cycle is both at once — the stop file winds a
+      cycle down, it does not kill it. 4 new unit tests (**301**, was 297).
+
+Next: **U2** — `set_paused()` and `POST /stop`, with its idempotency in both directions.
+
+## What 0.4 covered — two buttons, and the extension's first write
 
 - [x] **U1 — one preflight, shared.** `cycle_preflight(repo, heartbeat=…, override=…)` in
       `orchestrator.py` applies the gates in the order `run()` applied them — stop file,

@@ -99,6 +99,10 @@ def orchestrator_state():
         "agents": agents,
         "cycle_started_at": since,
         "lock_age_seconds": None if age is None else round(age),
+        # The stop file, which nothing in the orchestrator ever removes. Reported because it
+        # is the one thing about the queue a reader cannot deduce: a paused box looks exactly
+        # like an idle one until something tries to start a cycle and is refused.
+        "paused": _orch.is_paused(repo),
         "ideas": ideas,
     }
 

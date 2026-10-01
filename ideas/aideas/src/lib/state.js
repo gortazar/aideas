@@ -176,6 +176,11 @@ export function parseState(body) {
         // Present even on a dead cycle, where a climbing age is the visible symptom of a box
         // that stopped renewing its lock. Negative would be clock skew; clamp it.
         lockAgeSeconds: lockAge === null ? null : Math.max(0, Math.round(lockAge)),
+        // The stop file exists. Independent of `running`: a cycle that is winding down after
+        // being stopped is both. A box too old to serve the key reads as not paused, which is
+        // the only safe default — claiming "Paused" about a queue that is building would be a
+        // lie the user cannot check from the panel.
+        paused: body.paused === true,
         rows: ideas.slice(0, MAX_ROWS).map(normaliseRow),
         droppedRows: Math.max(0, ideas.length - MAX_ROWS),
     };

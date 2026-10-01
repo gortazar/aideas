@@ -85,6 +85,13 @@ class Fixture:
         }))
         return self
 
+    def pause(self):
+        """Create the stop file by hand, as a person with `touch` would."""
+        path = self.root / ".orchestrator" / "stop"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("")
+        return self
+
     def rows(self, running=()):
         return orchestrator.queue_rows(self.root, tuple(running))
 
@@ -567,13 +574,75 @@ class EndpointTest(ContractTestCase):
         body = self.ready_fixture().lock(["alpha"], renewed_ago=5).state()
 
         self.assertEqual(set(body), {"available", "running", "agents", "cycle_started_at",
-                                     "lock_age_seconds", "ideas"})
+                                     "lock_age_seconds", "paused", "ideas"})
 
     def test_the_body_is_json_serialisable(self):
         """The endpoint json.dumps() this; a non-serialisable value would 500 the request."""
         body = self.ready_fixture().lock(["alpha"], renewed_ago=5).state()
 
         self.assertIsInstance(json.dumps(body), str)
+
+
+class PausedTest(ContractTestCase):
+    """`paused` — the one fact about the stop file a reader cannot deduce from anything else.
+
+    Until 0.5 the body said nothing about it, so a panel could only discover a paused queue by
+    pressing a button and being refused. The file is a pause switch nothing in the orchestrator
+    ever removes, which is exactly why it has to be visible without being clicked.
+    """
+
+    def ready_fixture(self):
+        return self.fixture([("alpha", "an idea")]).idea(
+            "alpha", status="not_started", version="0.1", plan="# Plan\n")
+
+    def test_no_stop_file_is_not_paused(self):
+        body = self.ready_fixture().state()
+
+        self.assertIs(body["paused"], False)
+
+    def test_a_stop_file_is_paused(self):
+        body = self.ready_fixture().pause().state()
+
+        self.assertIs(body["paused"], True)
+
+    def test_paused_is_independent_of_running(self):
+        """The stop file winds a cycle down; it does not end it. Both are true meanwhile."""
+        body = self.ready_fixture().lock(["alpha"], renewed_ago=5).pause().state()
+
+        self.assertIs(body["running"], True)
+        self.assertIs(body["paused"], True)
+
+    def test_paused_matches_the_gate_the_preflight_applies(self):
+        """One fact, two readers: what /state shows and what POST /cycle refuses at."""
+        fixture = self.ready_fixture().pause()
+
+        self.assertIs(fixture.state()["paused"], True)
+        check = orchestrator.cycle_preflight(fixture.root)
+        self.assertFalse(check.ok)
+        self.assertEqual(check.gate, "stop-file")
+
+    def test_is_paused_reads_the_file_the_orchestrator_polls(self):
+        """`is_paused()` and `Orchestrator.stop_file` must name the same path, or the panel
+        would report on a file nothing else looks at."""
+        fixture = self.ready_fixture()
+
+        self.assertEqual(orchestrator.stop_file_path(fixture.root),
+                         orchestrator.Orchestrator(fixture.root, "").stop_file)
+        self.assertIs(orchestrator.is_paused(fixture.root), False)
+        fixture.pause()
+        self.assertIs(orchestrator.is_paused(fixture.root), True)
+
+    def test_a_directory_in_the_way_still_reads_as_paused(self):
+        """`exists()` is the orchestrator's own test; anything at that path pauses it."""
+        fixture = self.ready_fixture()
+        (fixture.root / ".orchestrator" / "stop").mkdir(parents=True)
+
+        self.assertIs(fixture.state()["paused"], True)
+
+    def test_an_unreadable_repo_is_not_paused_rather_than_an_error(self):
+        """A path that is not a repository at all answers False, never raises: /state must
+        not 500 because someone pointed IDEAS_REPO_PATH at nothing."""
+        self.assertIs(orchestrator.is_paused(self.tmp / "nowhere"), False)
 
 
 if __name__ == "__main__":
