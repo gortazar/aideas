@@ -16,7 +16,7 @@ update it is, so `AGENTS.md`'s default applies: **minor**.
 
 Branch `agent/meet/2026-10-01` on `gortazar/meet`.
 
-### Units — 4 of 9 done
+### Units — 5 of 9 done
 
 - [x] **U1 — the room model.** `src/lib/rooms.js`: what a room is (`id`, `name`, `status`,
       `createdAt`, `joinUrl`), that the link taken is the **anonymous moderator** one, and
@@ -51,8 +51,13 @@ Branch `agent/meet/2026-10-01` on `gortazar/meet`.
       window opening faster than the keyring unlocks from deleting the key it was about to
       show. Verified end to end first: a real `gnome-keyring-daemon` under
       `dbus-run-session` stores, reads back and clears. 46 tests, **273** in the suite.
-- [ ] **U4b — the key field in the preferences window.** **Next.**
-- [ ] U5 — the room rows and the join button in the shell.
+- [x] **U4b — the key field in the preferences window.** An `Adw.PasswordEntryRow` per
+      instance, with a line saying where the key comes from and what it costs not to have
+      one. Rows are drawn first and filled in when the keyring answers — unlocking one can
+      be a dialog — and a lookup arriving after the user has edited the list is dropped
+      rather than written over their edit. Writes are debounced by 400 ms, flushed on
+      `close-request`, and a failed store marks its own row. 6 tests, **279** in the suite.
+- [ ] **U5 — the room rows and the join button in the shell.** **Next.**
 - [ ] U6 — the request itself: libsoup3, the cancellable, the timeout.
 - [ ] U7 — the nested shell: a stub instance, the assertions, the screenshots.
 - [ ] U8 — ship `v0.2`.
