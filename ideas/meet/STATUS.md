@@ -16,7 +16,7 @@ update it is, so `AGENTS.md`'s default applies: **minor**.
 
 Branch `agent/meet/2026-10-01` on `gortazar/meet`.
 
-### Units — 2 of 8 done
+### Units — 3 of 8 done
 
 - [x] **U1 — the room model.** `src/lib/rooms.js`: what a room is (`id`, `name`, `status`,
       `createdAt`, `joinUrl`), that the link taken is the **anonymous moderator** one, and
@@ -34,8 +34,14 @@ Branch `agent/meet/2026-10-01` on `gortazar/meet`.
       so a broken instance costs its rooms and not the menu. A room whose link `rooms.js`
       refuses is listed with **no** destination, so no button can be drawn. 33 tests, **194**
       in the suite.
-- [ ] **U3 — the API response**, over an injected transport (`lib/client.js`). **Next.**
-- [ ] U4 — the API key in preferences, in the keyring.
+- [x] **U3 — the API response** (`lib/client.js`), over an injected transport. The request
+      (`GET …/api/v1/rooms?maxItems=100`, `X-API-KEY`, `Accept: application/json`) and the
+      reading of every answer: `ok` with rooms — an empty list included — `refused` for 401
+      and 403, `cancelled` for a request the caller abandoned, and `unreachable` for
+      everything else, including a 200 whose body is a proxy's HTML login page. A failure
+      state never carries rooms, so a stale list cannot survive through one. 33 tests,
+      **227** in the suite.
+- [ ] **U4 — the API key in preferences**, in the keyring. **Next.**
 - [ ] U5 — the room rows and the join button in the shell.
 - [ ] U6 — the request itself: libsoup3, the cancellable, the timeout.
 - [ ] U7 — the nested shell: a stub instance, the assertions, the screenshots.
@@ -54,8 +60,10 @@ Branch `agent/meet/2026-10-01` on `gortazar/meet`.
 
 ### What the research settled, before any code
 
-The plan's four facts about OpenVidu Meet are confirmed against the 3.8 documentation, so
-none of them is an assumption any more:
+The plan's four facts about OpenVidu Meet are confirmed — and then pinned down properly
+against **OpenVidu Meet's own OpenAPI specification**, `meet-ce/backend/openapi` in
+`OpenVidu/openvidu-meet`, which the published documentation site only renders client-side
+and so cannot be read from a fetch. None of this is an assumption any more:
 
 - the list is `GET <instance>/api/v1/rooms`, authenticated with an **`X-API-KEY` header**,
   and the key is generated from the deployment's *Embedded* page;
@@ -64,16 +72,38 @@ none of them is an assumption any more:
 - a role link looks exactly like `https://YOUR_DOMAIN/meet/room/room-123?secret=123456` —
   the documented example — so the `secret` parameter is what the check in `rooms.js` looks
   for;
-- the statuses are **open**, **active meeting** and **closed**. The answered question asks
-  for closed rooms listed too, so `status` is parsed and carried but does not filter.
+- the statuses are exactly **`open`**, **`active_meeting`** and **`closed`**. The answered
+  question asks for closed rooms listed too, so `status` is parsed and carried but does not
+  filter.
+
+And four things the specification settled that the plan could not:
+
+- **The 200 envelope is `{rooms, _extraFields, pagination}`**, with
+  `pagination.{isTruncated, nextPageToken, maxItems}`.
+- **`maxItems` defaults to 10, is capped at 100, and answers `422` to zero or a negative
+  value.** The request therefore asks for 100 — the default of 10 would have quietly shown a
+  tenth of a deployment's rooms. Past 100 the API paginates and the *…and N more* row
+  undercounts; the row goes to the instance, where all of them are, so the cost of not
+  following `nextPageToken` is one inaccurate number on a deployment with far more rooms
+  than a popup menu could usefully show.
+- **`access.user.url` is the room's own page — the same path with no secret** — and it sits
+  directly beside the moderator link in the same object. That is the degradation this entry
+  is about, confirmed as a real neighbouring field rather than a hypothetical, which is why
+  `rooms.js` requires a `secret` rather than merely preferring one.
+- **A role URL is "present only when the caller holds the `roomShareAccessLinks`
+  permission, removed otherwise".** A room with no link is an ordinary, documented case, not
+  a malformed payload — so listing it without a button is the correct behaviour and not a
+  defensive guess.
 
 Two consequences worth stating now rather than at the end:
 
-- **The API path is resolved relative to the instance URL.** The documentation's own
-  deployment serves the app under `/meet`, and its API docs at `/meet/api/v1/docs/`. An
-  instance entered as `https://host/meet/` therefore has to reach
-  `https://host/meet/api/v1/rooms`, not `https://host/api/v1/rooms`. Resolving relatively
-  handles both, and costs an instance at the domain root nothing.
+- **The API path is resolved relative to the instance URL.** The backend mounts itself at
+  `/api/v1` and the deployment's proxy puts the Meet application under `/meet` — the
+  specification's `servers:` entry reads `meet/api/v1`, and the API docs live at
+  `/meet/api/v1/docs/`. An instance entered as `https://host/meet/` therefore has to reach
+  `https://host/meet/api/v1/rooms`. Resolving relatively handles that deployment and the one
+  at a domain root alike; an absolute `/api/v1/rooms` would have worked on the second and
+  missed the first entirely.
 - **`gi://Secret` and `gi://Soup` (3.0) are both present** and usable from plain `gjs` on
   this machine, so the keyring answer to open question 2 and the libsoup half of U6 are
   both buildable as planned. Checked, not assumed.
