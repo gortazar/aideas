@@ -16,7 +16,7 @@ update it is, so `AGENTS.md`'s default applies: **minor**.
 
 Branch `agent/meet/2026-10-01` on `gortazar/meet`.
 
-### Units — 6 of 9 done
+### Units — 7 of 9 done
 
 - [x] **U1 — the room model.** `src/lib/rooms.js`: what a room is (`id`, `name`, `status`,
       `createdAt`, `joinUrl`), that the link taken is the **anonymous moderator** one, and
@@ -66,8 +66,17 @@ Branch `agent/meet/2026-10-01` on `gortazar/meet`.
       that anybody writes it into a message, but that a launch fails and GIO quotes the URI
       it was given. The teardown hygiene test is checked per class now, and both directions
       verified by mutation. 15 tests, **291** in the suite.
-- [ ] **U6 — the request itself: libsoup3, the cancellable, the timeout.** **Next.**
-- [ ] U7 — the nested shell: a stub instance, the assertions, the screenshots.
+- [x] **U6 — the request, for real.** One `Soup.Session` with a ten-second timeout, one
+      `Gio.Cancellable` per refresh, fetched on `open-state-changed` and abandoned when the
+      menu closes or the extension is disabled. The status is read as `message.status_code`
+      and never through `get_status()`, which throws on a status outside libsoup's enum from
+      inside the async callback, where a throw settles no promise and the request hangs for
+      ever. 0.1's "nothing reaches the network" rule is **replaced, not dropped**: exactly
+      one file may import `gi://Soup` and the test names it, nothing under `lib/` may even
+      in principle, no synchronous spelling appears anywhere, and no credential reaches
+      anything that writes text. Both halves verified by mutation. 7 tests, **298** in the
+      suite.
+- [ ] **U7 — the nested shell**: a stub instance, the assertions, the screenshots. **Next.**
 - [ ] U8 — ship `v0.2`.
 
 **Two things U2 added that the plan does not list**, both stated here rather than buried:
