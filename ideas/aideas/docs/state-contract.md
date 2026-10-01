@@ -62,6 +62,12 @@ cause could omit it — so a consumer substitutes its own wording when it is mis
   "cycle_started_at": 1755180000.0,
   "lock_age_seconds": 42,
   "paused": false,
+  "refresh": {
+    "state": "current",
+    "reason": null,
+    "checked_at": 1755179900.0,
+    "age_seconds": 100
+  },
   "ideas": [ ...rows... ]
 }
 ```
@@ -74,6 +80,7 @@ cause could omit it — so a consumer substitutes its own wording when it is mis
 | `cycle_started_at` | unix seconds, or `null` | when the lock was acquired. `null` when nothing is running, or when the lock has no `acquired_at`.  |
 | `lock_age_seconds` | int, or `null`      | seconds since the lock was last renewed. `null` when there is no readable lock. Present **even when `running` is false** — a climbing age on a dead cycle is the visible symptom of a box that stopped renewing. |
 | `paused`           | bool                | `.orchestrator/stop` exists, so no cycle will start and a running one is winding down. New in 0.5; **absent on an older box, where a reader must take it as `false`** rather than guess. |
+| `refresh`          | object              | whether this body is answering for `origin` or only for the local clone — see **Freshness**. New in orchestrator 1.8; **absent on an older box**, where a reader must assume nothing about freshness rather than guess. |
 | `ideas`            | array of row        | one row per `## Ideas` entry in `README.md`, in queue order. May be empty.                              |
 
 `running`, `agents` and `cycle_started_at` all come from one write of the lock's
@@ -90,6 +97,51 @@ queue indistinguishable from an idle one until something tried to start a cycle 
 at the `stop-file` gate. `paused` is that gate's own fact, reported before it is hit.
 
 `## Finished` entries are **not** returned. Neither is anything about budget or schedule.
+
+### Freshness
+
+The endpoint reads a working tree, and the only `git pull` in the system runs at the *start of
+a cycle*. With the timer off that is days away or never, so a question answered and pushed from
+a laptop stayed `blocked` in the panel indefinitely — and because the indicator polls on a
+timer and got a byte-identical answer every time, it read as a dead panel rather than as stale
+data. Since orchestrator 1.8 the endpoint brings the clone up to its upstream before reading
+the queue, and `refresh` says whether that worked.
+
+| key           | type                    | meaning                                                              |
+|---------------|-------------------------|----------------------------------------------------------------------|
+| `state`       | `"current"` \| `"stale"` | whether this body is answering for `origin`                          |
+| `reason`      | string, or `null`       | why it is stale, as a sentence meant to be shown verbatim. `null` when `current`. |
+| `checked_at`  | unix seconds, or `null` | the last **successful** refresh. `null` if there has never been one. |
+| `age_seconds` | int, or `null`          | seconds since `checked_at`. `null` on the same condition.            |
+
+The vocabulary is closed at two words on purpose. There is no third word for "never checked":
+a box that cannot fetch is serving data it cannot vouch for, which is exactly what `stale`
+means, and `reason` says which case it is — one fewer branch for every consumer.
+
+A refresh is attempted at most once per `ORCHESTRATOR_STATE_REFRESH_SECONDS` (default 120), so
+with a 60-second poll at most every other request shells out and a push appears within about
+two minutes. A request inside that window reports the previous attempt's verdict, which is what
+`current` means there.
+
+What the endpoint does in each case, and what it reports:
+
+| situation                       | what `/state` does                  | `state`   |
+|---------------------------------|-------------------------------------|-----------|
+| clean clone, `origin` ahead     | `fetch`, then `merge --ff-only`     | `current` |
+| clean clone, already level      | `fetch`, the merge is a no-op       | `current` |
+| a cycle is running              | nothing at all                      | `stale`   |
+| refreshed inside the window     | nothing — the rate limit            | `current` |
+| tracked files modified          | nothing                             | `stale`   |
+| detached HEAD, or no upstream   | nothing                             | `stale`   |
+| not a git clone                 | nothing                             | `stale`   |
+| the fetch failed or timed out   | nothing lands                       | `stale`   |
+| the clone has diverged          | the fetch succeeds, the merge declines | `stale` |
+
+`merge --ff-only` is what makes a GET safe to do this: it either moves `HEAD` along a line
+`origin` already has, or it declines and changes nothing. There is no conflict state to get
+stuck in. A diverged clone is never resolved here — a cycle has a lock, a commit and a push to
+follow a merge with, and a GET has none of those — so it declines, says so, and keeps saying so
+until a person looks.
 
 ### A row
 
@@ -197,6 +249,10 @@ box that is also running agents, so:
 - **`available: false` is an ordinary state**, not an error, and is distinct from being
   unable to reach the box at all. Those two mean opposite things — one is a configured box
   telling you something, the other is silence — and the UI says which.
+- **`refresh.state: "stale"` is an ordinary state too**, not an error. A box with no network,
+  no upstream or a dirty tree reports it on every poll, for ever, and the queue it serves is
+  still the best answer available. A consumer that ignores `refresh` entirely remains correct:
+  the rest of the body is the body it always was, which is why the key is additive.
 
 ## Versioning this contract
 

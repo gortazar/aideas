@@ -50,12 +50,19 @@ last_cycle_cost_usd: 0.0
       calling its mutating sibling, because `status` is interactive and a cycle may be
       building in that tree. `local_refresh_blocker()` holds the three network-free refusals
       so both callers word them identically. 133 tests.
-- [ ] **U5 — the contract** in `ideas/aideas/docs/state-contract.md` and its exact-keys test.
+- [x] **U5 — the contract.** `state-contract.md` gains `refresh` in the available-body key
+      table, a `### Freshness` section carrying the decision table and the closed two-word
+      vocabulary, and a line under *What the extension must not assume*: `stale` is an
+      ordinary state and a consumer that ignores the key stays correct. The exact-keys
+      assertion in `ideas/aideas/tests/test_state_contract.py` gains `refresh`, plus one
+      test of its shape. Both suites green: 133 orchestrator, 114 aideas. **No extension
+      source touched** — rendering the field is the aideas idea's own entry, and the key is
+      additive precisely so an extension that ignores it keeps working.
 - [ ] **U6 — `SETUP.md`** and the hardened unit's `ReadWritePaths` note.
 - [ ] **U7 — 1.8**, `status: done`, suite green under `env -i`.
 
-Next: U5 — the contract in ideas/aideas/docs/state-contract.md and the exact-keys assertion
-in its test suite.
+Next: U6 — SETUP.md on what refreshing needs from the box, and the hardened unit's
+ReadWritePaths note.
 
 Run the suite from the repo root:
 

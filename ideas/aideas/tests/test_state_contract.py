@@ -574,7 +574,26 @@ class EndpointTest(ContractTestCase):
         body = self.ready_fixture().lock(["alpha"], renewed_ago=5).state()
 
         self.assertEqual(set(body), {"available", "running", "agents", "cycle_started_at",
-                                     "lock_age_seconds", "paused", "ideas"})
+                                     "lock_age_seconds", "paused", "refresh", "ideas"})
+
+    def test_refresh_says_whether_the_body_answers_for_origin(self):
+        """New in orchestrator 1.8.
+
+        A lock is held in this fixture, so the endpoint reports `stale` without touching the
+        tree — a GET must never move a working tree a cycle is building in. `stale` is an
+        ordinary state, and its reason is a sentence meant to be shown verbatim.
+        """
+        body = self.ready_fixture().lock(["alpha"], renewed_ago=5).state()
+
+        refresh = body["refresh"]
+        self.assertEqual(set(refresh), {"state", "reason", "checked_at", "age_seconds"})
+        self.assertIn(refresh["state"], ("current", "stale"),
+                      "the vocabulary is closed at two words")
+        if refresh["state"] == "current":
+            self.assertIsNone(refresh["reason"])
+        else:
+            self.assertIsInstance(refresh["reason"], str)
+            self.assertTrue(refresh["reason"].strip())
 
     def test_the_body_is_json_serialisable(self):
         """The endpoint json.dumps() this; a non-serialisable value would 500 the request."""
