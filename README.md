@@ -71,9 +71,9 @@ makes position a safe identity: the active list only ever holds work still to do
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel.
 
-3. [recap-gs](aideas/recap-gs) - Make claude sessions start within a terminator console window, instead of the default console of gnome. Minor.
+3. [recap-gs](ideas/recap-gs) - Make claude sessions start within a terminator console window, instead of the default console of gnome. Minor.
 
-4. [meet](aideas/meet) - When pushing the button for the call it must bring you to the page where the cam and mic are selected if possible (the page where the Join Meeting button in the current page brings you). Minor.
+4. [meet](ideas/meet) - When pushing the button for the call it must bring you to the page where the cam and mic are selected if possible (the page where the Join Meeting button in the current page brings you). Minor.
 
 ## Finished
 
