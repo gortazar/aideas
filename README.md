@@ -71,6 +71,28 @@ makes position a safe identity: the active list only ever holds work still to do
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel.
 
+3. [recap-gs](ideas/recap-gs/) - The extension's `src/metadata.json` carries no `version-name` key, so once installed there is no way to tell which release
+   the code on disk came from — not for a person reading `~/.local/share/gnome-shell/extensions/recap@recap-gs.patxi/metadata.json`, and not for an
+   installer deciding whether a reinstall would change anything. Add `version-name`, and keep it honest the way `ideas/aideas` already does — copy that
+   arrangement rather than invent another: a unit test asserting the key equals the current idea version (`ideas/aideas/tests/unit/metadata.test.js`), the
+   release workflow refusing to publish when `version-name` and the tag `v<version>` disagree (`.github/workflows/release-aideas.yml`), `check-release.sh`
+   reading the key out of the published zip rather than trusting the tag (`ideas/aideas/tools/check-release.sh`), and `install.sh` printing the version it
+   just installed (`ideas/aideas/install.sh`). Bumping the idea version must become a one-line edit that the build then checks, never two places to remember.
+   While you are in there: `url` in that file points at `github.com/gortazar/aideas`, which is this workshop and not the extension's own repository — it
+   should be `github.com/gortazar/recap-gs`. Minor update.
+
+4. [meet](ideas/meet/) - Same gap as the recap-gs entry above, in `src/metadata.json`: no `version-name`, so an installed copy cannot say which release it
+   is. Add it and wire the same four guards `ideas/aideas` already has — the unit test pinning the key to the idea version, the release workflow refusing a
+   tag/metadata mismatch, `check-release.sh` reading the key from inside the published zip, and `install.sh` reporting the installed version. The point is
+   not the key on its own; it is that nothing can publish a release whose artefact disagrees with the tag it was cut from. Minor update.
+
+5. [gnome-tasks](ideas/gnome-tasks/) - `src/extension/metadata.json` does carry a `version-name`, but it says `0.1.0` while `STATUS.md` says `0.2`, and
+   `0.1.0` is not even the two-component form this repo's versioning rules use. It drifted because nothing ever compared the two. Set it to the idea's
+   current version in the correct form, and add a test to the existing suite under `tests/unit/` that fails whenever `version-name` and the `version:` in
+   `STATUS.md` disagree, so the next bump cannot silently leave the artefact behind. This idea is in-tree with no upstream repository and no release
+   workflow, so the release-side checks the recap-gs and meet entries ask for do not apply here — the test is the whole deliverable, and `STATUS.md` should
+   say plainly that this idea still ships nothing installable. Minor update.
+
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
