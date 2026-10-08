@@ -71,8 +71,6 @@ makes position a safe identity: the active list only ever holds work still to do
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel.
 
-3. [meet](ideas/meet) - When pushing the button for the call it must bring you to the page where the cam and mic are selected if possible (the page where the Join Meeting button in the current page brings you). Minor.
-
 ## Finished
 
 1. [pwgen](ideas/pwgen/) — Gnome Shell extension to generate secure passwords and copy them to the clipboard (finished 2026-08-06)
@@ -292,3 +290,5 @@ makes position a safe identity: the active list only ever holds work still to do
 34. [meet](ideas/meet) - Add the rooms of each instance below the instance name, and a button next to the name to open that room specifically. The button must get you to the call itself, not the room homepage. (finished 2026-10-01, v0.2)
 
 35. [recap-gs](ideas/recap-gs) - Make claude sessions start within a terminator console window, instead of the default console of gnome. Minor. (finished 2026-10-08, v0.4)
+
+36. [meet](ideas/meet) - When pushing the button for the call it must bring you to the page where the cam and mic are selected if possible (the page where the Join Meeting button in the current page brings you). Minor. (finished 2026-10-08, v0.3)
