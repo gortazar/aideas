@@ -74,11 +74,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1791449078,
-        "narHash": "sha256-70Atb87uSQ8RB2z9P3x9hTtCEMbwo5XBaocih31e9Y8=",
+        "lastModified": 1791461293,
+        "narHash": "sha256-asBBDasdAlF8nWmG0dLzpMeLdTOejHvDF4GyvcG9c8Q=",
         "owner": "gortazar",
         "repo": "recap-gs",
-        "rev": "9db26c38de127c5ce0f899beba9bb9d675ac6d27",
+        "rev": "ffe330096c0bbfcaa81417add056c8a04243d59a",
         "type": "github"
       },
       "original": {

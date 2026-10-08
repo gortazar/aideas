@@ -1,5 +1,5 @@
-status: not_started
-version: 0.4
+status: done
+version: 0.5
 started_at: 2026-08-10
 last_session_id: d662d114-7a57-4140-a585-10f9305b66aa
 last_run: 2026-10-08T10:53:16+02:00
@@ -18,6 +18,158 @@ last_cycle_cost_usd: 23.14270499999999
 
 
 
+
+### 2026-10-09 — done (0.5: say which version is installed)
+
+All 6 units done. An installed tree now answers "which release is this" from the file a
+person already opens, and the homepage link sends a bug report to the repository the code
+is in rather than to the workshop the plans are in.
+
+The two keys were the small half. The point of the entry is the four checks that stop them
+going stale again — a manifest field with nothing watching it is how this drifted in the
+first place.
+
+- [x] U1 — `version-name: "0.5"` and `url: https://github.com/gortazar/recap-gs` in
+      `src/metadata.json`, with **one** test pinning both — they are the two things an
+      installed tree says about itself, and an edit that fixes one while quietly breaking the
+      other should not pass. A second test pins the *absence* of a `version` key, which
+      extensions.gnome.org assigns on upload and rejects when set by hand. 246 tests, up
+      from 244.
+- [x] U2 — `version-name` joins the required-field loop in `flake.nix`'s `packExtension`.
+      **Observed, not assumed**: with the key deleted, `nix build` stops with
+      `metadata.json: missing or empty "version-name"`; restored, the check is green. This
+      covers what the unit test cannot — the test reads the tree, this reads what is about
+      to be zipped.
+- [x] U3 — the release workflow's step named "Check the tag against metadata.json", which
+      since 0.1 read `metadata.json` nowhere, now does. Run locally against every input,
+      with real exit codes:
+
+      | `GITHUB_REF_NAME` | exit | result |
+      | --- | ---: | --- |
+      | `v0.5` | 0 | tag and manifest agree on 0.5 |
+      | `v0.4` | 1 | tag v0.4 does not match version-name 0.5 — refusing to publish |
+      | `v1.0` | 1 | same, for a higher version |
+      | `v` | 1 | the tag is empty after stripping its leading v |
+      | `v0.5`, manifest key deleted | 1 | no version-name to check the tag against |
+
+- [x] U4 — `tools/check-release.sh`, shellcheck-clean, jq rather than python3; `unzip` and
+      `curl` added to the dev shell for it. It asks the **published bytes**, not the tag.
+- [x] U5 — `install.sh` prints `recap-gs: installed 0.5 to <dest>`, read from the unpacked
+      manifest and falling back to `unknown version` so `VERSION=v0.4` still installs. All
+      three paths run locally. README says what the output tells you and gives the one-line
+      grep that answers "which release am I running" from the machine.
+- [x] U6 — [PR #3](https://github.com/gortazar/recap-gs/pull/3) **merged** as
+      [`ffe3300`](https://github.com/gortazar/recap-gs/commit/ffe3300), gate **OK** on the
+      pull request before it went in. Both pins bumped to it, the pin confirmed an ancestor
+      of `origin/main`, and the wrapper's `nix flake check` green at it.
+      [v0.5](https://github.com/gortazar/recap-gs/releases/tag/v0.5) tagged and released.
+      `check-pin.sh`'s version assertion landed here, after the pin moved — adding it
+      earlier would have left this repo's own CI red for five units.
+
+## The four checks, and what each was shown to do
+
+**The release gate ran live and passed**, which is the one branch a tag push can prove:
+the `Check the tag against metadata.json` step reports `success` in
+[the v0.5 release run](https://github.com/gortazar/recap-gs/actions/workflows/release.yml).
+The **refusal** branch was not exercised live and this does not pretend otherwise — doing so
+means pushing a deliberately wrong tag to a public repository to leave junk behind. It was
+run locally against every input instead, with real exit codes, in the table above.
+
+**`check-release.sh` was shown to fail before it was shown to pass**, which is the only
+order that means anything. Against the published **v0.4** it reported 3 failures — no
+`version-name` in the artefact, the `gortazar/aideas` homepage, and the tag behind this tree.
+Against **v0.5**, the same script:
+
+```
+  ok    the newest release is v0.5, the version this tree says
+  ok    it carries recap@recap-gs.patxi.shell-extension.zip
+  ok    the artefact downloads
+  ok    it matches the digest GitHub reports
+  ok    the artefact's metadata.json says version-name 0.5
+  ok    its homepage link points at gortazar/recap-gs
+  ok    <asset>.sha256 is published and correct
+
+7 passed, 0 failed, 0 warned
+```
+
+**The packer and `check-pin.sh` were both watched failing** before being left green: the
+packer refusing a manifest with the key deleted, and `check-pin.sh` naming `0.4` against a
+pin carrying `0.5`.
+
+**Install-verified** from a clean directory against the published asset with `XDG_DATA_HOME`
+redirected. The file count proves nothing for this entry, so the checks that matter were
+made instead — the installer printed **`recap-gs: installed 0.5 to …`**, the line this entry
+added, and the installed manifest reads:
+
+```
+  "version-name": "0.5",
+  "url": "https://github.com/gortazar/recap-gs",
+```
+
+with no `version` key, which extensions.gnome.org would reject. The README's own
+`grep version-name …` one-liner was run against that installed tree rather than merely
+written down.
+
+**Sonar after the merge**: gate **OK**, `bugs=0`, `reliability_rating=1.0` (**A**), and
+**zero open BLOCKERs under both severity models**. The nine code smells are the inherited
+ones 0.3 catalogued.
+
+## What "done" covers, and what it does not
+
+**Covers:** both manifest keys, the unit tests pinning them, the packer's refusal, the
+release gate made real, `tools/check-release.sh`, `install.sh` reporting the version,
+`check-pin.sh`'s third assertion, and `v0.5` released and verified four ways.
+
+**Does not cover:**
+
+- **The release gate's refusal path was never exercised live.** Named above. Proving it
+  costs a junk tag on a public repository, which is worse than the assurance is worth.
+- **`check-release.sh`'s rate-limit branch was not triggered.** It cannot be summoned on
+  demand, and exhausting the quota deliberately would break the other checks for an hour.
+  The 403 handling is written from the documented behaviour and the fleet's own prior
+  encounter with it; the 404 and no-releases branches were run.
+- **`install.sh` still reinstalls unconditionally.** It now knows the installed version, so
+  skipping an identical reinstall became possible — and is a different feature, not invented
+  here.
+- **`install.sh`'s `gnome-extensions enable` still writes dconf**, which `XDG_DATA_HOME`
+  does not contain. A no-op here again, checked after. Carried forward from 0.3 and 0.4,
+  still unaddressed.
+- **`ci/smoke-test.sh` still does not complete on this machine.** Unchanged from 0.4: the
+  headless shell boots, no extension loads into it.
+
+Difficulty estimate: **easy**, as planned, and it was. Two keys and four checks, with no
+surprises — the gate stayed green throughout, which 0.4 had warned might not happen for a
+new shell script. The only judgement call was refusing to push a bad tag to see the refusal
+work.
+
+Next: nothing outstanding. If the idea is reopened, in order: why extensions do not load in
+the headless shell here, which still blocks the smoke test and the screenshots; skipping a
+reinstall when the installed version already matches, which this entry made possible; the
+three `javascript:S3735` `void e` code smells, which may be a quality-profile case rather
+than a fix; and the three items 0.2 left.
+
+**`check-release.sh` is already proven to catch things, not just to print `ok`.** Run
+against the real published **v0.4** it reports exactly the three defects this entry fixes,
+while passing the download, digest and checksum checks:
+
+```
+  FAIL  the newest release is v0.4, but this tree says version 0.5
+  ok    it carries recap@recap-gs.patxi.shell-extension.zip
+  ok    the artefact downloads
+  ok    it matches the digest GitHub reports
+  FAIL  the artefact's metadata.json has no version-name — it cannot say what it is
+  FAIL  its homepage link is https://github.com/gortazar/aideas, not .../recap-gs
+  ok    <asset>.sha256 is published and correct
+```
+
+That is better evidence than a green run after v0.5 publishes would be: a checker that has
+only ever said `ok` has not been shown to do anything.
+
+**Two failures it tells apart on purpose.** A rate-limited unauthenticated API answers 403
+with a well-formed body holding no releases — indistinguishable, to `curl -f`, from a project
+that has never released anything. The status code is kept, and a rate limit says so and exits
+**2** ("cannot tell") rather than **1** ("the release is wrong"). 404 names a repository that
+does not exist. Both run; the rate limit is the one branch that cannot be triggered on demand.
 
 ### 2026-10-08 — done (0.4: resume in Terminator, not GNOME's console)
 
