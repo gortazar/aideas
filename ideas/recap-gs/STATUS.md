@@ -1,5 +1,5 @@
-status: not_started
-version: 0.3
+status: done
+version: 0.4
 started_at: 2026-08-10
 last_session_id: d662d114-7a57-4140-a585-10f9305b66aa
 last_run: 2026-09-28T12:26:58+02:00
@@ -16,6 +16,167 @@ last_cycle_cost_usd: 6.560045999999999
 - 2026-08-10T14:13:00+02:00 — in_progress ($13.098638499999996)
 
 
+
+### 2026-10-08 — done (0.4: resume in Terminator, not GNOME's console)
+
+All 6 units done. Clicking a row now opens Terminator on a machine that has it, in the
+session's own directory, with `claude --resume <id>` running in it — and that last clause is
+measured on a real desktop rather than inferred from an argv.
+
+It is also a bug fix: `terminator` typed into the `terminal` preference used to produce a
+command nobody meant.
+
+- [x] U1 + U3 — the `terminator --working-directory=<dir> -x <command...>` row, and both
+      wm_class spellings in `TERMINAL_WM_CLASSES`. **They land together because the project
+      already forbids them to drift**: `sources.test.js` asserts every terminal in
+      `TERMINALS` has a wm_class, so adding to one list alone fails the suite. That is how
+      this pairing arrived — it was not planned as one unit. 241 tests, up from 238.
+- [x] U2 — Terminator ahead of the GNOME terminals in the default order, with two tests
+      pinning what a reordering can quietly cost: a machine without Terminator falls back to
+      exactly the 0.3 order, and an explicit `terminal` preference still outranks it.
+      243 tests.
+- [x] U4 — **the real desktop, and the answer is that `-u/--no-dbus` is not needed.**
+      `ci/verify-terminator.sh` drives a real Terminator in both states and checks the three
+      things that can be wrong independently. Launched from `/` on purpose, so a directory
+      that was merely *inherited* cannot pass for one that was *set*. Both cases green on
+      GNOME 46 / Wayland with terminator 2.1.3:
+
+      | Case | Window | Working directory | Command line |
+      | --- | --- | --- | --- |
+      | an instance already running (the D-Bus hand-off) | ok | ok | ok, `--resume` + id as two arguments |
+      | a standalone instance (`-u`) | ok | ok | ok |
+
+      So `--working-directory` survives the hand-off and `-x` delivers the whole line. The
+      plan's worst case — a window that opens, resumes, and reads the wrong project — does
+      not happen, and is now re-checkable by anyone rather than being a claim in a
+      transcript. The script is a small addition beyond the literal plan, in the shape the
+      project already uses for `ci/smoke-test.sh`.
+- [x] U5 — the preferences Terminal row (placeholder `terminator`, subtitle saying what an
+      empty value now prefers), the README where it describes which terminal opens, and
+      `ci/verify-terminator.sh` added to the list of things the suite cannot ask.
+      **No new screenshot**, for two separate reasons, both checked rather than assumed:
+      - *The existing ones are not stale.* `screenshots/preferences.png` is scrolled to the
+        top and the Terminal row is below the fold, so the `kgx` placeholder it would have
+        contradicted is not in the picture at all. Looked at, not guessed.
+      - *The resumed-window shot the plan asks for is not one I can take honestly.* It would
+        have to show a real `claude --resume`, which means publishing to a public repository
+        either an error page (a bogus session id) or the user's own session content (a real
+        one). Neither is what the feature looks like working, and the second is not mine to
+        publish. The panel and menu — where this feature's user-visible surface actually is —
+        are already pictured. This is the one line of the plan not done.
+- [x] U6 — [PR #2](https://github.com/gortazar/recap-gs/pull/2) **merged** as
+      [`9db26c3`](https://github.com/gortazar/recap-gs/commit/9db26c3) with all four checks
+      green, the gate among them. Submodule pointer and `recap-gs-src` flake input both
+      bumped to it, `scripts/check-pin.sh` agrees, the pin is confirmed an ancestor of
+      `origin/main`, and the wrapper's own `nix flake check` passes at it. `v0.4` tagged and
+      released; install-verified below.
+
+**The quality gate went red, and the finding was real.** `javascript:S9383` MAJOR BUG on
+`src/extension.js:130` — `this._watchIdle()` called bare, so anything it throws becomes an
+unhandled promise rejection. Its dynamic import is guarded; constructing the idle monitor is
+not, so a shell with the typelib and a broken monitor would lose idle suppression with
+nothing in the log. Fixed in the pull request, which is what the gate is for.
+
+Two things worth recording about it:
+
+- **The line was not mine.** `git blame` puts `this._watchIdle()` in the initial commit, and
+  my only edit to that file was a comment 370 lines below it. Sonar counted it as new code
+  anyway. I did not chase why — the finding is true regardless of which bucket it landed in,
+  and fixing it was cheaper than arguing about the classification.
+- **Writing the guard as a rule rather than a fix found a second one.** The hygiene test says
+  *every* `async _method` in `extension.js` is awaited or has a `.catch` at each call site,
+  and that immediately failed on `onTick: () => this._refresh()` — which Sonar had not
+  flagged. The scheduler calls it and walks away, so a throw in `_render()` on a refresh tick
+  would have stopped the panel updating in silence.
+
+**Released and verified.** [v0.4](https://github.com/gortazar/recap-gs/releases/tag/v0.4),
+published by the upstream tag workflow from `9db26c3`, carrying
+`recap@recap-gs.patxi.shell-extension.zip` (60,226 bytes) and its `.sha256`.
+Install-verified from a clean directory against the published asset with `XDG_DATA_HOME`
+redirected: the zip downloads, `recap-gs: checksum ok`, 32 files land, and the installed
+`hooks/install-hooks.sh --print` runs. Then the check that actually matters for *this*
+entry — the **released** `lib/resume.js` was asked what it does on a machine with every
+terminal installed, and answered:
+
+```
+terminator --working-directory=/home/me/git/orchestrator -x claude --resume aaaa1111
+```
+
+**Sonar after the merge**: gate **OK**, `bugs=0`, `reliability_rating=1.0` (**A**), and
+**zero open BLOCKERs under both severity models** — checked both ways, since the `bugs`
+measure alone would not show one raised as a code smell. The nine code smells are the
+inherited ones 0.3 catalogued; the gate judges new code and `AGENTS.md` says not to spend an
+entry on old debt.
+
+**A portability fix fell out of U5.** `scripts/screenshot.sh` could not run on this machine —
+`dbus-run-session` only looks for `/etc/dbus-1/session.conf`, and Ubuntu 24.04 ships it at
+`/usr/share/dbus-1/session.conf` and leaves the `/etc` path absent. The failure is
+"Failed to start message bus" before any of this project's code runs, which reads like a
+broken test rather than a missing file. `ci/smoke-test.sh` now finds the config and says
+where it got it. **This also unblocks the boot of `ci/smoke-test.sh` itself**, which the 0.2
+and 0.3 entries both recorded as unrunnable here — a headless GNOME Shell 46 now starts on
+this machine where it previously died before running a line of this project's code.
+
+It is not fully fixed, and saying so is the point: the shell boots but **no extension loads
+into it**, so the driver never writes a result and the run ends at its 180-second timeout.
+The shell version is 46.0, inside the extension's supported range, so that is not the cause
+and I did not find it. The screenshots are therefore unchanged — which, as U5 records, turned
+out to be correct anyway.
+
+## What "done" covers, and what it does not
+
+**Covers:** the Terminator row and the `-e` bug it replaces, the bell list, the default
+order, a real-desktop proof in both D-Bus states, the preferences and README copy, a real
+quality-gate finding fixed, `v0.4` released and install-verified.
+
+**Does not cover:**
+
+- **No screenshot of a resumed Terminator window** — the one line of the plan not done, with
+  the reason under U5. A truthful one means publishing either an error page or the user's own
+  session content to a public repository.
+- **`ci/smoke-test.sh` still does not complete here.** It gets further than it did; it does
+  not finish. Named above rather than left to be rediscovered a third time.
+- **opencode was not resumed in Terminator in practice.** The resume path does not branch per
+  agent — it builds an agent command and hands it to a terminal — so `opencode --session`
+  travels the identical code path and is unit-tested, but no opencode session was opened in a
+  Terminator window on this machine. Same honesty 0.2 applied to its hook.
+- **`install.sh`'s `gnome-extensions enable` writes dconf**, which `XDG_DATA_HOME` does not
+  contain. A no-op here again — the extension was already installed and enabled, checked
+  after. Carried forward from 0.3, still unaddressed, still not invented away.
+
+Difficulty estimate: **easy**, as planned, and the plan was right about where the difficulty
+was not. The row and the reorder were a few lines. What cost the turns was everything that
+had to be *true* around them: the first real-desktop attempt measured nothing because the
+D-Bus hand-off does not carry the environment; the gate found a genuine unhandled rejection
+that had nothing to do with terminals; and getting a headless shell to boot at all meant
+finding a dbus config file that Ubuntu had moved.
+
+Next: nothing outstanding for this idea. If it is reopened, in order: why extensions do not
+load in the headless shell here, which blocks the smoke test and the screenshots; the three
+`javascript:S3735` `void e` code smells, which may be a quality-profile case rather than a
+fix; and the three items 0.2 left — the hook from a real Claude Code session, a desktop
+notification for `asking` only, and naming *which* session within a project asked.
+
+**What the hand-off does *not* carry is the environment.** The first attempt at U4 injected
+`PATH` and a record path as environment variables and recorded nothing at all, because the
+already-running instance spawns the window from *its* environment, not the launcher's. That
+is also why `SubprocessLauncher.set_cwd()` buys nothing for Terminator specifically — the
+comment at its call site now says so instead of implying it is a safety net.
+
+**The wm_class is confirmed, not guessed**: terminator 2.1.3 calls
+`GLib.set_prgname('terminator')`, which is what a Wayland compositor reports as the app id.
+There is no `StartupWMClass` in its desktop file and no X11 window to read it off under
+Wayland, so this came from the installed source.
+
+**The bug this fixes, not just the feature it adds.** Setting `terminal` to `terminator`
+fell through to the generic `-e` fallback an unlisted terminal gets. Terminator's
+`-e/--command` takes the whole command as *one* string; `-x/--execute` takes the rest of the
+line. So the old path produced `terminator -e claude --resume <id>`, which hands Terminator
+`claude` and leaves it reading `--resume <id>` as its own arguments. Flags checked against
+**terminator 2.1.3**'s own `--help` on this machine, not from memory.
+
+**Terminator is installed here** (`/usr/bin/terminator`, 2.1.3), so U4 can be done honestly
+— the plan's named risk that it could not is retired.
 
 ### 2026-09-28 — done (0.3: clear the two BLOCKERs by configuring the rule)
 

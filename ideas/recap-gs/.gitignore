@@ -1,3 +1,6 @@
 # nix build output symlinks
 result
 result-*
+
+# scratch from release and real-desktop verification; never part of the wrapper
+.verify-*/
