@@ -1,4 +1,4 @@
-status: not_started
+status: in_progress
 version: 0.2
 started_at: 2026-08-28
 last_session_id: a8a338d4-3bad-427b-bd3d-112da5346bf3
@@ -12,7 +12,70 @@ last_cycle_cost_usd: 36.152480999999995
 
 
 
-## This entry — 0.2: the rooms of each instance, and a button that joins the call
+## This entry — 0.3: the join button lands where the camera and microphone are chosen
+
+`version:` above still reads `0.2` and moves to **`0.3`** in the same commit as
+`status: done`, per the cycle header.
+
+Branch `agent/meet/2026-10-08`, pull request
+[#5](https://github.com/gortazar/meet/pull/5).
+
+### The entry's own answer is "no, and say so"
+
+The three answered open questions all take the **alternative**, not the as-is tick:
+
+- *"Is one click away what this entry should deliver?"* → **"Do nothing and just document
+  this limitation."**
+- *"Where does the name sent as `participant-name` come from?"* → **"Not valid, since we
+  won't do it."**
+- *"Should the link also carry `initial-audio-active` / `initial-video-active`?"* → **"Do
+  nothing."**
+
+So `src/` is untouched. `PLAN.md`'s Features and U1–U5 describe the as-is tick — a
+`lib/join-url.js`, a name field in preferences, a GSettings key — and are superseded by
+those answers. What ships is the documentation, and one test so the decision cannot be
+undone by accident.
+
+### Units — 1 of 2 done
+
+- [x] **U1 — verified, then documented.** Every claim the README now makes was checked
+      against `OpenVidu/openvidu-meet` **at v3.9.0, the current release, and again at
+      `main`** — identical in both. A README section says where the button leaves you and
+      why not one step further; a line under *what it does not do* states that the URL
+      handed to the browser is the one the API returned, byte for byte. One test pins that,
+      so a later cycle cannot quietly start appending to a role link. 299 tests.
+- [ ] **U2 — ship `v0.3`.** **Next.**
+
+### What was verified, and what it rules out
+
+- **`meeting.routes.ts` registers `room/:room-id` and `disconnected`, and nothing else.**
+  The Join page and the device page are two states *inside* one route, not two addresses —
+  so there is no URL that names the device page, and no path, fragment or second room link
+  can reach it.
+- **`meeting.component.html`** renders `<ov-meeting-lobby />` while `showLobby()` and
+  `<ov-meeting-view [prejoin]="true">` after it, which is the device page the entry is
+  about.
+- **The flag behind `showLobby()` is assigned `true` in exactly one place** —
+  `submitAccess()` — and the only callers are the Join page's own form component and its
+  spec. Nothing auto-submits it: not when a name arrives from the URL, not when the user is
+  authenticated.
+- **The accepted query parameters are the closed `EmbeddedAttribute` list.** `skip-lobby`,
+  `skipLobby` and `skip-prejoin` return **zero hits across the whole repository**. 0.2's
+  plan had listed them as "recent" on the strength of OpenVidu Call; **that guess is retired
+  here**, which is worth more than the feature would have been.
+
+The consequence for a user is one press of *Join Meeting* between the panel button and the
+camera-and-microphone page, and the README now says so rather than leaving them to discover
+it and assume the extension is at fault.
+
+### Why this ships a release at all
+
+`v0.3` carries a packed extension **identical in content to `v0.2`'s** — `src/` did not
+change. The release exists because every finished entry ships one and because the version is
+the durable record of what was decided when. That is stated here so nobody later reads an
+unchanged artefact as a failed build.
+
+## Previously — 0.2: the rooms of each instance, and a button that joins the call
 
 `version:` above still reads `0.1` and moves to **`0.2`** in the same commit as
 `status: done`, per the cycle header. The `README.md` entry does not say which kind of
@@ -224,9 +287,9 @@ all, and the Sonar fixes, which are `catch {` in place of `catch (e) { void e; }
 `push` in place of three — no behaviour change. Neither is worth moving a published tag for;
 both ship with the next version.
 
-## What "done" covers
+### What 0.2's "done" covered
 
-Every feature in `PLAN.md`, as amended by the answered open questions.
+Every feature in 0.2's plan, as amended by its answered open questions.
 
 - **Merged**: pull request [#4](https://github.com/gortazar/meet/pull/4), squashed to
   [354e8c2](https://github.com/gortazar/meet/commit/354e8c2), with `check`, `package`,
