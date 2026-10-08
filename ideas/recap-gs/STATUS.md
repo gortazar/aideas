@@ -1,5 +1,5 @@
 status: in_progress
-version: 0.4
+version: 0.5
 started_at: 2026-08-10
 last_session_id: d662d114-7a57-4140-a585-10f9305b66aa
 last_run: 2026-10-08T10:53:16+02:00
