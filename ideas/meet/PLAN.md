@@ -149,23 +149,23 @@ Units, each one commit, tests first.
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [ ] **OpenVidu Meet has no address for the camera-and-microphone page, and its Join page is cleared only
+- [x] **OpenVidu Meet has no address for the camera-and-microphone page, and its Join page is cleared only
       by its own button — so "bring you to that page" cannot be done with a link. Is one click away what
       this entry should deliver?** Ticking this line as-is means yes: the join link gains
       `participant-name`, the Join page arrives with its only question already answered, and its *Join
       Meeting* button is all that remains between the panel and the device page. The alternatives are:
       change nothing in the extension and only document the limitation in the README; or hold the entry
       until OpenVidu Meet offers a parameter that skips the Join view (there is none today, and asking for
-      one is not something this repository can do).
-- [ ] **Where does the name sent as `participant-name` come from?** Ticking this line as-is means **one name
+      one is not something this repository can do). Do nothing and just document this limitation.
+- [x] **Where does the name sent as `participant-name` come from?** Ticking this line as-is means **one name
       for all instances, in the preferences window, pre-filled on first run from the session's own full
       name** (`GLib.get_real_name()`) and editable or clearable afterwards — a name is what the Join page
       would have asked for anyway, and it is shown to everyone else in the call either way. The cost is that
       a first run sends the account's real name without being asked. The alternatives are: an empty field
       the user must fill in before anything changes; or a separate name per instance, since a work
-      deployment and a personal one may not want the same one.
-- [ ] **Should the link also carry `initial-audio-active` / `initial-video-active`?** Ticking this line
+      deployment and a personal one may not want the same one. Not valid, since we won't do it.
+- [x] **Should the link also carry `initial-audio-active` / `initial-video-active`?** Ticking this line
       as-is means **no**: the device page is exactly where the camera and microphone are chosen, and this
       entry is about arriving there, not about deciding in advance what it will say. The alternative is two
       more preferences ("join muted", "join with camera off") that pre-set them — a sensible feature, and a
-      different entry.
+      different entry. Do nothing.
