@@ -1,4 +1,4 @@
-status: not_started
+status: in_progress
 version: 0.3
 started_at: 2026-08-28
 last_session_id: a8a338d4-3bad-427b-bd3d-112da5346bf3
@@ -14,7 +14,77 @@ last_cycle_cost_usd: 53.4504615
 
 
 
-## This entry — 0.3: the join button lands where the camera and microphone are chosen
+## This entry — 0.4: the installed copy says which release it is
+
+`version:` above still reads `0.3` and moves to **`0.4`** in the same commit as
+`status: done`, per the cycle header.
+
+Branch `agent/meet/2026-10-08`, pull request
+[#6](https://github.com/gortazar/meet/pull/6).
+
+The key on its own is a nicety. The key plus the guards is a release path that cannot lie
+about itself: before this, `git tag v0.9` on this tree would have published a release called
+v0.9 containing 0.3's code, with every check in the repository staying green.
+
+### Units — 4 of 5 done
+
+- [x] **U1 — the key, and the test that pins it.** `"version-name": "0.4"` in
+      `src/metadata.json`, plus three cases: it equals the idea version, it has the
+      two-component shape this project versions by (so `0.4.0` and `v0.4` fail here rather
+      than at tag time), and there is no `version` key — the integer EGO assigns and rejects
+      when set by hand. **All three verified by mutation.** 302 tests.
+- [x] **U2 — the release workflow refuses a disagreeing tag.** A step before the pack
+      compares `${GITHUB_REF_NAME#v}` with `jq -r '."version-name"'` and fails naming both
+      values. It runs before `nix flake check` *and* `nix build`, so a bad tag builds
+      nothing. The suite asserts the step is present, reads both values, and sits before the
+      pack and the release creation — verified by deleting the step and watching it go red.
+      303 tests.
+- [x] **U3 — `check-release.sh` reads the version out of the published zip.** Beside the
+      uuid check it already did. 
+- [x] **U4 — `install.sh` says what it installed.** `meet: installed 0.4 to <dir>`, read
+      from the unpacked `metadata.json`, degrading to `unknown version` so
+      `VERSION=v0.3 ./install.sh` still works. Two tests, a README line, and all three paths
+      run by hand. 305 tests.
+- [ ] **U5 — ship `v0.4`**, and add `check-pin.sh`'s version assertion. **Next.**
+
+### What was proven, and what could not be
+
+- **The release guard's refusal path was not exercised live, and this says so.** A tag push
+  is the only way to run it for real, and pushing a deliberately mismatched tag would leave
+  junk on a public repository for the sake of one assertion. Instead the step's exact body
+  was run locally with the values substituted:
+
+  | input | outcome |
+  | --- | --- |
+  | `v0.4` against a manifest saying `0.4` | exit 0 |
+  | `v0.9` against a manifest saying `0.4` | exit 1, *"the tag says 0.9 and src/metadata.json says 0.4"* |
+  | `v0.4` against a manifest with the key deleted | exit 1, *"… says null"* — `jq -r` yields the string `null`, which can never equal a tag |
+
+  The YAML was parsed to confirm the step exists and is ordered before the pack. What
+  guards it from here is the unit test, because the comparison only ever runs on a tag push:
+  no reviewer would ever see it fail on a pull request.
+- **`check-release.sh` fails against `v0.3`, and that is the check working.** Run
+  immediately after it was written: *"FAIL: the published zip has no version-name, so it
+  cannot say which release it is"*, exit 1. `v0.3`'s artefact predates the key and always
+  will. The temptation was to skip the comparison when the key is absent; that was refused,
+  because a published zip with no `version-name` is exactly what this entry exists to stop
+  shipping again. All three branches were then run on crafted manifests: match, mismatch,
+  absent.
+
+### Not in scope, as decisions rather than oversights
+
+- **The packer's required-field loop** (`flake.nix`) does not gain `version-name`: the
+  release workflow's comparison runs before `nix build`, and `jq -r` on a missing key yields
+  `null`, so a zip without it cannot be published anyway. A second check on a path already
+  closed is noise.
+- **`workflow_dispatch`** is not added to the release workflow. Three releases have been cut
+  by tag push without trouble.
+- **The nested shell is not re-run.** No widget, model or launched URL changed. The risk a
+  manifest edit carries is the Shell refusing to load malformed JSON, and that is already
+  covered without a compositor: the suite parses the file and the packer runs `jq -e` over
+  it on every `nix flake check`.
+
+## Previously — 0.3: the join button lands where the camera and microphone are chosen
 
 `version:` above still reads `0.2` and moves to **`0.3`** in the same commit as
 `status: done`, per the cycle header.
@@ -85,7 +155,7 @@ someone reads two different hashes as two different builds.
 The release exists because every finished entry ships one, and because the version is the
 durable record of what was decided when.
 
-## What "done" covers
+### What 0.3's "done" covered
 
 The entry asked whether the join button could land on the page where the camera and
 microphone are chosen. **It cannot**, and the answered open questions chose to say so rather
