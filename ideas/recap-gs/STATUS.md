@@ -30,10 +30,73 @@ Units 2 of 6 done. [PR #2](https://github.com/gortazar/recap-gs/pull/2) open as 
       pinning what a reordering can quietly cost: a machine without Terminator falls back to
       exactly the 0.3 order, and an explicit `terminal` preference still outranks it.
       243 tests.
-- [ ] U4 — the real desktop: both D-Bus states, checking window, working directory and the
-      running command separately.
-- [ ] U5 — preferences copy, README, screenshot.
+- [x] U4 — **the real desktop, and the answer is that `-u/--no-dbus` is not needed.**
+      `ci/verify-terminator.sh` drives a real Terminator in both states and checks the three
+      things that can be wrong independently. Launched from `/` on purpose, so a directory
+      that was merely *inherited* cannot pass for one that was *set*. Both cases green on
+      GNOME 46 / Wayland with terminator 2.1.3:
+
+      | Case | Window | Working directory | Command line |
+      | --- | --- | --- | --- |
+      | an instance already running (the D-Bus hand-off) | ok | ok | ok, `--resume` + id as two arguments |
+      | a standalone instance (`-u`) | ok | ok | ok |
+
+      So `--working-directory` survives the hand-off and `-x` delivers the whole line. The
+      plan's worst case — a window that opens, resumes, and reads the wrong project — does
+      not happen, and is now re-checkable by anyone rather than being a claim in a
+      transcript. The script is a small addition beyond the literal plan, in the shape the
+      project already uses for `ci/smoke-test.sh`.
+- [x] U5 — the preferences Terminal row (placeholder `terminator`, subtitle saying what an
+      empty value now prefers), the README where it describes which terminal opens, and
+      `ci/verify-terminator.sh` added to the list of things the suite cannot ask.
+      **No new screenshot**, for two separate reasons, both checked rather than assumed:
+      - *The existing ones are not stale.* `screenshots/preferences.png` is scrolled to the
+        top and the Terminal row is below the fold, so the `kgx` placeholder it would have
+        contradicted is not in the picture at all. Looked at, not guessed.
+      - *The resumed-window shot the plan asks for is not one I can take honestly.* It would
+        have to show a real `claude --resume`, which means publishing to a public repository
+        either an error page (a bogus session id) or the user's own session content (a real
+        one). Neither is what the feature looks like working, and the second is not mine to
+        publish. The panel and menu — where this feature's user-visible surface actually is —
+        are already pictured. This is the one line of the plan not done.
 - [ ] U6 — `v0.4` released and install-verified.
+
+**The quality gate went red, and the finding was real.** `javascript:S9383` MAJOR BUG on
+`src/extension.js:130` — `this._watchIdle()` called bare, so anything it throws becomes an
+unhandled promise rejection. Its dynamic import is guarded; constructing the idle monitor is
+not, so a shell with the typelib and a broken monitor would lose idle suppression with
+nothing in the log. Fixed in the pull request, which is what the gate is for.
+
+Two things worth recording about it:
+
+- **The line was not mine.** `git blame` puts `this._watchIdle()` in the initial commit, and
+  my only edit to that file was a comment 370 lines below it. Sonar counted it as new code
+  anyway. I did not chase why — the finding is true regardless of which bucket it landed in,
+  and fixing it was cheaper than arguing about the classification.
+- **Writing the guard as a rule rather than a fix found a second one.** The hygiene test says
+  *every* `async _method` in `extension.js` is awaited or has a `.catch` at each call site,
+  and that immediately failed on `onTick: () => this._refresh()` — which Sonar had not
+  flagged. The scheduler calls it and walks away, so a throw in `_render()` on a refresh tick
+  would have stopped the panel updating in silence.
+
+**A portability fix fell out of U5.** `scripts/screenshot.sh` could not run on this machine —
+`dbus-run-session` only looks for `/etc/dbus-1/session.conf`, and Ubuntu 24.04 ships it at
+`/usr/share/dbus-1/session.conf` and leaves the `/etc` path absent. The failure is
+"Failed to start message bus" before any of this project's code runs, which reads like a
+broken test rather than a missing file. `ci/smoke-test.sh` now finds the config and says
+where it got it. **This also unblocks `ci/smoke-test.sh` itself**, which the 0.2 and 0.3
+entries both recorded as unrunnable here.
+
+**What the hand-off does *not* carry is the environment.** The first attempt at U4 injected
+`PATH` and a record path as environment variables and recorded nothing at all, because the
+already-running instance spawns the window from *its* environment, not the launcher's. That
+is also why `SubprocessLauncher.set_cwd()` buys nothing for Terminator specifically — the
+comment at its call site now says so instead of implying it is a safety net.
+
+**The wm_class is confirmed, not guessed**: terminator 2.1.3 calls
+`GLib.set_prgname('terminator')`, which is what a Wayland compositor reports as the app id.
+There is no `StartupWMClass` in its desktop file and no X11 window to read it off under
+Wayland, so this came from the installed source.
 
 **The bug this fixes, not just the feature it adds.** Setting `terminal` to `terminator`
 fell through to the generic `-e` fallback an unlisted terminal gets. Terminator's

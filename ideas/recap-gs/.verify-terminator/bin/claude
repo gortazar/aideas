@@ -1,0 +1,8 @@
+#!/bin/sh
+# Stand-in for claude: records where it was started and exactly what it was handed.
+{
+  echo "cwd=$(pwd)"
+  echo "argc=$#"
+  for a in "$@"; do echo "arg=$a"; done
+} > "$RECORD"
+sleep 6
