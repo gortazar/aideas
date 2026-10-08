@@ -117,13 +117,13 @@ Each unit is pushed to `agent/recap-gs/<date>`; the pull request opens as a draf
 
 ## Open Questions
 
-- [ ] Should Terminator outrank the GNOME terminals in the default order for *everyone* who installs
+- [x] Should Terminator outrank the GNOME terminals in the default order for *everyone* who installs
       this extension, or should it only be preferred when the `terminal` preference names it (with
       the plan then being to set that preference on this machine, and to leave the shipped default
       GNOME-first)? Recommendation: the former — the entry says "instead of the default console of
       GNOME", a user who installed Terminator chose it deliberately, and the preference remains the
       escape hatch.
-- [ ] Should a resume open a **new Terminator window**, or a **new tab in the existing one**
+- [x] Should a resume open a **new Terminator window**, or a **new tab in the existing one**
       (`--new-tab`)? Recommendation: a new window, matching what every other terminal in the list
       does today; `--new-tab` also only works when an instance is already running, so it would make
       the first resume of a session behave differently from the rest.
