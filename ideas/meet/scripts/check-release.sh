@@ -101,9 +101,22 @@ if command -v unzip >/dev/null 2>&1; then
         done
         # The uuid the installer unpacks into has to be the one inside the package, or the
         # shell looks in a directory that does not match what it finds there.
-        unzip -p "${tmp}/${asset}" metadata.json 2>/dev/null |
-            jq -e --arg u "$UUID" '.uuid == $u' >/dev/null ||
+        unzip -p "${tmp}/${asset}" metadata.json > "${tmp}/metadata.json" 2>/dev/null || true
+        jq -e --arg u "$UUID" '.uuid == $u' < "${tmp}/metadata.json" >/dev/null 2>&1 ||
             fail "the published zip declares a uuid other than ${UUID}"
+
+        # And the version inside the artefact, which is the one a user actually installs. A
+        # tag can say anything and a release title is just text; this asks the bytes. An
+        # artefact published before 0.4 has no version-name at all, and failing against
+        # those is correct — shipping one is exactly what this check exists to stop.
+        inside="$(jq -r '."version-name" // empty' < "${tmp}/metadata.json" 2>/dev/null || true)"
+        if [ -z "$inside" ]; then
+            fail "the published zip has no version-name, so it cannot say which release it is"
+        elif [ "$inside" != "$version" ]; then
+            fail "the published zip says version-name ${inside}, but this is ${tag}"
+        else
+            echo "  the zip says version-name ${inside}"
+        fi
         echo "  the zip contains what the shell needs"
     else
         fail "the published asset could not be downloaded"
