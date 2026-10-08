@@ -1,188 +1,144 @@
-# Plan: gnome-tasks 0.2 — say what CI actually reports
+# Plan: gnome-tasks 0.3 — make `version-name` and `url` provable
 
-Difficulty estimate: easy — no code changes, one file to rewrite in places, and the whole job is
-reading evidence (`gh run view`, one `nix flake check`) and making prose match it; the only real
-care needed is not replacing one unverified sentence with another.
+Difficulty estimate: **easy** — one JSON file to correct, one new test file in an existing suite, and
+a two-line flake change so the test can see `STATUS.md`. No new behaviour, no release machinery, and
+the whole thing is verifiable in one `nix flake check`.
 
 ## Context
 
-The report: `STATUS.md` line 74 says
+`src/extension/metadata.json` today reads:
 
-> This checkout's `origin` is a local bare repo, so `.github/workflows/ci-gnome-tasks.yml` has
-> never run
+```json
+  "url": "https://github.com/patxi/aideas",
+  "version-name": "0.1.0"
+```
 
-and that is false about this tree. `origin` is `github.com:gortazar/aideas`, and the workflow had
-already run on `main` seven times — including on 2026-08-09, the day this entry was declared done —
-when the sentence was written on 2026-08-10 from a sandbox clone. `STATUS.md` is the only report
-anyone reads to judge an idea, so a sentence describing somebody's clone as though it were the
-repository is the one kind of error that cannot be left in it.
+Both lines are wrong, and both are wrong in the same way: nothing ever compared them to anything.
 
-The sentence does more damage than a stale fact, because it is load-bearing: it is the stated reason
-that **"whether GitHub runners can run a nested headless Shell is still unknown"**, which is in turn
-the answer to the last open question in `plans/01-2026-08-28.md`. The workflow carries a
-`nested-shell-smoke` job (`continue-on-error: true`) written for exactly that purpose — it boots a
-nested Shell with `tools/probe` and prints `VERDICT: a nested headless GNOME Shell runs on this
-runner` or its negation. If that job has been running for weeks, the question has a public answer and
-nobody read it. So the correction is not "delete a false sentence"; it is **go and get the verdict,
-and write down what it says**, whichever way it came out.
+* **`version-name` says `0.1.0`; `STATUS.md` says `version: 0.2`.** It is also not the form this
+  repo's versioning rules use — two integer components, `0.2`, not a three-component semantic
+  version. The Shell shows `version-name` in the extension list, so an installed copy currently
+  misreports which version of the idea it is.
+* **`url` points at `https://github.com/patxi/aideas`, an account that does not exist.** It 404s for
+  anybody who follows it from the Shell's extension list. This idea has no repository of its own
+  (`STATUS.md` → *This idea has no repository of its own*), so the correct target is this repo's path
+  to it: `https://github.com/gortazar/aideas/tree/main/ideas/gnome-tasks` — the form
+  `ideas/aideas/src/extension/metadata.json` already uses.
+
+The fix is two string edits. **The deliverable is the test that keeps them fixed**: a test under
+`tests/unit/` that fails whenever `version-name` and the `version:` header in `STATUS.md` disagree,
+so the next bump cannot silently leave the artefact behind. `ideas/aideas/tests/unit/metadata.test.js`
+is the nearest model, but it hardcodes its version (`assertEquals(metadata['version-name'], '0.5')`)
+and so has to be edited at every bump — exactly the manual step that let this drift happen. This test
+reads `STATUS.md` instead.
 
 Assumptions, stated rather than asked:
 
-- **The unit of truth is a named run, not a count.** "Seven times" was true when the audit was
-  written and is already wrong by this push. The correction cites what the workflow runs, what the
-  jobs concluded, and the verdict text, each attributed to a run id and date — a form that ages into
-  "as of then" rather than into a falsehood.
-- **`status: not_started` in the header is correct and must not be "fixed".** The orchestrator
-  rewrites it when it queues an entry (`orchestrator/orchestrator.py:1258`), so it describes this
-  entry, not the finished work the body describes. The `## Log` line saying `done` is the record.
-- **Nothing gets re-verified that was verified on a machine.** `make smoke`'s eleven checks and the
-  two experiments stay as claims about 2026-08-09; they get *re-scoped* wording, not a re-run. A
-  nested-Shell run from this session would be a long blocking wait that gets interrupted, and its
-  result would not make the old sentence any truer.
-- **No upstream repository, under any interpretation of this entry.** Not created, not proposed, not
-  prepared for. The in-repo arrangement is a real deviation from AGENTS.md and gets recorded in
-  `STATUS.md` as one — recording it is not the same as fixing it, and moving the idea is a separate
-  decision the audit explicitly left open.
-- **Minor update: `version: 0.1` → `0.2`**, as the entry says, set in the same commit that finishes
-  the work.
+* **This idea remains in-tree, with no upstream repository and no release.** The entry says so
+  outright: the release-side checks the recap-gs and meet entries carry do not apply here. Nothing in
+  this entry creates `gortazar/gnome-tasks`, adds a release workflow, or packs an artefact. 0.1 and
+  0.2 shipped nothing installable and 0.3 ships nothing installable; `STATUS.md` will say that in
+  those words rather than leaving it to be inferred from an absence.
+* **Minor update: `version: 0.2` → `0.3`**, set in the same commit that finishes the work, in both
+  `STATUS.md` and `metadata.json` — which, once this test exists, is the only state it permits. If
+  the generated `## This cycle` block names a different version, that block wins.
+* **The test reads `STATUS.md` from the tree, not a copy.** One source of truth; a duplicated version
+  string anywhere would be a third thing to drift.
+* **Sonar and the pull-request gate are not in scope.** This idea is analysed as part of the
+  whole-repo `gortazar_aideas` project and has no repository of its own to gate; the ladder in
+  AGENTS.md is about idea repositories.
 
 ## Features
 
-- **The CI sentence is replaced by what CI reports.** `.github/workflows/ci-gnome-tasks.yml` runs
-  path-filtered on every push touching `ideas/gnome-tasks/**`; the blocking `test` job runs
-  `nix flake check --print-build-logs` on `ubuntu-latest`. `STATUS.md` says so, names the runs it
-  read, and drops both halves of the false claim — the bare-repo remote *and* "has never run".
-- **The runner question is answered, or its real reason for being open is given.** The
-  `nested-shell-smoke` verdict is taken from the job's own log line and its `nested-shell-log`
-  artifact, and stated as the answer to `plans/01-2026-08-28.md`'s last open question. Three
-  outcomes, all acceptable, none of them a guess: *yes* (a runner boots a nested Shell — recorded,
-  with the job still non-blocking), *no* (recorded with the failing step and the log tail), or *the
-  job has never actually executed its verdict step* — for instance because it was added after those
-  runs, or because `apt-get` or `nested-shell.sh start` fell over first. In that third case the
-  question stays open, but with the true reason: not "the workflow has never run".
-- **The run-level green is not read as the job's verdict.** `continue-on-error: true` means the run
-  concludes `success` whatever the smoke job did, so the correction quotes the *job's* conclusion and
-  its printed verdict, and says explicitly that a green run says nothing about the nested Shell. That
-  trap is what made the original sentence survivable for three weeks.
-- **Every remaining sentence about the environment is re-scoped or removed.** A full read of the file
-  against the tree, fixing anything that describes a checkout, a machine or a sandbox as though it
-  described the repository. Known candidates, each resolved one way or the other with a reason:
-  - "Firefox and Chrome are snap-confined on **this machine**" — the verification gap is real and
-    stays; the excuse gets a date and a named machine instead of a "this" that follows the reader.
-  - "hiding `/dev/dri` needs a user namespace **this sandbox** forbids" and the two local
-    GPU-less approximation attempts — a fact about one sandbox, kept only if the CI verdict does not
-    already make it moot.
-  - "Nobody has installed this into a real session", the connector-name gap, and the dconf note at
-    the end — checked and expected to stand: they are about the world, not about a clone.
-- **The numeric and "all green" claims are re-earned or attributed.** `flake.nix` exposes `lint`,
-  `unit`, `dbus` and `bundle`; "151 unit + 56 D-Bus, all green" is a claim about the tree, so it is
-  re-measured from one `nix flake check` run in this session and corrected if the counts moved. Same
-  for the feature table's `all green` row.
-- **The twelve-feature references point at a file that exists.** `PLAN.md` is now this document;
-  the twelve features it credits live in `plans/01-2026-08-28.md`. Every `PLAN.md` reference in
-  `STATUS.md` that means *the original plan* is retargeted there, so the report's central table stops
-  citing a plan about itself.
-- **The same false sentence elsewhere is reported, not fixed.** `ideas/pwgen/STATUS.md:86-87`
-  carries it from the same era and is being fixed under its own entry; `ideas/gnome-tasks/docs/
-  testing.md:27` says "On GitHub runners: not yet known", which is the same claim one file over
-  inside this idea (see Open Questions for whether this entry corrects it). Whatever is found and not
-  touched is named in `STATUS.md` with file and line, so the next reader does not have to re-find it.
-- **The no-upstream deviation is on the record.** One short paragraph: this idea has no repository of
-  its own, its source and CI therefore live in `gortazar/aideas`, AGENTS.md expects otherwise, its
-  Sonar coverage is the whole-repo `gortazar_aideas` project (as `README.md` already says), nothing
-  in the original entry authorised the arrangement, and moving it is not this entry's decision.
-- **Version 0.2, with a log line**, and a difficulty estimate for *this* entry that does not
-  overwrite the `hard` estimate the build earned.
+* **`version-name` is the idea's current version, in this repo's two-component form.** `0.1.0` →
+  `0.3`, matching `STATUS.md`'s `version:` header exactly, set in the commit that finishes the entry.
+* **A unit test that fails when the two disagree.** New `tests/unit/metadata.test.js`, in the existing
+  suite run by `tests/run.js` and by the flake's `unit` check. It parses `STATUS.md`'s `version:`
+  header and `src/extension/metadata.json`, and asserts:
+  - `version-name` equals the `version:` header, character for character;
+  - both match `^\d+\.\d+$`, so `0.1.0` would fail even if somebody set the header to `0.1.0` too —
+    the form is part of the rule, not just the agreement;
+  - `STATUS.md` has exactly one `version:` header to read, so a malformed file fails loudly instead
+    of silently comparing against `undefined`.
+* **The `unit` check can see `STATUS.md`.** `flake.nix`'s `sourceFor` deliberately excludes
+  `STATUS.md` and `docs/` so that editing them does not invalidate the build cache. A test that reads
+  `STATUS.md` needs it as an input, or it fails in the sandbox and passes locally — the worst of both.
+  So the `unit` check gets its own fileset, `sourceFor pkgs` plus `./STATUS.md`; `lint`, `dbus` and
+  `bundle` keep the narrow one. The deliberate consequence, recorded in a comment next to it: a
+  `STATUS.md`-only edit now re-runs the unit suite, which is the point.
+* **`url` points somewhere that exists.** `https://github.com/gortazar/aideas/tree/main/ideas/gnome-tasks`,
+  asserted in the same test as an exact string.
+* **The same dead account is removed from the other two files that ship it.** Beyond the literal
+  entry, which names `src/extension/metadata.json` only, `github.com/patxi/aideas` also appears in
+  `data/gnome-tasks-daemon.service.in` (`Documentation=`, which `systemctl show` hands to a user) and
+  `tools/probe/metadata.json` (test-only, never shipped). Leaving a known-dead URL in an installed
+  unit file, in the entry that is about dead URLs, is not defensible. One assertion covers the class:
+  no file under `src/`, `data/` or `tools/probe/` mentions `github.com/patxi`. Kept as its own unit so
+  it can be dropped without touching the required work.
+* **`STATUS.md` says plainly that this idea ships nothing installable.** Not as a footnote inside the
+  no-upstream section, but as a statement a reader meets: there is no release, no installable
+  artefact and no installer for 0.1, 0.2 or 0.3; `make install` from a checkout is the only way to run
+  it; and the reason is that the idea has no repository of its own to tag. Plus the usual 0.3 record —
+  what this entry changed, the unit list, the version, the difficulty estimate.
 
 ## Approach
 
-Small units, one commit each, evidence gathered before prose is written.
+Tests first, one commit per unit, never ending a unit in the red window.
 
-1. **U0 — get the facts, write nothing.** `git remote -v` (is `origin` the GitHub remote today?),
-   then `gh run list --workflow=ci-gnome-tasks.yml --branch main --limit 30
-   --json databaseId,headSha,conclusion,createdAt,event`. For the runs that matter,
-   `gh run view <id> --json jobs` for per-job conclusions, `gh run view <id> --log-failed` or
-   `--job <smoke-job-id>` piped to `grep -a VERDICT`, and `gh run download <id> -n nested-shell-log`
-   for the probe records. Check whether the smoke job even existed at each run's SHA with
-   `git show <sha>:.github/workflows/ci-gnome-tasks.yml`. One pass, no `--watch`, no polling loop.
-   Deliverable: a list of run ids with conclusions and verdict lines, quoted in the commit message
-   of U1 so the sentence has a traceable source.
-2. **U1 — the correction.** Rewrite the `Whether GitHub runners can run a nested headless Shell`
-   bullet from U0's evidence, and move it out of `## What is built but not verified` if the verdict
-   answers it. Nothing else in the file changes in this commit, so the diff that fixes the reported
-   line is readable on its own.
-3. **U2 — the full-file audit.** Read `STATUS.md` top to bottom against the tree, resolve each
-   candidate above, retarget the `PLAN.md` references to `plans/01-2026-08-28.md`, and add the
-   "found elsewhere" note and the no-upstream paragraph. Every changed sentence traceable to
-   something in the tree or to a command run this session.
-4. **U3 — re-earn the numbers.** `git add -A && nix flake check --print-build-logs` once (the
-   `git add` is not optional — a flake sees only tracked files), read the unit and D-Bus counts out
-   of the logs, and correct line 41 and the feature table if they moved. If a check is red, that is a
-   finding for `STATUS.md`, not something to hide.
-5. **U4 — version, log, and the run this push causes.** `version: 0.2`, a `## Log` line, this
-   entry's own difficulty estimate. Then, once pushed, check the run this change itself triggers
-   (`gh run list --workflow=ci-gnome-tasks.yml --limit 1`, one look) — it is the freshest evidence
-   for the sentence just written, and if its smoke job contradicts U1, U1 is wrong and gets amended.
+1. **U1 — the version test.** Write `tests/unit/metadata.test.js` with the `version-name` assertions,
+   add `./STATUS.md` to the `unit` check's fileset, `git add -A && make test-unit` and watch it fail
+   against `0.1.0`. Then set `version-name` to `0.2` — today's header value, so the test is green and
+   the tree is honest at this commit; the bump to `0.3` is U4's job and the test is what forces the
+   two to move together. One commit: test, flake, metadata, `STATUS.md` unit line.
+2. **U2 — the url.** Extend the same test with the exact-`url` assertion, see it fail, fix
+   `src/extension/metadata.json`, commit.
+3. **U3 — the other two occurrences.** The class assertion over `src/`, `data/` and
+   `tools/probe/`, then `data/gnome-tasks-daemon.service.in` and `tools/probe/metadata.json`.
+4. **U4 — the bump and the record.** `version: 0.3` in `STATUS.md` and `version-name: "0.3"` in
+   `metadata.json`, in one commit — splitting them is what the test now refuses. Rewrite the
+   `STATUS.md` record for 0.3, including the "ships nothing installable" statement and the
+   `## Log` line. Full `git add -A && nix flake check --print-build-logs` before committing.
 
 ## Verification
 
-There is no code here, so "tested" means every assertion has a source:
-
-- **A claim-to-evidence checklist** covering the whole of `STATUS.md`: each sentence that asserts
-  something about the tree, the CI or the environment, paired with the command whose output it came
-  from, and a date for anything that was true on a machine on a day. Anything left unpaired is either
-  cut or rewritten as an explicit unknown.
-- **The correction is falsifiable**: the run ids, job conclusions and verdict text are quoted, so a
-  reader can re-run `gh run view <id>` and disagree.
-- **`nix flake check` green** at the end of U3, and the remote run for this push checked once at U4
-  — not the local run alone.
-- **Nothing outside `ideas/gnome-tasks/` is modified.** `ideas/pwgen/`, `README.md` and `AGENTS.md`
-  are off-limits by AGENTS.md and by this entry; the pwgen occurrence is reported in prose only.
+* **The test is falsifiable, and seen to be.** Each assertion is observed failing before its fix
+  lands, and U4 ends with one deliberate mutation — set `version-name` to `0.4`, run `make test-unit`,
+  confirm red, revert — recorded in `STATUS.md`. A guard nobody has watched fail is a guess.
+* **`git add -A && nix flake check --print-build-logs` green** over all four checks. The `git add` is
+  not optional: a flake sees only git-tracked files, and a brand-new untracked test is invisible and
+  appears to pass.
+* **Unit and D-Bus counts re-read** from that run (151 + 56 before this entry; unit goes up by the
+  number of new tests) and written into `STATUS.md` rather than carried over.
+* **Remote CI checked once**, late: `gh run list --workflow=ci-gnome-tasks.yml --limit 3`. One look,
+  no `--watch`, no sleep loop. The agent does not push this repo, so the run for this change may not
+  exist yet — if so, say that rather than implying it was read.
+* **Nothing outside `ideas/gnome-tasks/` is modified.**
 
 ## Risks / things to watch
 
-- **Replacing a false sentence with an unchecked one.** The obvious failure mode is to write "CI runs
-  and passes, and the nested Shell works on runners" because it sounds like the happy ending. If the
-  smoke job failed, or never reached its verdict step, that is what goes in the file.
-- **`continue-on-error` hides the answer in plain sight.** The run is green either way; only the
-  job's conclusion and its log carry the verdict. Read both.
-- **The workflow at the run's SHA is not the workflow in the tree today.** The seven runs may predate
-  the smoke job, and asserting otherwise would repeat the original mistake in the other direction.
-- **90-day log and artifact retention.** Runs from 2026-08-09 are inside the window on 2026-08-28,
-  but only just for the oldest of them; capture what U0 finds into the commit message rather than
-  relying on the logs still being there next month.
-- **Editing `STATUS.md` triggers CI but not the checks.** `flake.nix` deliberately excludes
-  `STATUS.md` and `docs/` from the check inputs, so the path filter fires the workflow while the
-  `test` job replays cached results. A green run on a docs-only push is not fresh evidence that the
-  suites pass; U3's local `nix flake check` is.
-- **`gh` needs the sandbox's credentials to see the runs at all.** If it cannot reach
-  `gortazar/aideas`, the entry cannot be finished honestly — that is a blocking open question, not a
-  licence to guess the verdict from the audit's summary.
-- **The sweep and the header.** Do not touch `status:`; do not read `not_started` as a bug to fix.
-  Also do not assume `STATUS.md`'s prose about a pin or a version matches the tree — this file is
-  being audited precisely because it drifted once.
-- **Scope pressure.** An answered "runners can boot a nested Shell" invites making the smoke job
-  blocking, or moving `make smoke` into CI. Both are new work for a new entry; this one corrects the
-  record.
+* **Cache invalidation is the cost, and it is intended.** Adding `STATUS.md` to the `unit` fileset
+  means every `STATUS.md` edit — AGENTS.md asks for one per unit — re-runs that check. Scoping it to
+  `unit` alone keeps `lint`, `dbus` and `bundle` cached. Do not "fix" this later by dropping the input
+  back out; that silently disarms the test in CI while it still passes locally.
+* **Parsing `STATUS.md` too cleverly.** The header is a plain `version: 0.2` line at the top. A loose
+  regex would also match the word elsewhere in a 260-line document; anchor it, and fail on zero or
+  more than one match instead of taking the first.
+* **Do not touch the `status:` header.** The orchestrator rewrites it when it queues an entry, and a
+  previous entry already had to explain that `not_started` there is not a bug.
+* **The three-component form is the trap, not just the mismatch.** Setting `version-name` to `0.2.0`
+  would satisfy a naive equality test against a header someone also wrote as `0.2.0`. The format
+  assertion exists so the repo's own rule — integers, two components, `0.9` → `0.10` — is what is
+  enforced.
+* **Scope pressure toward shipping.** An entry about `version-name` invites adding a release workflow,
+  a packed zip or an installer, because that is what every other idea has. The entry rules it out and
+  so does this plan: the test is the whole deliverable.
 
 ## Open Questions
 <!-- Append new questions here as "- [ ] question text". Never edit or remove old ones —
      when answered, change "- [ ]" to "- [x]" and add the answer inline. The orchestrator
      treats any remaining "- [ ]" line as blocking. -->
-- [x] Does this entry also correct `docs/testing.md`, which says "On GitHub runners: not yet known"
-      and "Until that job has run, window capture/restore is verified by hand"? Ticking this line
-      as-is fixes it here: it is the same claim as line 74, inside this same idea, and leaving it
-      would have `STATUS.md` and `docs/testing.md` contradicting each other on the file's central
-      correction. The alternative reading is literal — the entry names `STATUS.md`, and the
-      "say so rather than fixing it" instruction covers every other occurrence, including this one,
-      leaving `docs/testing.md` for a follow-up entry.
-      ANSWERED: **yes**, default accepted. Correct `docs/testing.md` in this entry too — leaving it contradicting `STATUS.md` on the file's central correction would be worse than the slightly wider scope.
-- [x] Does a documentation-only entry on an idea with no repository of its own ship a release?
-      AGENTS.md says every finished entry ships one, tagged `v<version>` from the idea's own
-      repository; this idea has none and must not get one, and 0.1 shipped none either. Ticking this
-      line as-is finishes 0.2 with **no release**, recording that reason in `STATUS.md`. The
-      alternative follows the `orchestrator` precedent — a tag on this repository
-      (`gnome-tasks-v0.2`) carrying the packed `.shell-extension.zip` — which means adding a release
-      workflow to a repository this idea does not own, and is a bigger change than the entry
-      describes.
-      ANSWERED: **no release**, default accepted. Finish 0.2 without one and record that reason in `STATUS.md`. Do not add a release workflow to a repository this idea does not own; that is a bigger change than this entry describes.
+
+Nothing here is blocking. The entry settles the two decisions that would otherwise be open — the
+target version form, and that no release or upstream repository is in scope — and the remaining
+judgement calls (which flake check gets `STATUS.md`, how far the dead-URL fix reaches) are recorded
+as assumptions above rather than as questions, because either answer leaves the entry deliverable.
