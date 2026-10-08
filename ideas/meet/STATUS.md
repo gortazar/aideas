@@ -1,5 +1,5 @@
-status: in_progress
-version: 0.3
+status: done
+version: 0.4
 started_at: 2026-08-28
 last_session_id: a8a338d4-3bad-427b-bd3d-112da5346bf3
 last_run: 2026-10-08T10:53:22+02:00
@@ -26,7 +26,7 @@ The key on its own is a nicety. The key plus the guards is a release path that c
 about itself: before this, `git tag v0.9` on this tree would have published a release called
 v0.9 containing 0.3's code, with every check in the repository staying green.
 
-### Units — 4 of 5 done
+### Units — 5 of 5 done
 
 - [x] **U1 — the key, and the test that pins it.** `"version-name": "0.4"` in
       `src/metadata.json`, plus three cases: it equals the idea version, it has the
@@ -45,7 +45,16 @@ v0.9 containing 0.3's code, with every check in the repository staying green.
       from the unpacked `metadata.json`, degrading to `unknown version` so
       `VERSION=v0.3 ./install.sh` still works. Two tests, a README line, and all three paths
       run by hand. 305 tests.
-- [ ] **U5 — ship `v0.4`**, and add `check-pin.sh`'s version assertion. **Next.**
+- [x] **U5 — shipped, and the two repositories tied together.** Pull request
+      [#6](https://github.com/gortazar/meet/pull/6) merged as
+      [367ae31](https://github.com/gortazar/meet/commit/367ae31),
+      [v0.4](https://github.com/gortazar/meet/releases/tag/v0.4) released and verified, pins
+      bumped, and `check-pin.sh` gained its third assertion: `STATUS.md`'s `version:` against
+      `version-name` in **the pinned commit's** manifest, read with `git show` rather than
+      from the checkout so a pin at one commit cannot pass on a file from another. Verified
+      both ways — a `STATUS.md` claiming `0.9` exits 1 naming both values; agreement exits 0.
+      A pin older than 0.4 takes a NOTE branch rather than failing, since no artefact before
+      this entry carries the key.
 
 ### What was proven, and what could not be
 
@@ -63,6 +72,10 @@ v0.9 containing 0.3's code, with every check in the repository staying green.
   The YAML was parsed to confirm the step exists and is ordered before the pack. What
   guards it from here is the unit test, because the comparison only ever runs on a tag push:
   no reviewer would ever see it fail on a pull request.
+
+  **Its matching branch was then exercised for real**: the `v0.4` tag push ran the step in
+  the release workflow and the run succeeded. So the half that must not block a good release
+  is proven live; the half that must block a bad one is proven locally and asserted by test.
 - **`check-release.sh` fails against `v0.3`, and that is the check working.** Run
   immediately after it was written: *"FAIL: the published zip has no version-name, so it
   cannot say which release it is"*, exit 1. `v0.3`'s artefact predates the key and always
@@ -83,6 +96,39 @@ v0.9 containing 0.3's code, with every check in the repository staying green.
   manifest edit carries is the Shell refusing to load malformed JSON, and that is already
   covered without a compositor: the suite parses the file and the packer runs `jq -e` over
   it on every `nix flake check`.
+
+## What "done" covers
+
+The entry's point was not the key but the guard: **no release can now exist whose artefact
+disagrees with the tag it was cut from.** Four things read or enforce the version where
+before nothing did.
+
+- **`src/metadata.json` carries `version-name`**, so the installed tree answers "what am I
+  running" from the file a person already opens, and the Extensions app shows it.
+- **The release workflow refuses a disagreeing tag**, before `nix flake check` and before
+  `nix build`, so a bad tag builds nothing. A missing key yields `null` from `jq -r`, which
+  can never equal a tag, so a manifest that lost it cannot be published either.
+- **`check-release.sh` reads the version out of the published zip** — the bytes a user
+  installs, not the tag and not the release title.
+- **`install.sh` prints it**, and **`check-pin.sh` ties `STATUS.md` to the pinned manifest**,
+  which is what keeps the literal in the upstream test honest across two repositories.
+
+Verified rather than asserted:
+
+- **Merged**: [#6](https://github.com/gortazar/meet/pull/6) →
+  [367ae31](https://github.com/gortazar/meet/commit/367ae31), with `check`, `package`,
+  `sonar / Analysis` and SonarCloud green. Gate **OK** on `main`; **no open Sonar issue at
+  any severity under either severity model**, so nothing is documented as a false positive.
+- **Released and verified**: [v0.4](https://github.com/gortazar/meet/releases/tag/v0.4),
+  both assets, and `check-release.sh` reporting *"the zip says version-name 0.4"* — the new
+  assertion passing against a real artefact, having failed correctly against `v0.3`.
+- **Install-verified from a clean directory**, with `HOME` and `XDG_DATA_HOME` redirected.
+  This time with something specific to look at rather than a file count: the installer's own
+  last line read `meet: installed 0.4 to …`, and the installed `metadata.json` contains
+  `"version-name": "0.4"`.
+- **Every new guard mutation-tested**: the three metadata cases, the workflow-step assertion
+  (by deleting the step), and `check-pin.sh`'s comparison (by claiming the wrong version).
+- **305 headless tests**, green in `nix flake check` alongside ESLint and the packed zip.
 
 ## Previously — 0.3: the join button lands where the camera and microphone are chosen
 

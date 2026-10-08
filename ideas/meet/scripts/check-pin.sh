@@ -53,4 +53,41 @@ if [ -d upstream/.git ] || [ -f upstream/.git ]; then
     fi
 fi
 
+# And the third thing that can drift: STATUS.md says which version this idea is at, and the
+# extension's own manifest says which version its code is. Those are two files in two
+# repositories, and nothing else compares them — the upstream suite pins a literal because
+# it cannot see STATUS.md, which lives here.
+#
+# Read out of the *pinned commit* rather than the working tree. A populated submodule can be
+# checked out anywhere, so reading the file on disk would let a pin at one commit pass on a
+# manifest from another.
+status_version="$(sed -n 's/^version:[[:space:]]*//p' STATUS.md | head -1)"
+if [ -z "$status_version" ]; then
+    echo "STATUS.md has no version: line" >&2
+    exit 1
+fi
+
+if [ -d upstream/.git ] || [ -f upstream/.git ]; then
+    manifest_version="$(git -C upstream show "${submodule_rev}:src/metadata.json" 2>/dev/null |
+        jq -r '."version-name" // empty' || true)"
+    if [ -z "$manifest_version" ]; then
+        # Every release from 0.4 carries the key. Before it, none did, so a pin at an older
+        # commit is a statement about history rather than a fault.
+        echo "NOTE: the pinned commit's metadata.json has no version-name (pre-0.4)."
+    elif [ "$manifest_version" != "$status_version" ]; then
+        cat >&2 <<EOF
+FAIL: STATUS.md and the pinned extension disagree about the version.
+
+  STATUS.md             -> $status_version
+  pinned metadata.json  -> $manifest_version
+
+One of them is wrong. If the release is out, bump STATUS.md; if STATUS.md is right, the pin
+is at the wrong commit.
+EOF
+        exit 1
+    else
+        echo "version $status_version         -> STATUS.md and the pinned metadata.json agree"
+    fi
+fi
+
 echo "OK: both pins are $submodule_rev"
