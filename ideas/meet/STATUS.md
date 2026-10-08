@@ -1,5 +1,5 @@
-status: not_started
-version: 0.2
+status: done
+version: 0.3
 started_at: 2026-08-28
 last_session_id: a8a338d4-3bad-427b-bd3d-112da5346bf3
 last_run: 2026-10-01T10:26:18+02:00
@@ -12,7 +12,110 @@ last_cycle_cost_usd: 36.152480999999995
 
 
 
-## This entry — 0.2: the rooms of each instance, and a button that joins the call
+## This entry — 0.3: the join button lands where the camera and microphone are chosen
+
+`version:` above still reads `0.2` and moves to **`0.3`** in the same commit as
+`status: done`, per the cycle header.
+
+Branch `agent/meet/2026-10-08`, pull request
+[#5](https://github.com/gortazar/meet/pull/5).
+
+### The entry's own answer is "no, and say so"
+
+The three answered open questions all take the **alternative**, not the as-is tick:
+
+- *"Is one click away what this entry should deliver?"* → **"Do nothing and just document
+  this limitation."**
+- *"Where does the name sent as `participant-name` come from?"* → **"Not valid, since we
+  won't do it."**
+- *"Should the link also carry `initial-audio-active` / `initial-video-active`?"* → **"Do
+  nothing."**
+
+So `src/` is untouched. `PLAN.md`'s Features and U1–U5 describe the as-is tick — a
+`lib/join-url.js`, a name field in preferences, a GSettings key — and are superseded by
+those answers. What ships is the documentation, and one test so the decision cannot be
+undone by accident.
+
+### Units — 2 of 2 done
+
+- [x] **U1 — verified, then documented.** Every claim the README now makes was checked
+      against `OpenVidu/openvidu-meet` **at v3.9.0, the current release, and again at
+      `main`** — identical in both. A README section says where the button leaves you and
+      why not one step further; a line under *what it does not do* states that the URL
+      handed to the browser is the one the API returned, byte for byte. One test pins that,
+      so a later cycle cannot quietly start appending to a role link. 299 tests.
+- [x] **U2 — shipped.** Pull request [#5](https://github.com/gortazar/meet/pull/5) merged as
+      [f0bfa26](https://github.com/gortazar/meet/commit/f0bfa26) with all four checks green,
+      [v0.3](https://github.com/gortazar/meet/releases/tag/v0.3) released and verified, the
+      installer re-run from a clean directory, and both pins bumped to the merge commit.
+
+### What was verified, and what it rules out
+
+- **`meeting.routes.ts` registers `room/:room-id` and `disconnected`, and nothing else.**
+  The Join page and the device page are two states *inside* one route, not two addresses —
+  so there is no URL that names the device page, and no path, fragment or second room link
+  can reach it.
+- **`meeting.component.html`** renders `<ov-meeting-lobby />` while `showLobby()` and
+  `<ov-meeting-view [prejoin]="true">` after it, which is the device page the entry is
+  about.
+- **The flag behind `showLobby()` is assigned `true` in exactly one place** —
+  `submitAccess()` — and the only callers are the Join page's own form component and its
+  spec. Nothing auto-submits it: not when a name arrives from the URL, not when the user is
+  authenticated.
+- **The accepted query parameters are the closed `EmbeddedAttribute` list.** `skip-lobby`,
+  `skipLobby` and `skip-prejoin` return **zero hits across the whole repository**. 0.2's
+  plan had listed them as "recent" on the strength of OpenVidu Call; **that guess is retired
+  here**, which is worth more than the feature would have been.
+
+The consequence for a user is one press of *Join Meeting* between the panel button and the
+camera-and-microphone page, and the README now says so rather than leaving them to discover
+it and assume the extension is at fault.
+
+### Why this ships a release at all
+
+`v0.3` carries a packed extension whose **every file is byte-identical to `v0.2`'s** —
+`src/` did not change. Verified rather than asserted: both published zips were downloaded
+and `diff -r` over the extracted trees is empty. The two **checksums differ anyway**
+(`4f3653a6…` against `1bac3551…`, same 46402 bytes) because a zip records modification
+times, so the archive is not reproducible even when its contents are. Worth knowing before
+someone reads two different hashes as two different builds.
+
+The release exists because every finished entry ships one, and because the version is the
+durable record of what was decided when.
+
+## What "done" covers
+
+The entry asked whether the join button could land on the page where the camera and
+microphone are chosen. **It cannot**, and the answered open questions chose to say so rather
+than ship a parameter that silently does nothing. So what "done" covers is the finding, the
+documentation of it, and the guard that keeps it true:
+
+- **Verified at the version users run.** Every claim was checked against
+  `OpenVidu/openvidu-meet` at **v3.9.0**, the current release, *and* at `main` — identical
+  in both, so this is not a statement about an unreleased branch.
+- **`skip-lobby` and `skip-prejoin` do not exist in OpenVidu Meet** — zero hits for all
+  three spellings across the repository. 0.2's plan had listed them as "recent" on the
+  strength of OpenVidu Call. Retiring that guess is the most useful thing this entry did.
+- **Documented** in the README: a section on where the button leaves you and why not one
+  step further, naming the files so a reader can check it, and a line under *what it does
+  not do* stating the URL is passed through byte for byte.
+- **Pinned by a test**, so a later cycle cannot quietly start appending to a role link.
+- **Merged**: [#5](https://github.com/gortazar/meet/pull/5) →
+  [f0bfa26](https://github.com/gortazar/meet/commit/f0bfa26), with `check`, `package`,
+  `sonar / Analysis` and SonarCloud green. Gate **OK** on `main`, all ratings 1, and **no
+  open Sonar issue at any severity under either severity model** — nothing to document as a
+  false positive.
+- **Released and verified**: [v0.3](https://github.com/gortazar/meet/releases/tag/v0.3),
+  both assets, `check-release.sh` green, and the published installer re-run from a clean
+  directory with `HOME` redirected — 17 files landed and the installed tree matches the
+  published zip exactly.
+- **299 headless tests**, green in `nix flake check` alongside ESLint and the packed zip.
+
+`src/` is untouched, deliberately. The nested shell was not re-run: no widget, no model and
+no launched URL changed, and the one new test is a headless assertion about a URL this entry
+promises *not* to alter.
+
+## Previously — 0.2: the rooms of each instance, and a button that joins the call
 
 `version:` above still reads `0.1` and moves to **`0.2`** in the same commit as
 `status: done`, per the cycle header. The `README.md` entry does not say which kind of
@@ -224,9 +327,9 @@ all, and the Sonar fixes, which are `catch {` in place of `catch (e) { void e; }
 `push` in place of three — no behaviour change. Neither is worth moving a published tag for;
 both ship with the next version.
 
-## What "done" covers
+### What 0.2's "done" covered
 
-Every feature in `PLAN.md`, as amended by the answered open questions.
+Every feature in 0.2's plan, as amended by its answered open questions.
 
 - **Merged**: pull request [#4](https://github.com/gortazar/meet/pull/4), squashed to
   [354e8c2](https://github.com/gortazar/meet/commit/354e8c2), with `check`, `package`,
