@@ -42,11 +42,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1791448548,
-        "narHash": "sha256-raLhnXGDGVDzhwRJ7Q4tGh1ApD1JZozc5SGc+syWt1Y=",
+        "lastModified": 1791461259,
+        "narHash": "sha256-CXlgdfN6K9RL6e4nQVYj15rF2VidWDxQfCLYZ/fTfQ0=",
         "owner": "gortazar",
         "repo": "meet",
-        "rev": "f0bfa261f0d962355975f6f088819ac708a2f0bd",
+        "rev": "367ae311db544bb1ccab09ecf4db1a864524e102",
         "type": "github"
       },
       "original": {
