@@ -1,4 +1,4 @@
-status: not_started
+status: in_progress
 version: 0.3
 started_at: 2026-08-10
 last_session_id: d662d114-7a57-4140-a585-10f9305b66aa
@@ -16,6 +16,34 @@ last_cycle_cost_usd: 6.560045999999999
 - 2026-08-10T14:13:00+02:00 — in_progress ($13.098638499999996)
 
 
+
+### 2026-10-08 — in_progress (0.4: resume in Terminator, not GNOME's console)
+
+Units 2 of 6 done. [PR #2](https://github.com/gortazar/recap-gs/pull/2) open as a draft.
+
+- [x] U1 + U3 — the `terminator --working-directory=<dir> -x <command...>` row, and both
+      wm_class spellings in `TERMINAL_WM_CLASSES`. **They land together because the project
+      already forbids them to drift**: `sources.test.js` asserts every terminal in
+      `TERMINALS` has a wm_class, so adding to one list alone fails the suite. That is how
+      this pairing arrived — it was not planned as one unit. 241 tests, up from 238.
+- [x] U2 — Terminator ahead of the GNOME terminals in the default order, with two tests
+      pinning what a reordering can quietly cost: a machine without Terminator falls back to
+      exactly the 0.3 order, and an explicit `terminal` preference still outranks it.
+      243 tests.
+- [ ] U4 — the real desktop: both D-Bus states, checking window, working directory and the
+      running command separately.
+- [ ] U5 — preferences copy, README, screenshot.
+- [ ] U6 — `v0.4` released and install-verified.
+
+**The bug this fixes, not just the feature it adds.** Setting `terminal` to `terminator`
+fell through to the generic `-e` fallback an unlisted terminal gets. Terminator's
+`-e/--command` takes the whole command as *one* string; `-x/--execute` takes the rest of the
+line. So the old path produced `terminator -e claude --resume <id>`, which hands Terminator
+`claude` and leaves it reading `--resume <id>` as its own arguments. Flags checked against
+**terminator 2.1.3**'s own `--help` on this machine, not from memory.
+
+**Terminator is installed here** (`/usr/bin/terminator`, 2.1.3), so U4 can be done honestly
+— the plan's named risk that it could not is retired.
 
 ### 2026-09-28 — done (0.3: clear the two BLOCKERs by configuring the rule)
 
