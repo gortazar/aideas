@@ -78,8 +78,10 @@ makes position a safe identity: the active list only ever holds work still to do
    release workflow refusing to publish when `version-name` and the tag `v<version>` disagree (`.github/workflows/release-aideas.yml`), `check-release.sh`
    reading the key out of the published zip rather than trusting the tag (`ideas/aideas/tools/check-release.sh`), and `install.sh` printing the version it
    just installed (`ideas/aideas/install.sh`). Bumping the idea version must become a one-line edit that the build then checks, never two places to remember.
-   While you are in there: `url` in that file points at `github.com/gortazar/aideas`, which is this workshop and not the extension's own repository — it
-   should be `github.com/gortazar/recap-gs`. Minor update.
+   The same file's `url` is also wrong: it says `https://github.com/gortazar/aideas`, which is this workshop, not the extension's own repository. It must be
+   `https://github.com/gortazar/recap-gs`. That key is what GNOME Shell shows as the extension's homepage and what a user follows to report a bug, so a
+   wrong one sends them to the wrong issue tracker. Fix it in the same entry, and have the unit test that pins `version-name` assert the `url` too — the
+   same test, so neither field can drift again unnoticed. Minor update.
 
 4. [meet](ideas/meet/) - Same gap as the recap-gs entry above, in `src/metadata.json`: no `version-name`, so an installed copy cannot say which release it
    is. Add it and wire the same four guards `ideas/aideas` already has — the unit test pinning the key to the idea version, the release workflow refusing a
@@ -91,7 +93,10 @@ makes position a safe identity: the active list only ever holds work still to do
    current version in the correct form, and add a test to the existing suite under `tests/unit/` that fails whenever `version-name` and the `version:` in
    `STATUS.md` disagree, so the next bump cannot silently leave the artefact behind. This idea is in-tree with no upstream repository and no release
    workflow, so the release-side checks the recap-gs and meet entries ask for do not apply here — the test is the whole deliverable, and `STATUS.md` should
-   say plainly that this idea still ships nothing installable. Minor update.
+   say plainly that this idea still ships nothing installable. Fix the same file's `url` while you are there: it reads `https://github.com/patxi/aideas`,
+   an account that does not exist — the link 404s for anyone who follows it from the Shell's extension list. This idea is in-tree with no repository of its
+   own, so the correct value is this repo's path to it, `https://github.com/gortazar/aideas/tree/main/ideas/gnome-tasks`, which is the form
+   `ideas/aideas/src/extension/metadata.json` already uses. Assert it in the same test as `version-name`. Minor update.
 
 ## Finished
 
