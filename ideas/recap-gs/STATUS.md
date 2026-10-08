@@ -1,4 +1,4 @@
-status: not_started
+status: in_progress
 version: 0.4
 started_at: 2026-08-10
 last_session_id: d662d114-7a57-4140-a585-10f9305b66aa
@@ -18,6 +18,66 @@ last_cycle_cost_usd: 23.14270499999999
 
 
 
+
+### 2026-10-09 — in_progress (0.5: say which version is installed)
+
+Units 5 of 6 done. [PR #3](https://github.com/gortazar/recap-gs/pull/3) open as a draft.
+
+- [x] U1 — `version-name: "0.5"` and `url: https://github.com/gortazar/recap-gs` in
+      `src/metadata.json`, with **one** test pinning both — they are the two things an
+      installed tree says about itself, and an edit that fixes one while quietly breaking the
+      other should not pass. A second test pins the *absence* of a `version` key, which
+      extensions.gnome.org assigns on upload and rejects when set by hand. 246 tests, up
+      from 244.
+- [x] U2 — `version-name` joins the required-field loop in `flake.nix`'s `packExtension`.
+      **Observed, not assumed**: with the key deleted, `nix build` stops with
+      `metadata.json: missing or empty "version-name"`; restored, the check is green. This
+      covers what the unit test cannot — the test reads the tree, this reads what is about
+      to be zipped.
+- [x] U3 — the release workflow's step named "Check the tag against metadata.json", which
+      since 0.1 read `metadata.json` nowhere, now does. Run locally against every input,
+      with real exit codes:
+
+      | `GITHUB_REF_NAME` | exit | result |
+      | --- | ---: | --- |
+      | `v0.5` | 0 | tag and manifest agree on 0.5 |
+      | `v0.4` | 1 | tag v0.4 does not match version-name 0.5 — refusing to publish |
+      | `v1.0` | 1 | same, for a higher version |
+      | `v` | 1 | the tag is empty after stripping its leading v |
+      | `v0.5`, manifest key deleted | 1 | no version-name to check the tag against |
+
+- [x] U4 — `tools/check-release.sh`, shellcheck-clean, jq rather than python3; `unzip` and
+      `curl` added to the dev shell for it. It asks the **published bytes**, not the tag.
+- [x] U5 — `install.sh` prints `recap-gs: installed 0.5 to <dest>`, read from the unpacked
+      manifest and falling back to `unknown version` so `VERSION=v0.4` still installs. All
+      three paths run locally. README says what the output tells you and gives the one-line
+      grep that answers "which release am I running" from the machine.
+- [ ] U6 — `v0.5`: merge, tag, release, `check-release.sh` against it, install-verify, and
+      the `check-pin.sh` version assertion (which lands **after** the pin moves, or this
+      repo's own CI goes red for several units).
+
+**`check-release.sh` is already proven to catch things, not just to print `ok`.** Run
+against the real published **v0.4** it reports exactly the three defects this entry fixes,
+while passing the download, digest and checksum checks:
+
+```
+  FAIL  the newest release is v0.4, but this tree says version 0.5
+  ok    it carries recap@recap-gs.patxi.shell-extension.zip
+  ok    the artefact downloads
+  ok    it matches the digest GitHub reports
+  FAIL  the artefact's metadata.json has no version-name — it cannot say what it is
+  FAIL  its homepage link is https://github.com/gortazar/aideas, not .../recap-gs
+  ok    <asset>.sha256 is published and correct
+```
+
+That is better evidence than a green run after v0.5 publishes would be: a checker that has
+only ever said `ok` has not been shown to do anything.
+
+**Two failures it tells apart on purpose.** A rate-limited unauthenticated API answers 403
+with a well-formed body holding no releases — indistinguishable, to `curl -f`, from a project
+that has never released anything. The status code is kept, and a rate limit says so and exits
+**2** ("cannot tell") rather than **1** ("the release is wrong"). 404 names a repository that
+does not exist. Both run; the rate limit is the one branch that cannot be triggered on demand.
 
 ### 2026-10-08 — done (0.4: resume in Terminator, not GNOME's console)
 
