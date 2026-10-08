@@ -71,12 +71,7 @@ makes position a safe identity: the active list only ever holds work still to do
    you feel that is a problem.
    This idea needs to be carefully planned first, and the plan must contain a workflow so that several agents can progress on parallel.
 
-3. [meet](ideas/meet/) - Same gap as the recap-gs entry above, in `src/metadata.json`: no `version-name`, so an installed copy cannot say which release it
-   is. Add it and wire the same four guards `ideas/aideas` already has — the unit test pinning the key to the idea version, the release workflow refusing a
-   tag/metadata mismatch, `check-release.sh` reading the key from inside the published zip, and `install.sh` reporting the installed version. The point is
-   not the key on its own; it is that nothing can publish a release whose artefact disagrees with the tag it was cut from. Minor update.
-
-4. [gnome-tasks](ideas/gnome-tasks/) - `src/extension/metadata.json` does carry a `version-name`, but it says `0.1.0` while `STATUS.md` says `0.2`, and
+3. [gnome-tasks](ideas/gnome-tasks/) - `src/extension/metadata.json` does carry a `version-name`, but it says `0.1.0` while `STATUS.md` says `0.2`, and
    `0.1.0` is not even the two-component form this repo's versioning rules use. It drifted because nothing ever compared the two. Set it to the idea's
    current version in the correct form, and add a test to the existing suite under `tests/unit/` that fails whenever `version-name` and the `version:` in
    `STATUS.md` disagree, so the next bump cannot silently leave the artefact behind. This idea is in-tree with no upstream repository and no release
@@ -319,3 +314,8 @@ makes position a safe identity: the active list only ever holds work still to do
    `https://github.com/gortazar/recap-gs`. That key is what GNOME Shell shows as the extension's homepage and what a user follows to report a bug, so a
    wrong one sends them to the wrong issue tracker. Fix it in the same entry, and have the unit test that pins `version-name` assert the `url` too — the
    same test, so neither field can drift again unnoticed. Minor update.
+
+38. [meet](ideas/meet/) - Same gap as the recap-gs entry above, in `src/metadata.json`: no `version-name`, so an installed copy cannot say which release it (finished 2026-10-08, v0.4)
+   is. Add it and wire the same four guards `ideas/aideas` already has — the unit test pinning the key to the idea version, the release workflow refusing a
+   tag/metadata mismatch, `check-release.sh` reading the key from inside the published zip, and `install.sh` reporting the installed version. The point is
+   not the key on its own; it is that nothing can publish a release whose artefact disagrees with the tag it was cut from. Minor update.
